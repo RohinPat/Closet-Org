@@ -1,7 +1,7 @@
 # Closet-Org
-I used a python based AI specific programing language called PyTorch in order to orginize clothes while only using an image of the clothing.  
+I used a python based AI specific programing language called PyTorch in order to organize clothes while only using an image of the clothing.  
 # Use of this program
-I plan to use this Artificial Inteligence to create an app that can help you orginize your closet. 
+I plan to use this Artificial Inteligence to create an app that can help you organize your closet. 
 # Features 
 - The first feature is this AI.  It would allow you to take a picture of your new clothes and upload them to a drive that stores your clothes information. (your virtual closet)
 - The second feature of this program is the inventory feature.  I want this app to create an inventory that tracks what you have worn and if it has been washed or not.
