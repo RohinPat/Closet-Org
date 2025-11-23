@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Closet-Org - AI Closet Organizer</title>
+    <link rel="stylesheet" href="/frontend/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <h1 class="logo">👕 Closet-Org</h1>
+                <nav class="nav">
+                    <button class="nav-btn active" data-tab="closet">My Closet</button>
+                    <button class="nav-btn" data-tab="upload">Upload</button>
+                    <button class="nav-btn" data-tab="outfits">Outfits</button>
+                    <button class="nav-btn" data-tab="stats">Stats</button>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <!-- My Closet Tab -->
+            <section id="closet-tab" class="tab-content active">
+                <div class="section-header">
+                    <h2>My Virtual Closet</h2>
+                    <div class="filters">
+                        <select id="category-filter" class="filter-select">
+                            <option value="">All Categories</option>
+                            <option value="Top">Tops</option>
+                            <option value="Bottom">Bottoms</option>
+                            <option value="Dress">Dresses</option>
+                            <option value="Footwear">Footwear</option>
+                            <option value="Accessory">Accessories</option>
+                        </select>
+                        <select id="status-filter" class="filter-select">
+                            <option value="">All Items</option>
+                            <option value="clean">Clean</option>
+                            <option value="dirty">Needs Washing</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="closet-grid" class="closet-grid">
+                    <div class="loading">Loading your closet...</div>
+                </div>
+            </section>
+
+            <!-- Upload Tab -->
+            <section id="upload-tab" class="tab-content">
+                <div class="upload-section">
+                    <h2>Add New Clothing Item</h2>
+                    <p class="subtitle">Upload a photo of your clothing and our AI will classify it</p>
+                    
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-icon">📸</div>
+                        <p class="upload-text">Drag & drop an image or click to browse</p>
+                        <input type="file" id="file-input" accept="image/*" hidden>
+                        <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+                            Choose Image
+                        </button>
+                    </div>
+
+                    <div id="upload-preview" class="upload-preview hidden">
+                        <img id="preview-image" src="" alt="Preview">
+                        <div class="preview-info">
+                            <h3>Preview</h3>
+                            <button class="btn btn-primary" id="upload-btn">Upload & Classify</button>
+                            <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
+                        </div>
+                    </div>
+
+                    <div id="classification-result" class="classification-result hidden">
+                        <h3>✨ Classification Complete!</h3>
+                        <div class="result-details"></div>
+                        <button class="btn btn-primary" id="add-another-btn">Add Another Item</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Outfits Tab -->
+            <section id="outfits-tab" class="tab-content">
+                <div class="section-header">
+                    <h2>AI Outfit Recommendations</h2>
+                    <div class="filters">
+                        <select id="occasion-filter" class="filter-select">
+                            <option value="">Any Occasion</option>
+                            <option value="work">Work</option>
+                            <option value="casual">Casual</option>
+                            <option value="gym">Gym</option>
+                            <option value="date">Date Night</option>
+                            <option value="party">Party</option>
+                        </select>
+                        <select id="season-filter" class="filter-select">
+                            <option value="">Any Season</option>
+                            <option value="Spring">Spring</option>
+                            <option value="Summer">Summer</option>
+                            <option value="Fall">Fall</option>
+                            <option value="Winter">Winter</option>
+                        </select>
+                        <button class="btn btn-primary" id="generate-outfits-btn">Generate Outfits</button>
+                    </div>
+                </div>
+                <div id="outfits-container" class="outfits-container">
+                    <div class="empty-state">
+                        <p>🎨 Click "Generate Outfits" to get AI-powered recommendations!</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Stats Tab -->
+            <section id="stats-tab" class="tab-content">
+                <h2>Closet Statistics</h2>
+                <div id="stats-container" class="stats-container">
+                    <div class="loading">Loading statistics...</div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Item Detail Modal -->
+    <div id="item-modal" class="modal hidden">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="/frontend/script.js"></script>
+</body>
+</html>
+
