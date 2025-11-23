@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Closet-Org</title>
+    <link rel="stylesheet" href="/frontend/auth.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="auth-container">
+        <!-- Background Elements -->
+        <div class="bg-gradient"></div>
+        <div class="bg-circle circle-1"></div>
+        <div class="bg-circle circle-2"></div>
+        <div class="bg-circle circle-3"></div>
+        
+        <!-- Auth Card -->
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="logo">
+                    <span class="logo-icon">👕</span>
+                    <h1>Closet-Org</h1>
+                </div>
+                <p class="tagline">Organize your wardrobe with AI</p>
+            </div>
+            
+            <form id="register-form" class="auth-form">
+                <h2>Create Account</h2>
+                <p class="form-subtitle">Join us and start organizing your closet</p>
+                
+                <div class="form-group">
+                    <label for="full_name">Full Name</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">👤</span>
+                        <input 
+                            type="text" 
+                            id="full_name" 
+                            name="full_name" 
+                            placeholder="Enter your full name"
+                        >
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">@</span>
+                        <input 
+                            type="text" 
+                            id="username" 
+                            name="username" 
+                            placeholder="Choose a username"
+                            required
+                        >
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">📧</span>
+                        <input 
+                            type="email" 
+                            id="email" 
+                            name="email" 
+                            placeholder="Enter your email"
+                            required
+                        >
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">🔒</span>
+                        <input 
+                            type="password" 
+                            id="password" 
+                            name="password" 
+                            placeholder="Create a password"
+                            required
+                        >
+                    </div>
+                    <small class="input-hint">Must be at least 6 characters long</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirm_password">Confirm Password</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">🔒</span>
+                        <input 
+                            type="password" 
+                            id="confirm_password" 
+                            name="confirm_password" 
+                            placeholder="Confirm your password"
+                            required
+                        >
+                    </div>
+                </div>
+                
+                <div id="error-message" class="error-message hidden"></div>
+                
+                <button type="submit" class="btn btn-primary" id="register-btn">
+                    <span class="btn-text">Create Account</span>
+                    <span class="btn-loader hidden">
+                        <div class="spinner"></div>
+                    </span>
+                </button>
+                
+                <div class="form-footer">
+                    <p>Already have an account? <a href="/frontend/login.html" class="link">Sign in</a></p>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Features Section -->
+        <div class="features-section">
+            <div class="feature-item">
+                <div class="feature-icon">🤖</div>
+                <h3>AI-Powered</h3>
+                <p>Automatic clothing classification</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">👔</div>
+                <h3>Smart Outfits</h3>
+                <p>Get personalized recommendations</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">📊</div>
+                <h3>Analytics</h3>
+                <p>Track your wardrobe stats</p>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/frontend/auth.js"></script>
+</body>
+</html>
+

@@ -169,3 +169,4 @@ class OutfitRecommender:
         
         return outfits[:max_outfits]
 
+

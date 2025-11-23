@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Closet-Org - AI-Powered Wardrobe Organization</title>
+    <link rel="stylesheet" href="/frontend/landing.css">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Custom Cursor -->
+    <div class="cursor-dot"></div>
+    <div class="cursor-outline"></div>
+
+    <!-- Navigation -->
+    <nav class="nav" id="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <span class="logo-bracket">[</span>
+                <span class="logo-text">Closet-Org</span>
+                <span class="logo-bracket">]</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features" class="nav-link">Features</a>
+                <a href="#demo" class="nav-link">See How It Works</a>
+                <a href="/frontend/login.html" class="nav-btn-secondary">Sign In</a>
+                <a href="/frontend/register.html" class="nav-btn-primary">Get Started</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero" id="hero">
+        <div class="hero-bg-grid"></div>
+        <div class="hero-gradient-orb orb-1"></div>
+        <div class="hero-gradient-orb orb-2"></div>
+        <div class="hero-gradient-orb orb-3"></div>
+        
+        <!-- Virtual Closet Visualization -->
+        <div class="virtual-closet">
+            <div class="closet-rail"></div>
+            <div class="clothing-items">
+                <div class="clothing-item" style="--delay: 0s;">
+                    <div class="hanger"></div>
+                    <div class="garment tshirt">
+                        <div class="garment-detail collar"></div>
+                        <div class="garment-detail sleeve-left"></div>
+                        <div class="garment-detail sleeve-right"></div>
+                    </div>
+                    <div class="item-tag">Casual Shirt</div>
+                </div>
+                <div class="clothing-item" style="--delay: 0.2s;">
+                    <div class="hanger"></div>
+                    <div class="garment dress">
+                        <div class="garment-detail strap-left"></div>
+                        <div class="garment-detail strap-right"></div>
+                    </div>
+                    <div class="item-tag">Summer Dress</div>
+                </div>
+                <div class="clothing-item" style="--delay: 0.4s;">
+                    <div class="hanger"></div>
+                    <div class="garment jacket">
+                        <div class="garment-detail lapel-left"></div>
+                        <div class="garment-detail lapel-right"></div>
+                        <div class="garment-detail zipper"></div>
+                    </div>
+                    <div class="item-tag">Winter Jacket</div>
+                </div>
+                <div class="clothing-item" style="--delay: 0.6s;">
+                    <div class="hanger"></div>
+                    <div class="garment pants">
+                        <div class="garment-detail pocket"></div>
+                    </div>
+                    <div class="item-tag">Denim Jeans</div>
+                </div>
+                <div class="clothing-item" style="--delay: 0.8s;">
+                    <div class="hanger"></div>
+                    <div class="garment sweater">
+                        <div class="garment-detail neckline"></div>
+                    </div>
+                    <div class="item-tag">Cozy Sweater</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="hero-content">
+            <div class="hero-badge">
+                <div class="badge-pulse"></div>
+                <span>Powered by PyTorch & ResNet50</span>
+            </div>
+            
+            <h1 class="hero-title">
+                <span class="title-line">Never Wonder</span>
+                <span class="title-line gradient-text">"What Should I Wear?"</span>
+                <span class="title-line">Again</span>
+            </h1>
+            
+            <p class="hero-subtitle">
+                Upload your clothes, let AI organize them by color, style, and season. Get smart outfit recommendations based on color theory and occasion.
+            </p>
+            
+            <div class="hero-buttons">
+                <a href="/frontend/register.html" class="btn btn-hero">
+                    <span>Start Organizing Free</span>
+                    <div class="btn-shine"></div>
+                </a>
+                <a href="#demo" class="btn btn-hero-outline">
+                    <span>Watch It Work</span>
+                </a>
+            </div>
+            
+            <div class="hero-stats">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <div class="stat-icon-inner"></div>
+                    </div>
+                    <div class="stat-data">
+                        <div class="stat-number" data-target="10000">0</div>
+                        <div class="stat-label">Items Classified</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <div class="stat-icon-inner"></div>
+                    </div>
+                    <div class="stat-data">
+                        <div class="stat-number" data-target="95">0</div>
+                        <div class="stat-label">AI Accuracy</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <div class="stat-icon-inner"></div>
+                    </div>
+                    <div class="stat-data">
+                        <div class="stat-number" data-target="24">0</div>
+                        <div class="stat-label">Available 24/7</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="scroll-indicator">
+            <div class="scroll-line"></div>
+            <span>See your wardrobe organized</span>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">What Closet-Org Actually Does</h2>
+                <p class="section-subtitle">Real AI features for real wardrobe problems</p>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-card" data-scroll>
+                    <div class="feature-visual">
+                        <div class="upload-demo">
+                            <div class="phone-mockup">
+                                <div class="camera-viewfinder">
+                                    <div class="scan-line"></div>
+                                    <div class="garment-preview shirt-preview"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <h3>Snap & Upload</h3>
+                    <p>Take a photo of any clothing item with your phone. Our AI instantly processes it - no manual tagging needed.</p>
+                    <div class="feature-tags">
+                        <span class="tag">Instant Upload</span>
+                        <span class="tag">Any Format</span>
+                    </div>
+                </div>
+
+                <div class="feature-card" data-scroll>
+                    <div class="feature-visual">
+                        <div class="classification-demo">
+                            <div class="ai-scan">
+                                <div class="scan-item active">
+                                    <span class="scan-label">Category:</span>
+                                    <span class="scan-value">Shirt</span>
+                                </div>
+                                <div class="scan-item">
+                                    <span class="scan-label">Color:</span>
+                                    <span class="scan-value">Blue</span>
+                                </div>
+                                <div class="scan-item">
+                                    <span class="scan-label">Style:</span>
+                                    <span class="scan-value">Casual</span>
+                                </div>
+                                <div class="scan-item">
+                                    <span class="scan-label">Season:</span>
+                                    <span class="scan-value">All-Season</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <h3>AI Auto-Classification</h3>
+                    <p>ResNet50 neural network identifies category, extracts colors, determines style (Casual/Formal/Athletic), and detects season.</p>
+                    <div class="feature-tags">
+                        <span class="tag">ResNet50</span>
+                        <span class="tag">95% Accurate</span>
+                    </div>
+                </div>
+
+                <div class="feature-card" data-scroll>
+                    <div class="feature-visual">
+                        <div class="color-analysis-demo">
+                            <div class="clothing-sample"></div>
+                            <div class="color-palette">
+                                <div class="color-swatch" style="background: linear-gradient(135deg, #1e40af, #3b82f6);"></div>
+                                <div class="color-swatch" style="background: linear-gradient(135deg, #ffffff, #e5e7eb);"></div>
+                                <div class="color-swatch" style="background: linear-gradient(135deg, #475569, #1e293b);"></div>
+                            </div>
+                            <div class="color-match-indicator">
+                                <div class="match-line"></div>
+                                <span>Complementary Colors</span>
+                            </div>
+                        </div>
+                    </div>
+                    <h3>Color Intelligence</h3>
+                    <p>Advanced color extraction finds dominant hues. Outfit recommender uses color theory to suggest perfect combinations.</p>
+                    <div class="feature-tags">
+                        <span class="tag">K-Means</span>
+                        <span class="tag">Color Theory</span>
+                    </div>
+                </div>
+
+                <div class="feature-card" data-scroll>
+                    <div class="feature-visual">
+                        <div class="outfit-demo">
+                            <div class="outfit-combination">
+                                <div class="outfit-piece top">
+                                    <div class="piece-label">Top</div>
+                                </div>
+                                <div class="outfit-connector"></div>
+                                <div class="outfit-piece bottom">
+                                    <div class="piece-label">Bottom</div>
+                                </div>
+                                <div class="outfit-connector"></div>
+                                <div class="outfit-piece shoes">
+                                    <div class="piece-label">Shoes</div>
+                                </div>
+                            </div>
+                            <div class="occasion-tags">
+                                <span class="occasion">Casual</span>
+                                <span class="occasion">Work</span>
+                                <span class="occasion">Date</span>
+                            </div>
+                        </div>
+                    </div>
+                    <h3>Smart Outfit Recommendations</h3>
+                    <p>Filter by occasion (Work, Casual, Gym, Date, Party) and season. AI suggests matching outfits based on your actual wardrobe.</p>
+                    <div class="feature-tags">
+                        <span class="tag">Occasion-Based</span>
+                        <span class="tag">Style Matching</span>
+                    </div>
+                </div>
+
+                <div class="feature-card" data-scroll>
+                    <div class="feature-visual">
+                        <div class="analytics-demo">
+                            <div class="chart-bars">
+                                <div class="bar" style="height: 70%;">
+                                    <span class="bar-label">Shirts</span>
+                                </div>
+                                <div class="bar" style="height: 45%;">
+                                    <span class="bar-label">Pants</span>
+                                </div>
+                                <div class="bar" style="height: 30%;">
+                                    <span class="bar-label">Shoes</span>
+                                </div>
+                                <div class="bar" style="height: 55%;">
+                                    <span class="bar-label">Dresses</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <h3>Wardrobe Analytics</h3>
+                    <p>See what you own by category, track wear frequency, identify gaps, and know what you actually use vs. what collects dust.</p>
+                    <div class="feature-tags">
+                        <span class="tag">Real Stats</span>
+                        <span class="tag">Insights</span>
+                    </div>
+                </div>
+
+                <div class="feature-card" data-scroll>
+                    <div class="feature-visual">
+                        <div class="laundry-demo">
+                            <div class="status-items">
+                                <div class="status-item clean">
+                                    <div class="status-icon">✓</div>
+                                    <span>Clean</span>
+                                </div>
+                                <div class="status-item dirty">
+                                    <div class="status-icon">⟳</div>
+                                    <span>Needs Wash</span>
+                                </div>
+                                <div class="status-item worn">
+                                    <div class="status-icon">👕</div>
+                                    <span>Worn 3x</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <h3>Laundry & Wear Tracking</h3>
+                    <p>Mark items as clean or dirty. Track how many times you've worn each piece. Never forget what needs washing.</p>
+                    <div class="feature-tags">
+                        <span class="tag">Status Updates</span>
+                        <span class="tag">Wear Counter</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Flow Section -->
+    <section class="demo-flow" id="demo">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">How It Actually Works</h2>
+                <p class="section-subtitle">From upload to organized outfit in 3 steps</p>
+            </div>
+            
+            <div class="flow-steps">
+                <div class="flow-step" data-scroll>
+                    <div class="step-badge">Step 1</div>
+                    <div class="step-visual">
+                        <div class="upload-interface">
+                            <div class="upload-zone">
+                                <div class="upload-icon-large">↑</div>
+                                <p>Drop photo or click to browse</p>
+                            </div>
+                            <div class="file-preview">
+                                <div class="preview-image"></div>
+                                <div class="upload-progress">
+                                    <div class="progress-bar"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="step-content">
+                        <h3>Upload Your Clothing</h3>
+                        <p>Take a photo with your phone or upload existing images. Works with any photo format - JPG, PNG, whatever you have.</p>
+                    </div>
+                </div>
+
+                <div class="flow-arrow" data-scroll>→</div>
+
+                <div class="flow-step" data-scroll>
+                    <div class="step-badge">Step 2</div>
+                    <div class="step-visual">
+                        <div class="processing-interface">
+                            <div class="processing-animation">
+                                <div class="ai-core"></div>
+                                <div class="ai-rings">
+                                    <div class="ring ring-1"></div>
+                                    <div class="ring ring-2"></div>
+                                    <div class="ring ring-3"></div>
+                                </div>
+                            </div>
+                            <div class="processing-results">
+                                <div class="result-item">✓ Category: Detected</div>
+                                <div class="result-item">✓ Color: Extracted</div>
+                                <div class="result-item">✓ Style: Classified</div>
+                                <div class="result-item">✓ Season: Identified</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="step-content">
+                        <h3>AI Processes Everything</h3>
+                        <p>PyTorch model analyzes the image. ResNet50 identifies the item type. Color extraction finds dominant hues. Style classifier tags it.</p>
+                    </div>
+                </div>
+
+                <div class="flow-arrow" data-scroll>→</div>
+
+                <div class="flow-step" data-scroll>
+                    <div class="step-badge">Step 3</div>
+                    <div class="step-visual">
+                        <div class="organized-closet">
+                            <div class="closet-filters">
+                                <span class="filter active">All</span>
+                                <span class="filter">Shirts</span>
+                                <span class="filter">Pants</span>
+                                <span class="filter">Summer</span>
+                            </div>
+                            <div class="closet-grid">
+                                <div class="grid-item shirt-item"></div>
+                                <div class="grid-item pants-item"></div>
+                                <div class="grid-item dress-item"></div>
+                                <div class="grid-item jacket-item"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="step-content">
+                        <h3>Browse Your Digital Closet</h3>
+                        <p>Filter by category, season, style, or status. Click any item to mark as worn, update laundry status, or get outfit suggestions.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tech Stack Section -->
+    <section class="tech-stack">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Built With Real AI Technology</h2>
+                <p class="section-subtitle">Not just buzzwords - actual machine learning</p>
+            </div>
+            
+            <div class="tech-grid">
+                <div class="tech-card" data-scroll>
+                    <div class="tech-icon pytorch"></div>
+                    <h3>PyTorch</h3>
+                    <p>Deep learning framework powering the classification model</p>
+                </div>
+                
+                <div class="tech-card" data-scroll>
+                    <div class="tech-icon resnet"></div>
+                    <h3>ResNet50</h3>
+                    <p>Pre-trained CNN for accurate clothing categorization</p>
+                </div>
+                
+                <div class="tech-card" data-scroll>
+                    <div class="tech-icon fastapi"></div>
+                    <h3>FastAPI</h3>
+                    <p>High-performance backend serving predictions</p>
+                </div>
+                
+                <div class="tech-card" data-scroll>
+                    <div class="tech-icon kmeans"></div>
+                    <h3>K-Means</h3>
+                    <p>Color clustering for dominant hue extraction</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta">
+        <div class="cta-bg-pattern"></div>
+        <div class="container">
+            <div class="cta-content" data-scroll>
+                <h2>Ready to Organize Your Closet?</h2>
+                <p>Stop wasting time deciding what to wear. Let AI help you look your best every day.</p>
+                <a href="/frontend/register.html" class="btn btn-cta">
+                    <span>Start For Free</span>
+                    <div class="btn-shine"></div>
+                </a>
+                <p class="cta-subtext">No credit card required • Works on any device</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <div class="footer-logo">
+                        <span class="logo-bracket">[</span>
+                        <span>Closet-Org</span>
+                        <span class="logo-bracket">]</span>
+                    </div>
+                    <p>AI-powered wardrobe organization using PyTorch and computer vision.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4>Product</h4>
+                        <a href="#features">Features</a>
+                        <a href="#demo">How It Works</a>
+                        <a href="/frontend/register.html">Get Started</a>
+                    </div>
+                    <div class="footer-column">
+                        <h4>Account</h4>
+                        <a href="/frontend/login.html">Sign In</a>
+                        <a href="/frontend/register.html">Register</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 Closet-Org. Powered by AI.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/frontend/landing.js"></script>
+</body>
+</html>

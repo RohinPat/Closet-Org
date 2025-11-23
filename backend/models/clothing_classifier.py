@@ -194,3 +194,4 @@ class ClothingClassifier:
         else:
             return "Casual"
 
+
