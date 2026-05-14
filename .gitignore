@@ -54,4 +54,8 @@ Thumbs.db
 .env
 .env.local
 
+# Expo / React Native
+mobile/node_modules/
+mobile/.expo/
+
 

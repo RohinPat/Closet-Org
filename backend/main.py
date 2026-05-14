@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import List, Optional
 import shutil
 
-from models.clothing_classifier import ClothingClassifier
 from models.outfit_recommender import OutfitRecommender
 from database.db_manager import DatabaseManager
 from auth import (
@@ -50,8 +49,16 @@ app.add_middleware(
 
 # Initialize components
 db = DatabaseManager()
-classifier = ClothingClassifier()
 outfit_recommender = OutfitRecommender()
+
+_classifier = None
+
+def get_classifier():
+    global _classifier
+    if _classifier is None:
+        from models.clothing_classifier import ClothingClassifier
+        _classifier = ClothingClassifier()
+    return _classifier
 
 # Create necessary directories (relative to project root)
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -214,8 +221,8 @@ async def upload_clothing(
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Classify the clothing
-        classification = classifier.classify(str(file_path))
+        # Classify the clothing (torch loaded lazily on first upload)
+        classification = get_classifier().classify(str(file_path))
         
         # Save to database with user_id
         item_id = db.add_clothing_item(

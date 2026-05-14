@@ -5,19 +5,39 @@ Upgrades existing closet.db to new schema with enhanced tracking features
 """
 
 import sqlite3
+import sys
 from pathlib import Path
 
-def migrate_database(db_path="backend/closet.db"):
-    """Migrate existing database to new schema"""
+_REPO_ROOT = Path(__file__).resolve().parent
+_DEFAULT_DB_PATH = _REPO_ROOT / "backend" / "closet.db"
+
+
+def _ensure_backend_on_path():
+    backend_dir = str(_REPO_ROOT / "backend")
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+
+
+def migrate_database(db_path=None):
+    """Create database with full schema if missing, or upgrade an older closet.db."""
     
-    print("🔄 Starting database migration...")
+    if db_path is None:
+        db_path = _DEFAULT_DB_PATH
+    else:
+        db_path = Path(db_path)
     
-    if not Path(db_path).exists():
-        print(f"❌ Database not found at {db_path}")
-        print("ℹ️  If this is a new installation, just run the app normally.")
+    db_path = Path(db_path)
+    print("[*] Starting database migration...")
+    
+    if not db_path.exists():
+        print(f"[i] No database at {db_path} -- creating full schema...")
+        _ensure_backend_on_path()
+        from database.db_manager import DatabaseManager
+        DatabaseManager(str(db_path))
+        print(f"[OK] Created new database: {db_path}")
         return
     
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
     
     # Check if migration is needed
@@ -25,11 +45,11 @@ def migrate_database(db_path="backend/closet.db"):
     columns = [col[1] for col in cursor.fetchall()]
     
     if 'purchase_price' in columns:
-        print("✅ Database already migrated!")
+        print("[OK] Database already migrated (full schema).")
         conn.close()
         return
     
-    print("📝 Adding new columns to clothing_items table...")
+    print("[*] Adding new columns to clothing_items table...")
     
     # Add new columns one by one (SQLite doesn't support multiple ADD COLUMN)
     new_columns = [
@@ -51,14 +71,14 @@ def migrate_database(db_path="backend/closet.db"):
     for col_name, col_type in new_columns:
         try:
             cursor.execute(f"ALTER TABLE clothing_items ADD COLUMN {col_name} {col_type}")
-            print(f"  ✓ Added {col_name}")
+            print(f"  + Added {col_name}")
         except sqlite3.OperationalError as e:
             if "duplicate column" in str(e).lower():
-                print(f"  ⊙ {col_name} already exists")
+                print(f"  = {col_name} already exists")
             else:
-                print(f"  ⚠ Error adding {col_name}: {e}")
+                print(f"  ! Error adding {col_name}: {e}")
     
-    print("\n📝 Adding new columns to wear_history table...")
+    print("\n[*] Adding new columns to wear_history table...")
     
     wear_history_columns = [
         ("occasion", "TEXT"),
@@ -69,14 +89,14 @@ def migrate_database(db_path="backend/closet.db"):
     for col_name, col_type in wear_history_columns:
         try:
             cursor.execute(f"ALTER TABLE wear_history ADD COLUMN {col_name} {col_type}")
-            print(f"  ✓ Added {col_name}")
+            print(f"  + Added {col_name}")
         except sqlite3.OperationalError as e:
             if "duplicate column" in str(e).lower():
-                print(f"  ⊙ {col_name} already exists")
+                print(f"  = {col_name} already exists")
             else:
-                print(f"  ⚠ Error adding {col_name}: {e}")
+                print(f"  ! Error adding {col_name}: {e}")
     
-    print("\n📝 Creating laundry_queue table...")
+    print("\n[*] Creating laundry_queue table...")
     
     try:
         cursor.execute('''
@@ -90,11 +110,11 @@ def migrate_database(db_path="backend/closet.db"):
                 FOREIGN KEY (item_id) REFERENCES clothing_items (id) ON DELETE CASCADE
             )
         ''')
-        print("  ✓ Created laundry_queue table")
+        print("  + Created laundry_queue table")
     except sqlite3.OperationalError as e:
-        print(f"  ⊙ laundry_queue table already exists")
+        print(f"  = laundry_queue table already exists")
     
-    print("\n📊 Calculating initial values for existing items...")
+    print("\n[*] Calculating initial values for existing items...")
     
     # Set smart defaults for max_wear_before_wash based on category
     cursor.execute("""
@@ -121,31 +141,29 @@ def migrate_database(db_path="backend/closet.db"):
             END
     """)
     
-    print("  ✓ Set smart defaults for max_wear_before_wash")
-    print("  ✓ Calculated rotation categories")
+    print("  + Set smart defaults for max_wear_before_wash")
+    print("  + Calculated rotation categories")
     
     conn.commit()
     conn.close()
     
-    print("\n✅ Migration complete!")
-    print("\n💡 New Features Available:")
-    print("   • Multi-wear tracking (jeans, jackets, etc.)")
-    print("   • Cost-per-wear analysis")
-    print("   • Freshness scores")
-    print("   • Laundry queue management")
-    print("   • Wardrobe insights & neglected items")
-    print("   • Rotation status tracking")
-    print("   • Favorite items")
-    print("\n🚀 Restart your app to use the new features!")
+    print("\n[OK] Migration complete!")
+    print("\nNew features available:")
+    print("   - Multi-wear tracking (jeans, jackets, etc.)")
+    print("   - Cost-per-wear analysis")
+    print("   - Freshness scores")
+    print("   - Laundry queue management")
+    print("   - Wardrobe insights & neglected items")
+    print("   - Rotation status tracking")
+    print("   - Favorite items")
+    print("\nRestart your app to use the new features.")
 
 if __name__ == "__main__":
-    import sys
-    
-    db_path = sys.argv[1] if len(sys.argv) > 1 else "backend/closet.db"
-    
-    # Also check root directory
-    if not Path(db_path).exists() and Path("closet.db").exists():
-        db_path = "closet.db"
-    
-    migrate_database(db_path)
+    cli_path = sys.argv[1] if len(sys.argv) > 1 else None
+    if cli_path:
+        migrate_database(cli_path)
+    elif Path("closet.db").exists() and not _DEFAULT_DB_PATH.exists():
+        migrate_database(_REPO_ROOT / "closet.db")
+    else:
+        migrate_database(_DEFAULT_DB_PATH)
 

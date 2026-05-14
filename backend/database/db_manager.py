@@ -7,11 +7,15 @@ import hashlib
 import secrets
 
 
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+_DEFAULT_DB = str(_BACKEND_DIR / "closet.db")
+
+
 class DatabaseManager:
     """SQLite database manager for clothing inventory and user management"""
     
-    def __init__(self, db_path: str = "closet.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: Optional[str] = None):
+        self.db_path = db_path or _DEFAULT_DB
         self.init_database()
     
     def get_connection(self):
