@@ -2,7 +2,13 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { apiUrl } from '../config';
 import { formatApiError } from './errors';
-import type { ClothingItem, ClosetStats, OutfitRecommendation, User } from './types';
+import type {
+  ClothingItem,
+  ClosetStats,
+  ItemDetailsPatch,
+  OutfitRecommendation,
+  User,
+} from './types';
 
 const TOKEN_KEY = 'closet_org_access_token';
 const isWeb = Platform.OS === 'web';
@@ -144,6 +150,7 @@ export async function uploadClothing(
     item_id: number;
     classification: Record<string, unknown>;
     image_url: string;
+    thumbnail_url?: string | null;
   }>(
     '/upload-clothing',
     {
@@ -163,6 +170,17 @@ export async function toggleFavorite(itemId: number) {
 export async function deleteItem(itemId: number) {
   return apiFetch<{ success: boolean }>(`/item/${itemId}`, {
     method: 'DELETE',
+  });
+}
+
+export async function updateItemDetails(
+  itemId: number,
+  patch: ItemDetailsPatch
+) {
+  return apiFetch<{ success: boolean; item_id: number }>(`/item/${itemId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
   });
 }
 

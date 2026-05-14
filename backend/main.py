@@ -211,7 +211,7 @@ async def update_profile(profile_data: UserProfile, current_user: dict = Depends
 
 @app.post("/api/upload-clothing")
 async def upload_clothing(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
     """Upload and classify a clothing item"""
@@ -220,26 +220,35 @@ async def upload_clothing(
         file_path = UPLOAD_DIR / f"{datetime.now().timestamp()}_{file.filename}"
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
+
         # Classify the clothing (torch loaded lazily on first upload)
         classification = get_classifier().classify(str(file_path))
-        
+
+        # Background-removed thumbnail. Best-effort — falls back to original
+        # on the frontend if rembg can't produce one.
+        from models.clothing_classifier import generate_cutout_thumbnail
+        thumb_path = file_path.with_name(file_path.stem + ".thumb.png")
+        thumb_ok = generate_cutout_thumbnail(str(file_path), str(thumb_path))
+        thumbnail_path_str = str(thumb_path) if thumb_ok else None
+
         # Save to database with user_id
         item_id = db.add_clothing_item(
             user_id=current_user["user_id"],
             image_path=str(file_path),
+            thumbnail_path=thumbnail_path_str,
             category=classification["category"],
             subcategory=classification["subcategory"],
             colors=classification["colors"],
             season=classification["season"],
             style=classification["style"]
         )
-        
+
         return {
             "success": True,
             "item_id": item_id,
             "classification": classification,
-            "image_url": f"/uploads/{file_path.name}"
+            "image_url": f"/uploads/{file_path.name}",
+            "thumbnail_url": f"/uploads/{thumb_path.name}" if thumb_ok else None,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -276,6 +285,15 @@ class ItemStatusUpdate(BaseModel):
     occasion: Optional[str] = None
     rating: Optional[int] = None
 
+
+class ItemDetailsUpdate(BaseModel):
+    brand: Optional[str] = None
+    size: Optional[str] = None
+    notes: Optional[str] = None
+    purchase_date: Optional[str] = None
+    purchase_price: Optional[float] = None
+    purchase_location: Optional[str] = None
+
 @app.put("/api/item/{item_id}/status")
 async def update_item_status(item_id: int, status_update: ItemStatusUpdate):
     """Update wear and wash status of an item with multi-wear tracking"""
@@ -286,6 +304,28 @@ async def update_item_status(item_id: int, status_update: ItemStatusUpdate):
         wear_again=status_update.wear_again,
         occasion=status_update.occasion,
         rating=status_update.rating
+    )
+    if not success:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return {"success": True, "item_id": item_id}
+
+
+@app.put("/api/item/{item_id}")
+async def update_item_details(
+    item_id: int,
+    details: ItemDetailsUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Patch user-editable metadata (brand, size, notes, purchase fields)."""
+    # exclude_unset so missing keys mean "leave alone" rather than "set to NULL".
+    patch = details.dict(exclude_unset=True)
+    if not patch:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    success = db.update_item_details(
+        item_id=item_id,
+        user_id=current_user["user_id"],
+        **patch,
     )
     if not success:
         raise HTTPException(status_code=404, detail="Item not found")

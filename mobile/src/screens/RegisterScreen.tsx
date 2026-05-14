@@ -10,15 +10,25 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useHeaderHeight } from '@react-navigation/elements';
 import type { AuthStackParamList } from '../navigation/RootNavigator';
 import { useAuth } from '../context/AuthContext';
-import { GlassButton, GlassCard, GlassInputContainer } from '../components/Glass';
-import { colors, spacing, typography } from '../theme';
+import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import {
+  GlassButton,
+  GlassCard,
+  GlassInputContainer,
+  ScreenBackground,
+} from '../components/Glass';
+import { spacing, typography, type ThemeColors } from '../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
 export function RegisterScreen({ navigation }: Props) {
   const { signUp } = useAuth();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const headerHeight = useHeaderHeight();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
@@ -57,138 +67,145 @@ export function RegisterScreen({ navigation }: Props) {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
+    <View style={{ flex: 1 }}>
+      <ScreenBackground />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Text style={styles.title}>Join Closet Org</Text>
-        <Text style={styles.subtitle}>
-          A few details and your closet is ready.
-        </Text>
+        <ScrollView
+          contentContainerStyle={[
+            styles.container,
+            { paddingTop: headerHeight + spacing.lg },
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.title}>Join Closet Org</Text>
+          <Text style={styles.subtitle}>
+            A few details and your closet is ready.
+          </Text>
 
-        <GlassCard padded style={styles.card}>
-          {[
-            {
-              key: 'u',
-              placeholder: 'Username',
-              value: username,
-              setter: setUsername,
-              autoCap: 'none' as const,
-            },
-            {
-              key: 'e',
-              placeholder: 'Email',
-              value: email,
-              setter: setEmail,
-              autoCap: 'none' as const,
-              keyboard: 'email-address' as const,
-            },
-            {
-              key: 'n',
-              placeholder: 'Full name (optional)',
-              value: fullName,
-              setter: setFullName,
-            },
-            {
-              key: 'p',
-              placeholder: 'Password',
-              value: password,
-              setter: setPassword,
-              secure: true,
-            },
-            {
-              key: 'c',
-              placeholder: 'Confirm password',
-              value: confirm,
-              setter: setConfirm,
-              secure: true,
-            },
-          ].map((f) => (
-            <GlassInputContainer key={f.key} style={styles.input}>
-              <TextInput
-                style={styles.textInput}
-                placeholder={f.placeholder}
-                placeholderTextColor={colors.placeholder}
-                autoCapitalize={f.autoCap}
-                autoCorrect={false}
-                keyboardType={f.keyboard}
-                secureTextEntry={f.secure}
-                value={f.value}
-                onChangeText={f.setter}
-              />
-            </GlassInputContainer>
-          ))}
+          <GlassCard padded style={styles.card}>
+            {[
+              {
+                key: 'u',
+                placeholder: 'Username',
+                value: username,
+                setter: setUsername,
+                autoCap: 'none' as const,
+              },
+              {
+                key: 'e',
+                placeholder: 'Email',
+                value: email,
+                setter: setEmail,
+                autoCap: 'none' as const,
+                keyboard: 'email-address' as const,
+              },
+              {
+                key: 'n',
+                placeholder: 'Full name (optional)',
+                value: fullName,
+                setter: setFullName,
+              },
+              {
+                key: 'p',
+                placeholder: 'Password',
+                value: password,
+                setter: setPassword,
+                secure: true,
+              },
+              {
+                key: 'c',
+                placeholder: 'Confirm password',
+                value: confirm,
+                setter: setConfirm,
+                secure: true,
+              },
+            ].map((f) => (
+              <GlassInputContainer key={f.key} style={styles.input}>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder={f.placeholder}
+                  placeholderTextColor={colors.placeholder}
+                  autoCapitalize={f.autoCap}
+                  autoCorrect={false}
+                  keyboardType={f.keyboard}
+                  secureTextEntry={f.secure}
+                  value={f.value}
+                  onChangeText={f.setter}
+                />
+              </GlassInputContainer>
+            ))}
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <GlassButton
-            title="Create account"
-            onPress={onSubmit}
-            loading={busy}
-            style={styles.submit}
-          />
+            <GlassButton
+              title="Create account"
+              onPress={onSubmit}
+              loading={busy}
+              style={styles.submit}
+            />
 
-          <Pressable
-            style={styles.linkWrap}
-            onPress={() => navigation.goBack()}
-            disabled={busy}
-          >
-            <Text style={styles.link}>Already have an account? Sign in</Text>
-          </Pressable>
-        </GlassCard>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            <Pressable
+              style={styles.linkWrap}
+              onPress={() => navigation.goBack()}
+              disabled={busy}
+            >
+              <Text style={styles.link}>Already have an account? Sign in</Text>
+            </Pressable>
+          </GlassCard>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: 96,
-    paddingBottom: spacing.xxl,
-  },
-  title: {
-    ...typography.title,
-    color: colors.text,
-    marginBottom: 6,
-  },
-  subtitle: {
-    ...typography.callout,
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
-  },
-  card: {
-    padding: spacing.lg,
-  },
-  input: {
-    marginBottom: spacing.md,
-  },
-  textInput: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: colors.text,
-  },
-  error: {
-    color: colors.danger,
-    marginBottom: spacing.sm,
-    fontSize: 14,
-  },
-  submit: {
-    marginTop: spacing.sm,
-  },
-  linkWrap: {
-    marginTop: spacing.lg,
-    alignItems: 'center',
-  },
-  link: {
-    color: colors.accent,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});
+function makeStyles({ colors }: { colors: ThemeColors }) {
+  return StyleSheet.create({
+    flex: { flex: 1 },
+    container: {
+      paddingHorizontal: spacing.xl,
+      paddingBottom: spacing.xxl,
+    },
+    title: {
+      ...typography.title,
+      color: colors.text,
+      marginBottom: 6,
+    },
+    subtitle: {
+      ...typography.callout,
+      color: colors.textSecondary,
+      marginBottom: spacing.xl,
+    },
+    card: {
+      padding: spacing.lg,
+    },
+    input: {
+      marginBottom: spacing.md,
+    },
+    textInput: {
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      fontSize: 16,
+      color: colors.text,
+    },
+    error: {
+      color: colors.danger,
+      marginBottom: spacing.sm,
+      fontSize: 14,
+    },
+    submit: {
+      marginTop: spacing.sm,
+    },
+    linkWrap: {
+      marginTop: spacing.lg,
+      alignItems: 'center',
+    },
+    link: {
+      color: colors.accent,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+  });
+}

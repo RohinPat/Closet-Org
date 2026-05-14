@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, radii, shadow, blur, typography } from '../theme';
+import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import { blur, radii, shadow, typography } from '../theme';
 
 type GlassCardProps = ViewProps & {
   intensity?: number;
@@ -28,14 +29,17 @@ export function GlassCard({
   style,
   intensity = blur.cardIntensity,
   radius = radii.lg,
-  tint = blur.tint,
+  tint,
   padded = true,
   ...rest
 }: GlassCardProps) {
+  const { surface } = useTheme();
+  const resolvedTint = tint ?? surface.blurTint;
   return (
     <View
       style={[
-        styles.cardShell,
+        sharedStyles.cardShell,
+        Platform.OS === 'android' && { backgroundColor: surface.cardOverlay },
         { borderRadius: radius },
         shadow.card,
         style,
@@ -44,7 +48,7 @@ export function GlassCard({
     >
       <BlurView
         intensity={intensity}
-        tint={tint}
+        tint={resolvedTint}
         style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
       />
       <View
@@ -52,13 +56,13 @@ export function GlassCard({
           StyleSheet.absoluteFill,
           {
             borderRadius: radius,
-            backgroundColor: 'rgba(255, 255, 255, 0.42)',
+            backgroundColor: surface.cardOverlay,
             borderWidth: StyleSheet.hairlineWidth,
-            borderColor: 'rgba(255, 255, 255, 0.6)',
+            borderColor: surface.cardBorder,
           },
         ]}
       />
-      <View style={[padded && styles.cardPadding, { borderRadius: radius }]}>
+      <View style={[padded && sharedStyles.cardPadding, { borderRadius: radius }]}>
         {children}
       </View>
     </View>
@@ -85,6 +89,7 @@ export function GlassButton({
   fullWidth = true,
   ...rest
 }: GlassButtonProps) {
+  const { colors, surface } = useTheme();
   const isPrimary = variant === 'primary';
   const isDanger = variant === 'danger';
 
@@ -93,7 +98,7 @@ export function GlassButton({
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
-        styles.button,
+        sharedStyles.button,
         fullWidth && { alignSelf: 'stretch' },
         isPrimary && shadow.button,
         { opacity: pressed || disabled ? 0.85 : 1 },
@@ -112,7 +117,7 @@ export function GlassButton({
         <>
           <BlurView
             intensity={50}
-            tint="light"
+            tint={surface.blurTint}
             style={StyleSheet.absoluteFill}
           />
           <View
@@ -121,14 +126,14 @@ export function GlassButton({
               {
                 backgroundColor:
                   variant === 'ghost'
-                    ? 'rgba(255, 255, 255, 0.4)'
+                    ? surface.ghostOverlay
                     : isDanger
                       ? colors.dangerSoft
-                      : 'rgba(255, 255, 255, 0.55)',
+                      : surface.secondaryOverlay,
                 borderWidth: StyleSheet.hairlineWidth,
                 borderColor: isDanger
                   ? 'rgba(255, 69, 58, 0.32)'
-                  : 'rgba(255, 255, 255, 0.7)',
+                  : surface.secondaryBorder,
                 borderRadius: radii.md,
               },
             ]}
@@ -140,7 +145,7 @@ export function GlassButton({
       ) : (
         <Text
           style={[
-            styles.buttonText,
+            sharedStyles.buttonText,
             {
               color: isPrimary
                 ? '#fff'
@@ -164,12 +169,79 @@ type GlassBackgroundProps = {
 };
 
 export function GlassBackground({ children, style }: GlassBackgroundProps) {
+  const { colors } = useTheme();
   return (
-    <View style={[styles.bg, style]}>
+    <View style={[{ flex: 1, backgroundColor: colors.bg }, style]}>
       <LinearGradient
         colors={colors.bgGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {children}
+    </View>
+  );
+}
+
+type Orb = {
+  size: number;
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+  color: string;
+};
+
+type ScreenBackgroundProps = {
+  orbs?: Orb[];
+  children?: React.ReactNode;
+};
+
+export function ScreenBackground({
+  orbs,
+  children,
+}: ScreenBackgroundProps) {
+  const { colors, surface } = useTheme();
+  const resolvedOrbs: Orb[] = orbs ?? [
+    { size: 320, top: -80, right: -100, color: colors.orbPink },
+    { size: 280, top: 180, left: -120, color: colors.orbPurple },
+    { size: 360, bottom: -120, right: -90, color: colors.orbBlue },
+    { size: 220, bottom: 220, left: -60, color: colors.orbPeach },
+  ];
+  return (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]}
+      collapsable={false}
+    >
+      <LinearGradient
+        colors={colors.bgGradient}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {resolvedOrbs.map((o, i) => (
+        <View
+          key={i}
+          style={[
+            {
+              position: 'absolute',
+              width: o.size,
+              height: o.size,
+              borderRadius: o.size / 2,
+              backgroundColor: o.color,
+              opacity: 1,
+            },
+            o.top !== undefined && { top: o.top },
+            o.bottom !== undefined && { bottom: o.bottom },
+            o.left !== undefined && { left: o.left },
+            o.right !== undefined && { right: o.right },
+          ]}
+        />
+      ))}
+      <BlurView
+        intensity={Platform.OS === 'ios' ? 60 : 40}
+        tint={surface.blurTint}
         style={StyleSheet.absoluteFill}
       />
       {children}
@@ -184,17 +256,18 @@ export function GlassInputContainer({
   style,
   ...rest
 }: GlassInputContainerProps) {
+  const { surface } = useTheme();
   return (
     <View
       style={[
-        styles.inputShell,
+        sharedStyles.inputShell,
         style,
       ]}
       {...rest}
     >
       <BlurView
         intensity={30}
-        tint="light"
+        tint={surface.blurTint}
         style={[StyleSheet.absoluteFill, { borderRadius: radii.md }]}
       />
       <View
@@ -202,9 +275,9 @@ export function GlassInputContainer({
           StyleSheet.absoluteFill,
           {
             borderRadius: radii.md,
-            backgroundColor: 'rgba(255, 255, 255, 0.55)',
+            backgroundColor: surface.inputOverlay,
             borderWidth: StyleSheet.hairlineWidth,
-            borderColor: 'rgba(255, 255, 255, 0.65)',
+            borderColor: surface.inputBorder,
           },
         ]}
       />
@@ -213,10 +286,10 @@ export function GlassInputContainer({
   );
 }
 
-const styles = StyleSheet.create({
+const sharedStyles = StyleSheet.create({
   cardShell: {
     overflow: 'hidden',
-    backgroundColor: Platform.OS === 'android' ? colors.surface : 'transparent',
+    backgroundColor: 'transparent',
   },
   cardPadding: {
     padding: 16,
@@ -233,10 +306,6 @@ const styles = StyleSheet.create({
     ...typography.bodyMedium,
     fontSize: 16,
     fontWeight: '600',
-  },
-  bg: {
-    flex: 1,
-    backgroundColor: colors.bg,
   },
   inputShell: {
     minHeight: 52,

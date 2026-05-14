@@ -10,8 +10,17 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as api from '../api/client';
-import { GlassButton, GlassCard } from '../components/Glass';
-import { colors, radii, shadow, spacing, typography } from '../theme';
+import { GlassButton, GlassCard, ScreenBackground } from '../components/Glass';
+import { API_ORIGIN } from '../config';
+import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import {
+  radii,
+  shadow,
+  spacing,
+  typography,
+  type ThemeColors,
+  type ThemeSurface,
+} from '../theme';
 
 type Classification = {
   category?: string;
@@ -43,6 +52,8 @@ function inferFilename(uri: string, mime: string): string {
 }
 
 export function UploadScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ResultState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,10 +96,15 @@ export function UploadScreen() {
     setBusy(true);
     try {
       const data = await api.uploadClothing(uri, filename, mime);
+      // Prefer the server's background-removed thumbnail so the preview
+      // matches what the closet grid will show; fall back to the local pick.
+      const previewUri = data.thumbnail_url
+        ? `${API_ORIGIN}${data.thumbnail_url}`
+        : uri;
       setResult({
         itemId: data.item_id,
         classification: data.classification as Classification,
-        previewUri: uri,
+        previewUri,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed');
@@ -98,178 +114,193 @@ export function UploadScreen() {
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.heading}>Add an item</Text>
-      <Text style={styles.blurb}>
-        Snap or pick a photo of a clothing item. We'll classify it and add it to
-        your closet.
-      </Text>
+    <View style={{ flex: 1 }}>
+      <ScreenBackground />
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.heading}>Add an item</Text>
+        <Text style={styles.blurb}>
+          Snap or pick a photo of a clothing item. We'll classify it and add it
+          to your closet.
+        </Text>
 
-      <GlassCard padded={false} style={styles.actionCard}>
-        <View style={styles.actionRow}>
-          <GlassButton
-            title="Pick from library"
-            onPress={() => pickAndUpload(false)}
-            loading={busy}
-            style={styles.flexBtn}
-          />
-        </View>
-        <View style={[styles.actionRow, { paddingTop: 0 }]}>
-          <GlassButton
-            title="Take photo"
-            onPress={() => pickAndUpload(true)}
-            variant="ghost"
-            disabled={busy}
-            style={styles.flexBtn}
-          />
-        </View>
-      </GlassCard>
-
-      {error ? (
-        <View style={styles.errorBox}>
-          <Ionicons
-            name="alert-circle"
-            size={18}
-            color={colors.danger}
-            style={{ marginRight: 8 }}
-          />
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : null}
-
-      {result ? (
-        <GlassCard padded style={styles.resultCard}>
-          <View style={styles.resultHeader}>
-            <Image
-              source={{ uri: result.previewUri }}
-              style={styles.preview}
-              resizeMode="cover"
+        <GlassCard padded={false} style={styles.actionCard}>
+          <View style={styles.actionRow}>
+            <GlassButton
+              title="Pick from library"
+              onPress={() => pickAndUpload(false)}
+              loading={busy}
+              style={styles.flexBtn}
             />
-            <View style={{ flex: 1, marginLeft: spacing.md }}>
-              <Text style={styles.savedTag}>Saved · #{result.itemId}</Text>
-              <Text style={styles.resultTitle}>
-                {result.classification.category ?? 'Item'}
-              </Text>
-              <Text style={styles.resultSub}>
-                {result.classification.subcategory}
-              </Text>
-            </View>
           </View>
-
-          <View style={styles.tagRow}>
-            {result.classification.style ? (
-              <View style={styles.tag}>
-                <Text style={styles.tagText}>{result.classification.style}</Text>
-              </View>
-            ) : null}
-            {result.classification.season ? (
-              <View style={styles.tag}>
-                <Text style={styles.tagText}>{result.classification.season}</Text>
-              </View>
-            ) : null}
-            {(result.classification.colors ?? []).map((c) => (
-              <View key={c} style={[styles.tag, styles.colorTag]}>
-                <Text style={styles.tagText}>{c}</Text>
-              </View>
-            ))}
+          <View style={[styles.actionRow, { paddingTop: 0 }]}>
+            <GlassButton
+              title="Take photo"
+              onPress={() => pickAndUpload(true)}
+              variant="ghost"
+              disabled={busy}
+              style={styles.flexBtn}
+            />
           </View>
         </GlassCard>
-      ) : null}
-    </ScrollView>
+
+        {error ? (
+          <View style={styles.errorBox}>
+            <Ionicons
+              name="alert-circle"
+              size={18}
+              color={colors.danger}
+              style={{ marginRight: 8 }}
+            />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
+        {result ? (
+          <GlassCard padded style={styles.resultCard}>
+            <View style={styles.resultHeader}>
+              <Image
+                source={{ uri: result.previewUri }}
+                style={styles.preview}
+                resizeMode="contain"
+              />
+              <View style={{ flex: 1, marginLeft: spacing.md }}>
+                <Text style={styles.savedTag}>Saved · #{result.itemId}</Text>
+                <Text style={styles.resultTitle}>
+                  {result.classification.category ?? 'Item'}
+                </Text>
+                <Text style={styles.resultSub}>
+                  {result.classification.subcategory}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.tagRow}>
+              {result.classification.style ? (
+                <View style={styles.tag}>
+                  <Text style={styles.tagText}>
+                    {result.classification.style}
+                  </Text>
+                </View>
+              ) : null}
+              {result.classification.season ? (
+                <View style={styles.tag}>
+                  <Text style={styles.tagText}>
+                    {result.classification.season}
+                  </Text>
+                </View>
+              ) : null}
+              {(result.classification.colors ?? []).map((c) => (
+                <View key={c} style={[styles.tag, styles.colorTag]}>
+                  <Text style={styles.tagText}>{c}</Text>
+                </View>
+              ))}
+            </View>
+          </GlassCard>
+        ) : null}
+      </ScrollView>
+    </View>
   );
 }
 
 const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
 
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: HEADER_PAD,
-    paddingBottom: 120,
-  },
-  heading: {
-    ...typography.title,
-    color: colors.text,
-    marginBottom: 6,
-  },
-  blurb: {
-    ...typography.callout,
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
-    lineHeight: 22,
-  },
-  actionCard: {
-    padding: spacing.md,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingVertical: 4,
-  },
-  flexBtn: { flex: 1 },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.dangerSoft,
-    borderRadius: radii.md,
-  },
-  errorText: { color: colors.danger, fontSize: 14, flex: 1 },
-  resultCard: {
-    marginTop: spacing.xl,
-    padding: spacing.lg,
-  },
-  resultHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  preview: {
-    width: 72,
-    height: 72,
-    borderRadius: radii.md,
-    backgroundColor: '#EFEDE8',
-    ...shadow.card,
-  },
-  savedTag: {
-    ...typography.micro,
-    color: colors.accent,
-    marginBottom: 4,
-  },
-  resultTitle: {
-    ...typography.headline,
-    color: colors.text,
-  },
-  resultSub: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  tagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accentSoft,
-  },
-  colorTag: {
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-  },
-  tagText: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: '600',
-  },
-});
+function makeStyles({
+  colors,
+  surface,
+}: {
+  colors: ThemeColors;
+  surface: ThemeSurface;
+}) {
+  return StyleSheet.create({
+    container: {
+      paddingHorizontal: spacing.xl,
+      paddingTop: HEADER_PAD,
+      paddingBottom: 120,
+    },
+    heading: {
+      ...typography.title,
+      color: colors.text,
+      marginBottom: 6,
+    },
+    blurb: {
+      ...typography.callout,
+      color: colors.textSecondary,
+      marginBottom: spacing.xl,
+      lineHeight: 22,
+    },
+    actionCard: {
+      padding: spacing.md,
+    },
+    actionRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      paddingVertical: 4,
+    },
+    flexBtn: { flex: 1 },
+    errorBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: spacing.lg,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      backgroundColor: colors.dangerSoft,
+      borderRadius: radii.md,
+    },
+    errorText: { color: colors.danger, fontSize: 14, flex: 1 },
+    resultCard: {
+      marginTop: spacing.xl,
+      padding: spacing.lg,
+    },
+    resultHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: spacing.md,
+    },
+    preview: {
+      width: 72,
+      height: 72,
+      borderRadius: radii.md,
+      backgroundColor: surface.thumbBg,
+      ...shadow.card,
+    },
+    savedTag: {
+      ...typography.micro,
+      color: colors.accent,
+      marginBottom: 4,
+    },
+    resultTitle: {
+      ...typography.headline,
+      color: colors.text,
+    },
+    resultSub: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    tagRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    tag: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: radii.pill,
+      backgroundColor: colors.accentSoft,
+    },
+    colorTag: {
+      backgroundColor: surface.chipInactive,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairline,
+    },
+    tagText: {
+      fontSize: 13,
+      color: colors.text,
+      fontWeight: '600',
+    },
+  });
+}

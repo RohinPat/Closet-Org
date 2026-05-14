@@ -1,11 +1,17 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  DarkTheme,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import type { ThemeColors, ThemeSurface } from '../theme';
 import type { ClothingItem } from '../api/types';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
@@ -15,7 +21,7 @@ import { OutfitsScreen } from '../screens/OutfitsScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ItemDetailScreen } from '../screens/ItemDetailScreen';
-import { colors, shadow, typography } from '../theme';
+import { shadow, typography } from '../theme';
 
 export type AuthStackParamList = {
   Login: undefined;
@@ -39,30 +45,18 @@ const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-const navTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: colors.bg,
-    card: colors.bg,
-    text: colors.text,
-    primary: colors.accent,
-    border: 'transparent',
-  },
-};
-
-function GlassTabBarBackground() {
+function GlassTabBarBackground({ surface }: { surface: ThemeSurface }) {
   return (
     <View style={StyleSheet.absoluteFill}>
       <BlurView
         intensity={Platform.OS === 'ios' ? 80 : 60}
-        tint="light"
+        tint={surface.blurTint}
         style={StyleSheet.absoluteFill}
       />
       <View
         style={[
           StyleSheet.absoluteFill,
-          { backgroundColor: 'rgba(255, 255, 255, 0.6)' },
+          { backgroundColor: surface.tabBarOverlay },
         ]}
       />
       <View
@@ -72,25 +66,25 @@ function GlassTabBarBackground() {
           left: 0,
           right: 0,
           height: StyleSheet.hairlineWidth,
-          backgroundColor: 'rgba(255, 255, 255, 0.85)',
+          backgroundColor: surface.tabBarTopLine,
         }}
       />
     </View>
   );
 }
 
-function GlassHeaderBackground() {
+function GlassHeaderBackground({ surface }: { surface: ThemeSurface }) {
   return (
     <View style={StyleSheet.absoluteFill}>
       <BlurView
         intensity={Platform.OS === 'ios' ? 70 : 50}
-        tint="light"
+        tint={surface.blurTint}
         style={StyleSheet.absoluteFill}
       />
       <View
         style={[
           StyleSheet.absoluteFill,
-          { backgroundColor: 'rgba(255, 255, 255, 0.6)' },
+          { backgroundColor: surface.headerOverlay },
         ]}
       />
     </View>
@@ -98,6 +92,7 @@ function GlassHeaderBackground() {
 }
 
 function MainTabs() {
+  const { colors, surface } = useTheme();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -118,7 +113,7 @@ function MainTabs() {
           },
           shadow.tabBar,
         ],
-        tabBarBackground: () => <GlassTabBarBackground />,
+        tabBarBackground: () => <GlassTabBarBackground surface={surface} />,
         headerShown: false,
         sceneStyle: { backgroundColor: colors.bg },
       }}
@@ -198,11 +193,12 @@ function MainTabs() {
 }
 
 function AppStackNavigator() {
+  const { colors, surface } = useTheme();
   return (
     <AppStack.Navigator
       screenOptions={{
         headerTransparent: true,
-        headerBackground: () => <GlassHeaderBackground />,
+        headerBackground: () => <GlassHeaderBackground surface={surface} />,
         headerTitleStyle: { ...typography.headline, color: colors.text },
         headerTintColor: colors.accent,
         contentStyle: { backgroundColor: colors.bg },
@@ -223,11 +219,12 @@ function AppStackNavigator() {
 }
 
 function AuthNavigator() {
+  const { colors, surface } = useTheme();
   return (
     <AuthStack.Navigator
       screenOptions={{
         headerTransparent: true,
-        headerBackground: () => <GlassHeaderBackground />,
+        headerBackground: () => <GlassHeaderBackground surface={surface} />,
         headerTitleStyle: { ...typography.headline, color: colors.text },
         headerTintColor: colors.accent,
         contentStyle: { backgroundColor: colors.bg },
@@ -247,12 +244,30 @@ function AuthNavigator() {
   );
 }
 
+function buildNavTheme(mode: 'light' | 'dark', colors: ThemeColors) {
+  const base = mode === 'dark' ? DarkTheme : DefaultTheme;
+  return {
+    ...base,
+    colors: {
+      ...base.colors,
+      background: colors.bg,
+      card: colors.bg,
+      text: colors.text,
+      primary: colors.accent,
+      border: 'transparent',
+    },
+  };
+}
+
 export function RootNavigator() {
   const { user, loading } = useAuth();
+  const { mode, colors } = useTheme();
+
+  const navTheme = useMemo(() => buildNavTheme(mode, colors), [mode, colors]);
 
   if (loading) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.bg }]}>
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
@@ -270,6 +285,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.bg,
   },
 });

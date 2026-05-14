@@ -1,9 +1,98 @@
-import { Platform } from 'react-native';
+import { Appearance, Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 
-export const colors = {
-  bg: '#F4F1EC',
-  bgGradient: ['#F7F4EF', '#E9E4F5', '#DCEAF3'] as const,
-  surface: 'rgba(255, 255, 255, 0.68)',
+export type ThemeMode = 'light' | 'dark';
+export type ThemePref = 'system' | 'light' | 'dark';
+
+const THEME_PREF_KEY = 'theme_pref_v1';
+
+export function readStoredPref(): ThemePref {
+  try {
+    const v = SecureStore.getItem(THEME_PREF_KEY);
+    if (v === 'light' || v === 'dark' || v === 'system') return v;
+  } catch {
+    // sync read can fail on some platforms — silent fall-through
+  }
+  return 'system';
+}
+
+export function loadThemePref(): ThemePref {
+  return readStoredPref();
+}
+
+export async function saveThemePref(pref: ThemePref): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(THEME_PREF_KEY, pref);
+  } catch {
+    // best-effort persistence; don't crash on storage failure
+  }
+}
+
+export function getSystemMode(): ThemeMode {
+  try {
+    return Appearance.getColorScheme() === 'light' ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+
+export function resolveMode(pref: ThemePref): ThemeMode {
+  if (pref === 'light' || pref === 'dark') return pref;
+  return getSystemMode();
+}
+
+type GradientTuple = readonly [string, string, string];
+
+type Palette = {
+  bg: string;
+  bgGradient: GradientTuple;
+  surface: string;
+  surfaceSolid: string;
+  hairline: string;
+  divider: string;
+
+  text: string;
+  textSecondary: string;
+  textMuted: string;
+  placeholder: string;
+
+  accent: string;
+  accentSoft: string;
+  accentGradient: GradientTuple;
+
+  danger: string;
+  dangerSoft: string;
+  success: string;
+  warning: string;
+
+  orbPink: string;
+  orbPurple: string;
+  orbBlue: string;
+  orbPeach: string;
+};
+
+type SurfacePalette = {
+  blurTint: 'light' | 'dark';
+  cardOverlay: string;
+  cardBorder: string;
+  inputOverlay: string;
+  inputBorder: string;
+  ghostOverlay: string;
+  secondaryOverlay: string;
+  secondaryBorder: string;
+  tabBarOverlay: string;
+  tabBarTopLine: string;
+  headerOverlay: string;
+  thumbBg: string;
+  chipInactive: string;
+  chipInactiveBorder: string;
+  favBadgeBg: string;
+};
+
+const LIGHT_COLORS: Palette = {
+  bg: '#FAF7FF',
+  bgGradient: ['#FFE4F1', '#E8DEFF', '#D8EAFF'] as const,
+  surface: 'rgba(255, 255, 255, 0.62)',
   surfaceSolid: '#FFFFFF',
   hairline: 'rgba(60, 60, 67, 0.12)',
   divider: 'rgba(60, 60, 67, 0.08)',
@@ -13,14 +102,96 @@ export const colors = {
   textMuted: 'rgba(60, 60, 67, 0.5)',
   placeholder: 'rgba(60, 60, 67, 0.36)',
 
-  accent: '#5B6CFF',
-  accentSoft: 'rgba(91, 108, 255, 0.14)',
-  accentGradient: ['#7B8BFF', '#5B6CFF'] as const,
+  accent: '#7C4DFF',
+  accentSoft: 'rgba(124, 77, 255, 0.14)',
+  accentGradient: ['#A371FF', '#5B6CFF', '#3DA9FF'] as const,
 
   danger: '#FF453A',
   dangerSoft: 'rgba(255, 69, 58, 0.12)',
   success: '#30D158',
+  warning: '#FF9F0A',
+
+  orbPink: 'rgba(255, 138, 200, 0.55)',
+  orbPurple: 'rgba(155, 110, 255, 0.5)',
+  orbBlue: 'rgba(90, 170, 255, 0.5)',
+  orbPeach: 'rgba(255, 180, 130, 0.45)',
 };
+
+const DARK_COLORS: Palette = {
+  bg: '#0A0A14',
+  bgGradient: ['#1A0B2E', '#0A1B3D', '#082631'] as const,
+  surface: 'rgba(255, 255, 255, 0.08)',
+  surfaceSolid: '#1A1A24',
+  hairline: 'rgba(255, 255, 255, 0.10)',
+  divider: 'rgba(255, 255, 255, 0.06)',
+
+  text: '#FFFFFF',
+  textSecondary: 'rgba(255, 255, 255, 0.72)',
+  textMuted: 'rgba(255, 255, 255, 0.5)',
+  placeholder: 'rgba(255, 255, 255, 0.36)',
+
+  accent: '#A78BFA',
+  accentSoft: 'rgba(167, 139, 250, 0.22)',
+  accentGradient: ['#C4B5FD', '#A78BFA', '#7C3AED'] as const,
+
+  danger: '#FF6B5E',
+  dangerSoft: 'rgba(255, 107, 94, 0.18)',
+  success: '#34D399',
+  warning: '#FBBF24',
+
+  orbPink: 'rgba(236, 72, 153, 0.55)',
+  orbPurple: 'rgba(167, 139, 250, 0.55)',
+  orbBlue: 'rgba(56, 189, 248, 0.5)',
+  orbPeach: 'rgba(251, 146, 60, 0.45)',
+};
+
+const LIGHT_SURFACE: SurfacePalette = {
+  blurTint: 'light',
+  cardOverlay: 'rgba(255, 255, 255, 0.42)',
+  cardBorder: 'rgba(255, 255, 255, 0.6)',
+  inputOverlay: 'rgba(255, 255, 255, 0.55)',
+  inputBorder: 'rgba(255, 255, 255, 0.65)',
+  ghostOverlay: 'rgba(255, 255, 255, 0.4)',
+  secondaryOverlay: 'rgba(255, 255, 255, 0.55)',
+  secondaryBorder: 'rgba(255, 255, 255, 0.7)',
+  tabBarOverlay: 'rgba(255, 255, 255, 0.6)',
+  tabBarTopLine: 'rgba(255, 255, 255, 0.85)',
+  headerOverlay: 'rgba(255, 255, 255, 0.6)',
+  thumbBg: '#EFEDE8',
+  chipInactive: 'rgba(255, 255, 255, 0.55)',
+  chipInactiveBorder: 'rgba(255, 255, 255, 0.7)',
+  favBadgeBg: 'rgba(255, 255, 255, 0.85)',
+};
+
+const DARK_SURFACE: SurfacePalette = {
+  blurTint: 'dark',
+  cardOverlay: 'rgba(20, 20, 30, 0.35)',
+  cardBorder: 'rgba(255, 255, 255, 0.10)',
+  inputOverlay: 'rgba(255, 255, 255, 0.06)',
+  inputBorder: 'rgba(255, 255, 255, 0.10)',
+  ghostOverlay: 'rgba(255, 255, 255, 0.05)',
+  secondaryOverlay: 'rgba(20, 20, 30, 0.45)',
+  secondaryBorder: 'rgba(255, 255, 255, 0.12)',
+  tabBarOverlay: 'rgba(10, 10, 20, 0.55)',
+  tabBarTopLine: 'rgba(255, 255, 255, 0.10)',
+  headerOverlay: 'rgba(10, 10, 20, 0.5)',
+  thumbBg: '#23232E',
+  chipInactive: 'rgba(255, 255, 255, 0.08)',
+  chipInactiveBorder: 'rgba(255, 255, 255, 0.14)',
+  favBadgeBg: 'rgba(20, 20, 30, 0.7)',
+};
+
+export type ThemeColors = Palette;
+export type ThemeSurface = SurfacePalette;
+
+export function getPalette(mode: ThemeMode): {
+  colors: ThemeColors;
+  surface: ThemeSurface;
+} {
+  return mode === 'dark'
+    ? { colors: DARK_COLORS, surface: DARK_SURFACE }
+    : { colors: LIGHT_COLORS, surface: LIGHT_SURFACE };
+}
 
 export const radii = {
   sm: 10,
@@ -70,7 +241,6 @@ export const shadow = {
 };
 
 export const blur = {
-  tint: 'light' as const,
   intensity: 60,
   cardIntensity: 40,
 };

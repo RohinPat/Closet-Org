@@ -10,6 +10,7 @@ export type ClothingItem = {
   id: number;
   user_id: number;
   image_path: string;
+  thumbnail_path?: string | null;
   category: string;
   subcategory: string;
   colors: string[];
@@ -20,6 +21,22 @@ export type ClothingItem = {
   times_worn?: number;
   is_favorite?: boolean;
   rotation_category?: string | null;
+  brand?: string | null;
+  size?: string | null;
+  notes?: string | null;
+  purchase_date?: string | null;
+  purchase_price?: number | null;
+  purchase_location?: string | null;
+  cost_per_wear?: number | null;
+};
+
+export type ItemDetailsPatch = {
+  brand?: string | null;
+  size?: string | null;
+  notes?: string | null;
+  purchase_date?: string | null;
+  purchase_price?: number | null;
+  purchase_location?: string | null;
 };
 
 export type OutfitRecommendation = {

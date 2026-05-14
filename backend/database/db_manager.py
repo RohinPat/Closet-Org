@@ -51,6 +51,7 @@ class DatabaseManager:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 image_path TEXT NOT NULL,
+                thumbnail_path TEXT,
                 category TEXT NOT NULL,
                 subcategory TEXT NOT NULL,
                 colors TEXT NOT NULL,
@@ -104,9 +105,17 @@ class DatabaseManager:
             )
         ''')
         
+        # Lightweight migration: add columns to existing tables if missing.
+        cursor.execute("PRAGMA table_info(clothing_items)")
+        existing_cols = {row["name"] for row in cursor.fetchall()}
+        if "thumbnail_path" not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE clothing_items ADD COLUMN thumbnail_path TEXT"
+            )
+
         conn.commit()
         conn.close()
-    
+
     # User Management Methods
     
     def create_user(self, username: str, email: str, password_hash: str, 
@@ -230,17 +239,18 @@ class DatabaseManager:
     
     # Clothing Management Methods (Updated for multi-user)
     
-    def add_clothing_item(self, user_id: int, image_path: str, category: str, 
+    def add_clothing_item(self, user_id: int, image_path: str, category: str,
                          subcategory: str, colors: List[str], season: str, style: str,
                          purchase_date: Optional[str] = None, purchase_price: Optional[float] = None,
                          purchase_location: Optional[str] = None, brand: Optional[str] = None,
-                         size: Optional[str] = None, max_wear_before_wash: int = 1) -> int:
+                         size: Optional[str] = None, max_wear_before_wash: int = 1,
+                         thumbnail_path: Optional[str] = None) -> int:
         """Add a new clothing item to the database"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         colors_json = json.dumps(colors)
-        
+
         # Set default max_wear_before_wash based on category
         if max_wear_before_wash == 1:
             category_lower = category.lower()
@@ -250,20 +260,87 @@ class DatabaseManager:
                 max_wear_before_wash = 5
             elif 'dress' in category_lower or 'shirt' in subcategory.lower():
                 max_wear_before_wash = 1
-        
+
         cursor.execute('''
-            INSERT INTO clothing_items 
-            (user_id, image_path, category, subcategory, colors, season, style,
+            INSERT INTO clothing_items
+            (user_id, image_path, thumbnail_path, category, subcategory, colors, season, style,
              purchase_date, purchase_price, purchase_location, brand, size, max_wear_before_wash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (user_id, image_path, category, subcategory, colors_json, season, style,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, image_path, thumbnail_path, category, subcategory, colors_json, season, style,
               purchase_date, purchase_price, purchase_location, brand, size, max_wear_before_wash))
-        
+
         item_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        
+
         return item_id
+
+    def set_thumbnail_path(self, item_id: int, thumbnail_path: Optional[str]) -> bool:
+        """Update only the thumbnail_path for an existing item (used by backfill)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE clothing_items SET thumbnail_path = ? WHERE id = ?",
+            (thumbnail_path, item_id),
+        )
+        success = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        return success
+
+    # Whitelist of free-text/metadata columns the API is allowed to patch.
+    # Keep this tight — anything wear/wash related goes through update_item_status.
+    _EDITABLE_DETAIL_FIELDS = {
+        "brand",
+        "size",
+        "notes",
+        "purchase_date",
+        "purchase_price",
+        "purchase_location",
+    }
+
+    def update_item_details(self, item_id: int, user_id: int, **fields) -> bool:
+        """Patch user-editable metadata on an item.
+
+        Returns False if the item doesn't exist, belongs to another user, or
+        no recognized fields were supplied. Unknown keys are silently dropped
+        — the endpoint validates shape before getting here.
+        """
+        clean: Dict = {}
+        for key, value in fields.items():
+            if key not in self._EDITABLE_DETAIL_FIELDS:
+                continue
+            # Treat empty strings as "clear this field" rather than storing ''.
+            if isinstance(value, str) and value.strip() == "":
+                clean[key] = None
+            else:
+                clean[key] = value
+
+        if not clean:
+            return False
+
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT user_id FROM clothing_items WHERE id = ?",
+            (item_id,),
+        )
+        row = cursor.fetchone()
+        if not row or row["user_id"] != user_id:
+            conn.close()
+            return False
+
+        assignments = ", ".join(f"{col} = ?" for col in clean.keys())
+        params = list(clean.values()) + [item_id]
+        cursor.execute(
+            f"UPDATE clothing_items SET {assignments} WHERE id = ?",
+            params,
+        )
+        success = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        return success
     
     def get_all_items(self, user_id: int, category: Optional[str] = None, 
                      status: Optional[str] = None) -> List[Dict]:

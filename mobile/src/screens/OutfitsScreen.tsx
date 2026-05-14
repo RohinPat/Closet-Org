@@ -13,8 +13,15 @@ import { BlurView } from 'expo-blur';
 import * as api from '../api/client';
 import type { OutfitRecommendation } from '../api/types';
 import { itemImageUrl } from '../config';
-import { GlassButton, GlassCard } from '../components/Glass';
-import { colors, radii, spacing, typography } from '../theme';
+import { GlassButton, GlassCard, ScreenBackground } from '../components/Glass';
+import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import {
+  radii,
+  spacing,
+  typography,
+  type ThemeColors,
+  type ThemeSurface,
+} from '../theme';
 
 const OCCASIONS = [
   { label: 'Any', value: '' },
@@ -40,35 +47,34 @@ type ChipProps = {
 };
 
 function Chip({ label, active, onPress }: ChipProps) {
+  const { colors, surface } = useTheme();
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
-        styles.chip,
+        chipStyles.chip,
         { transform: [{ scale: pressed ? 0.96 : 1 }] },
       ]}
     >
       <BlurView
         intensity={active ? 0 : 40}
-        tint="light"
+        tint={surface.blurTint}
         style={[StyleSheet.absoluteFill, { borderRadius: radii.pill }]}
       />
       <View
         style={[
           StyleSheet.absoluteFill,
           {
-            backgroundColor: active
-              ? colors.accent
-              : 'rgba(255,255,255,0.55)',
+            backgroundColor: active ? colors.accent : surface.chipInactive,
             borderRadius: radii.pill,
             borderWidth: StyleSheet.hairlineWidth,
-            borderColor: active ? colors.accent : 'rgba(255,255,255,0.7)',
+            borderColor: active ? colors.accent : surface.chipInactiveBorder,
           },
         ]}
       />
       <Text
         style={[
-          styles.chipText,
+          chipStyles.chipText,
           { color: active ? '#fff' : colors.text },
         ]}
       >
@@ -79,6 +85,8 @@ function Chip({ label, active, onPress }: ChipProps) {
 }
 
 export function OutfitsScreen() {
+  const { colors, surface } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [occasion, setOccasion] = useState('');
   const [season, setSeason] = useState('');
   const [outfits, setOutfits] = useState<OutfitRecommendation[]>([]);
@@ -107,125 +115,116 @@ export function OutfitsScreen() {
   }, [generate]);
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.heading}>Outfits</Text>
-      <Text style={styles.blurb}>
-        Curated combinations from your closet.
-      </Text>
+    <View style={{ flex: 1 }}>
+      <ScreenBackground />
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.heading}>Outfits</Text>
+        <Text style={styles.blurb}>
+          Curated combinations from your closet.
+        </Text>
 
-      <Text style={styles.sectionLabel}>Occasion</Text>
-      <View style={styles.chips}>
-        {OCCASIONS.map((o) => (
-          <Chip
-            key={o.value || 'any-o'}
-            label={o.label}
-            active={occasion === o.value}
-            onPress={() => setOccasion(o.value)}
-          />
-        ))}
-      </View>
-
-      <Text style={styles.sectionLabel}>Season</Text>
-      <View style={styles.chips}>
-        {SEASONS.map((s) => (
-          <Chip
-            key={s.value || 'any-s'}
-            label={s.label}
-            active={season === s.value}
-            onPress={() => setSeason(s.value)}
-          />
-        ))}
-      </View>
-
-      <GlassButton
-        title="Refresh outfits"
-        onPress={generate}
-        loading={loading}
-        style={styles.refresh}
-      />
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      {outfits.length === 0 && !loading ? (
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyTitle}>No matches</Text>
-          <Text style={styles.empty}>
-            Try “Any” for the filters or add more clean items.
-          </Text>
+        <Text style={styles.sectionLabel}>Occasion</Text>
+        <View style={styles.chips}>
+          {OCCASIONS.map((o) => (
+            <Chip
+              key={o.value || 'any-o'}
+              label={o.label}
+              active={occasion === o.value}
+              onPress={() => setOccasion(o.value)}
+            />
+          ))}
         </View>
-      ) : null}
 
-      {loading && outfits.length === 0 ? (
-        <ActivityIndicator color={colors.accent} style={{ marginTop: 32 }} />
-      ) : null}
+        <Text style={styles.sectionLabel}>Season</Text>
+        <View style={styles.chips}>
+          {SEASONS.map((s) => (
+            <Chip
+              key={s.value || 'any-s'}
+              label={s.label}
+              active={season === s.value}
+              onPress={() => setSeason(s.value)}
+            />
+          ))}
+        </View>
 
-      {outfits.map((outfit, idx) => (
-        <GlassCard key={idx} padded style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Outfit {idx + 1}</Text>
-            <View style={styles.scoreBadge}>
-              <Text style={styles.scoreText}>{Math.round(outfit.score)}</Text>
-            </View>
+        <GlassButton
+          title="Refresh outfits"
+          onPress={generate}
+          loading={loading}
+          style={styles.refresh}
+        />
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        {outfits.length === 0 && !loading ? (
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyTitle}>No matches</Text>
+            <Text style={styles.empty}>
+              Try “Any” for the filters or add more clean items.
+            </Text>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.outfitRow}
-          >
-            {outfit.items.map((item) => {
-              const uri = itemImageUrl(item.image_path);
-              return (
-                <View key={item.id} style={styles.mini}>
-                  {uri ? (
-                    <Image
-                      source={{ uri }}
-                      style={styles.miniImg}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.miniImg} />
-                  )}
-                  <Text style={styles.miniLabel} numberOfLines={1}>
-                    {item.subcategory}
-                  </Text>
-                </View>
-              );
-            })}
-          </ScrollView>
-        </GlassCard>
-      ))}
-    </ScrollView>
+        ) : null}
+
+        {loading && outfits.length === 0 ? (
+          <ActivityIndicator
+            color={colors.accent}
+            style={{ marginTop: 32 }}
+          />
+        ) : null}
+
+        {outfits.map((outfit, idx) => (
+          <GlassCard key={idx} padded style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Outfit {idx + 1}</Text>
+              <View style={styles.scoreBadge}>
+                <Text style={styles.scoreText}>
+                  {Math.round(outfit.score)}
+                </Text>
+              </View>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.outfitRow}
+            >
+              {outfit.items.map((item) => {
+                const uri = itemImageUrl(item.image_path);
+                return (
+                  <View key={item.id} style={styles.mini}>
+                    {uri ? (
+                      <Image
+                        source={{ uri }}
+                        style={styles.miniImg}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.miniImg,
+                          { backgroundColor: surface.thumbBg },
+                        ]}
+                      />
+                    )}
+                    <Text style={styles.miniLabel} numberOfLines={1}>
+                      {item.subcategory}
+                    </Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </GlassCard>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
 const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
 
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: HEADER_PAD,
-    paddingBottom: 120,
-  },
-  heading: {
-    ...typography.title,
-    color: colors.text,
-    marginBottom: 6,
-  },
-  blurb: {
-    ...typography.callout,
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
-  },
-  sectionLabel: {
-    ...typography.micro,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+const chipStyles = StyleSheet.create({
   chip: {
     paddingHorizontal: 16,
     paddingVertical: 9,
@@ -238,65 +237,98 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  refresh: {
-    marginTop: spacing.xl,
-  },
-  error: {
-    color: colors.danger,
-    marginTop: spacing.md,
-    textAlign: 'center',
-  },
-  emptyWrap: {
-    alignItems: 'center',
-    marginTop: 48,
-  },
-  emptyTitle: {
-    ...typography.headline,
-    color: colors.text,
-    marginBottom: 4,
-  },
-  empty: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: spacing.xl,
-  },
-  card: {
-    marginTop: spacing.lg,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  cardTitle: {
-    ...typography.headline,
-    color: colors.text,
-  },
-  scoreBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accentSoft,
-  },
-  scoreText: {
-    color: colors.accent,
-    fontWeight: '700',
-    fontSize: 13,
-    letterSpacing: 0.3,
-  },
-  outfitRow: { flexDirection: 'row', gap: spacing.md },
-  mini: { width: 96 },
-  miniImg: {
-    width: 96,
-    height: 96,
-    borderRadius: radii.md,
-    backgroundColor: '#EFEDE8',
-  },
-  miniLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 6,
-    textAlign: 'center',
-  },
 });
+
+function makeStyles({
+  colors,
+  surface,
+}: {
+  colors: ThemeColors;
+  surface: ThemeSurface;
+}) {
+  return StyleSheet.create({
+    container: {
+      paddingHorizontal: spacing.xl,
+      paddingTop: HEADER_PAD,
+      paddingBottom: 120,
+    },
+    heading: {
+      ...typography.title,
+      color: colors.text,
+      marginBottom: 6,
+    },
+    blurb: {
+      ...typography.callout,
+      color: colors.textSecondary,
+      marginBottom: spacing.xl,
+    },
+    sectionLabel: {
+      ...typography.micro,
+      color: colors.textSecondary,
+      marginBottom: spacing.sm,
+      marginTop: spacing.md,
+    },
+    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    refresh: {
+      marginTop: spacing.xl,
+    },
+    error: {
+      color: colors.danger,
+      marginTop: spacing.md,
+      textAlign: 'center',
+    },
+    emptyWrap: {
+      alignItems: 'center',
+      marginTop: 48,
+    },
+    emptyTitle: {
+      ...typography.headline,
+      color: colors.text,
+      marginBottom: 4,
+    },
+    empty: {
+      color: colors.textSecondary,
+      textAlign: 'center',
+      paddingHorizontal: spacing.xl,
+    },
+    card: {
+      marginTop: spacing.lg,
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.md,
+    },
+    cardTitle: {
+      ...typography.headline,
+      color: colors.text,
+    },
+    scoreBadge: {
+      paddingHorizontal: 12,
+      paddingVertical: 5,
+      borderRadius: radii.pill,
+      backgroundColor: colors.accentSoft,
+    },
+    scoreText: {
+      color: colors.accent,
+      fontWeight: '700',
+      fontSize: 13,
+      letterSpacing: 0.3,
+    },
+    outfitRow: { flexDirection: 'row', gap: spacing.md },
+    mini: { width: 96 },
+    miniImg: {
+      width: 96,
+      height: 96,
+      borderRadius: radii.md,
+      backgroundColor: surface.thumbBg,
+    },
+    miniLabel: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 6,
+      textAlign: 'center',
+    },
+  });
+}

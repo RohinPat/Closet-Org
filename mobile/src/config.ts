@@ -16,3 +16,15 @@ export function itemImageUrl(imagePath: string | undefined | null): string {
   if (!filename) return '';
   return `${API_ORIGIN}/uploads/${encodeURIComponent(filename)}`;
 }
+
+/**
+ * Resolve the URL for an item's background-removed thumbnail, falling back to
+ * the original image when no thumbnail was generated (e.g. rembg unavailable
+ * at upload time or pre-existing items not yet backfilled).
+ */
+export function itemThumbnailUrl(item: {
+  image_path?: string | null;
+  thumbnail_path?: string | null;
+}): string {
+  return itemImageUrl(item.thumbnail_path || item.image_path);
+}

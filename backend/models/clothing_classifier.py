@@ -25,6 +25,29 @@ def _get_rembg_session():
     return _rembg_session
 
 
+def generate_cutout_thumbnail(
+    input_path: str, output_path: str, max_size: int = 1024
+) -> bool:
+    """Write a background-removed PNG thumbnail at output_path.
+
+    Returns True on success, False if rembg isn't available or the cutout fails
+    — callers should fall back to the original image.
+    """
+    session = _get_rembg_session()
+    if session is None:
+        return False
+    try:
+        from rembg import remove
+        img = Image.open(input_path).convert("RGB")
+        img.thumbnail((max_size, max_size))
+        cutout = remove(img, session=session)
+        cutout.save(output_path, "PNG")
+        return True
+    except Exception as e:
+        print(f"Thumbnail generation failed for {input_path}: {e}")
+        return False
+
+
 class ClothingClassifier:
     """CLIP zero-shot clothing classifier.
 
