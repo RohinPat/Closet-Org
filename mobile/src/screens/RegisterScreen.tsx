@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,6 +12,8 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../navigation/RootNavigator';
 import { useAuth } from '../context/AuthContext';
+import { GlassButton, GlassCard, GlassInputContainer } from '../components/Glass';
+import { colors, spacing, typography } from '../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
@@ -64,118 +65,130 @@ export function RegisterScreen({ navigation }: Props) {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Create account</Text>
+        <Text style={styles.title}>Join Closet Org</Text>
+        <Text style={styles.subtitle}>
+          A few details and your closet is ready.
+        </Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Username"
-          placeholderTextColor="#9ca3af"
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={username}
-          onChangeText={setUsername}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#9ca3af"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Full name (optional)"
-          placeholderTextColor="#9ca3af"
-          value={fullName}
-          onChangeText={setFullName}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#9ca3af"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Confirm password"
-          placeholderTextColor="#9ca3af"
-          secureTextEntry
-          value={confirm}
-          onChangeText={setConfirm}
-        />
+        <GlassCard padded style={styles.card}>
+          {[
+            {
+              key: 'u',
+              placeholder: 'Username',
+              value: username,
+              setter: setUsername,
+              autoCap: 'none' as const,
+            },
+            {
+              key: 'e',
+              placeholder: 'Email',
+              value: email,
+              setter: setEmail,
+              autoCap: 'none' as const,
+              keyboard: 'email-address' as const,
+            },
+            {
+              key: 'n',
+              placeholder: 'Full name (optional)',
+              value: fullName,
+              setter: setFullName,
+            },
+            {
+              key: 'p',
+              placeholder: 'Password',
+              value: password,
+              setter: setPassword,
+              secure: true,
+            },
+            {
+              key: 'c',
+              placeholder: 'Confirm password',
+              value: confirm,
+              setter: setConfirm,
+              secure: true,
+            },
+          ].map((f) => (
+            <GlassInputContainer key={f.key} style={styles.input}>
+              <TextInput
+                style={styles.textInput}
+                placeholder={f.placeholder}
+                placeholderTextColor={colors.placeholder}
+                autoCapitalize={f.autoCap}
+                autoCorrect={false}
+                keyboardType={f.keyboard}
+                secureTextEntry={f.secure}
+                value={f.value}
+                onChangeText={f.setter}
+              />
+            </GlassInputContainer>
+          ))}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Pressable
-          style={[styles.button, busy && styles.buttonDisabled]}
-          onPress={onSubmit}
-          disabled={busy}
-        >
-          {busy ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Register</Text>
-          )}
-        </Pressable>
+          <GlassButton
+            title="Create account"
+            onPress={onSubmit}
+            loading={busy}
+            style={styles.submit}
+          />
 
-        <Pressable
-          style={styles.linkWrap}
-          onPress={() => navigation.goBack()}
-          disabled={busy}
-        >
-          <Text style={styles.link}>Already have an account? Sign in</Text>
-        </Pressable>
+          <Pressable
+            style={styles.linkWrap}
+            onPress={() => navigation.goBack()}
+            disabled={busy}
+          >
+            <Text style={styles.link}>Already have an account? Sign in</Text>
+          </Pressable>
+        </GlassCard>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#fff' },
+  flex: { flex: 1 },
   container: {
-    padding: 24,
-    paddingTop: 48,
-    paddingBottom: 48,
+    paddingHorizontal: spacing.xl,
+    paddingTop: 96,
+    paddingBottom: spacing.xxl,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 24,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: 6,
+  },
+  subtitle: {
+    ...typography.callout,
+    color: colors.textSecondary,
+    marginBottom: spacing.xl,
+  },
+  card: {
+    padding: spacing.lg,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    marginBottom: spacing.md,
+  },
+  textInput: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
-    marginBottom: 12,
-    backgroundColor: '#fafafa',
-    color: '#111827',
+    color: colors.text,
   },
   error: {
-    color: '#dc2626',
-    marginBottom: 12,
+    color: colors.danger,
+    marginBottom: spacing.sm,
     fontSize: 14,
   },
-  button: {
-    backgroundColor: '#4f46e5',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 8,
+  submit: {
+    marginTop: spacing.sm,
   },
-  buttonDisabled: { opacity: 0.7 },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
+  linkWrap: {
+    marginTop: spacing.lg,
+    alignItems: 'center',
+  },
+  link: {
+    color: colors.accent,
+    fontSize: 15,
     fontWeight: '600',
   },
-  linkWrap: { marginTop: 20, alignItems: 'center' },
-  link: { color: '#4f46e5', fontSize: 15, fontWeight: '500' },
 });

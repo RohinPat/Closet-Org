@@ -2,15 +2,19 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import * as api from '../api/client';
 import type { OutfitRecommendation } from '../api/types';
 import { itemImageUrl } from '../config';
+import { GlassButton, GlassCard } from '../components/Glass';
+import { colors, radii, spacing, typography } from '../theme';
 
 const OCCASIONS = [
   { label: 'Any', value: '' },
@@ -28,6 +32,51 @@ const SEASONS = [
   { label: 'Fall', value: 'Fall' },
   { label: 'Winter', value: 'Winter' },
 ];
+
+type ChipProps = {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+};
+
+function Chip({ label, active, onPress }: ChipProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        { transform: [{ scale: pressed ? 0.96 : 1 }] },
+      ]}
+    >
+      <BlurView
+        intensity={active ? 0 : 40}
+        tint="light"
+        style={[StyleSheet.absoluteFill, { borderRadius: radii.pill }]}
+      />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: active
+              ? colors.accent
+              : 'rgba(255,255,255,0.55)',
+            borderRadius: radii.pill,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: active ? colors.accent : 'rgba(255,255,255,0.7)',
+          },
+        ]}
+      />
+      <Text
+        style={[
+          styles.chipText,
+          { color: active ? '#fff' : colors.text },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 export function OutfitsScreen() {
   const [occasion, setOccasion] = useState('');
@@ -58,154 +107,196 @@ export function OutfitsScreen() {
   }, [generate]);
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text style={styles.heading}>Outfits</Text>
+      <Text style={styles.blurb}>
+        Curated combinations from your closet.
+      </Text>
+
       <Text style={styles.sectionLabel}>Occasion</Text>
       <View style={styles.chips}>
         {OCCASIONS.map((o) => (
-          <Pressable
+          <Chip
             key={o.value || 'any-o'}
-            style={[styles.chip, occasion === o.value && styles.chipActive]}
+            label={o.label}
+            active={occasion === o.value}
             onPress={() => setOccasion(o.value)}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                occasion === o.value && styles.chipTextActive,
-              ]}
-            >
-              {o.label}
-            </Text>
-          </Pressable>
+          />
         ))}
       </View>
 
       <Text style={styles.sectionLabel}>Season</Text>
       <View style={styles.chips}>
         {SEASONS.map((s) => (
-          <Pressable
+          <Chip
             key={s.value || 'any-s'}
-            style={[styles.chip, season === s.value && styles.chipActive]}
+            label={s.label}
+            active={season === s.value}
             onPress={() => setSeason(s.value)}
-          >
-            <Text
-              style={[styles.chipText, season === s.value && styles.chipTextActive]}
-            >
-              {s.label}
-            </Text>
-          </Pressable>
+          />
         ))}
       </View>
 
-      <Pressable
-        style={[styles.generateBtn, loading && styles.generateDisabled]}
+      <GlassButton
+        title="Refresh outfits"
         onPress={generate}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.generateText}>Refresh outfits</Text>
-        )}
-      </Pressable>
+        loading={loading}
+        style={styles.refresh}
+      />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {outfits.length === 0 && !loading ? (
-        <Text style={styles.empty}>
-          No outfits match these filters. Try “Any” or add more clean items.
-        </Text>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTitle}>No matches</Text>
+          <Text style={styles.empty}>
+            Try “Any” for the filters or add more clean items.
+          </Text>
+        </View>
+      ) : null}
+
+      {loading && outfits.length === 0 ? (
+        <ActivityIndicator color={colors.accent} style={{ marginTop: 32 }} />
       ) : null}
 
       {outfits.map((outfit, idx) => (
-        <View key={idx} style={styles.card}>
+        <GlassCard key={idx} padded style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Outfit {idx + 1}</Text>
-            <Text style={styles.score}>Score {Math.round(outfit.score)}</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.outfitRow}>
-              {outfit.items.map((item) => {
-                const uri = itemImageUrl(item.image_path);
-                return (
-                  <View key={item.id} style={styles.mini}>
-                    {uri ? (
-                      <Image
-                        source={{ uri }}
-                        style={styles.miniImg}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.miniImg} />
-                    )}
-                    <Text style={styles.miniLabel} numberOfLines={1}>
-                      {item.subcategory}
-                    </Text>
-                  </View>
-                );
-              })}
+            <View style={styles.scoreBadge}>
+              <Text style={styles.scoreText}>{Math.round(outfit.score)}</Text>
             </View>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.outfitRow}
+          >
+            {outfit.items.map((item) => {
+              const uri = itemImageUrl(item.image_path);
+              return (
+                <View key={item.id} style={styles.mini}>
+                  {uri ? (
+                    <Image
+                      source={{ uri }}
+                      style={styles.miniImg}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.miniImg} />
+                  )}
+                  <Text style={styles.miniLabel} numberOfLines={1}>
+                    {item.subcategory}
+                  </Text>
+                </View>
+              );
+            })}
           </ScrollView>
-        </View>
+        </GlassCard>
       ))}
     </ScrollView>
   );
 }
 
+const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f9fafb' },
-  container: { padding: 16, paddingBottom: 40 },
+  container: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: HEADER_PAD,
+    paddingBottom: 120,
+  },
+  heading: {
+    ...typography.title,
+    color: colors.text,
+    marginBottom: 6,
+  },
+  blurb: {
+    ...typography.callout,
+    color: colors.textSecondary,
+    marginBottom: spacing.xl,
+  },
   sectionLabel: {
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-    marginTop: 8,
+    ...typography.micro,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
   },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  chipActive: { backgroundColor: '#eef2ff', borderColor: '#4f46e5' },
-  chipText: { color: '#4b5563', fontSize: 14 },
-  chipTextActive: { color: '#4f46e5', fontWeight: '600' },
-  generateBtn: {
-    backgroundColor: '#4f46e5',
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: radii.pill,
+    overflow: 'hidden',
     alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 8,
+    justifyContent: 'center',
   },
-  generateDisabled: { opacity: 0.7 },
-  generateText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  error: { color: '#dc2626', marginTop: 8 },
-  empty: { color: '#6b7280', marginTop: 16, textAlign: 'center' },
+  chipText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  refresh: {
+    marginTop: spacing.xl,
+  },
+  error: {
+    color: colors.danger,
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  emptyWrap: {
+    alignItems: 'center',
+    marginTop: 48,
+  },
+  emptyTitle: {
+    ...typography.headline,
+    color: colors.text,
+    marginBottom: 4,
+  },
+  empty: {
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: spacing.xl,
+  },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    marginTop: spacing.lg,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    alignItems: 'center',
+    marginBottom: spacing.md,
   },
-  cardTitle: { fontWeight: '700', fontSize: 16, color: '#111827' },
-  score: { color: '#4f46e5', fontWeight: '600' },
-  outfitRow: { flexDirection: 'row', gap: 10 },
-  mini: { width: 88 },
+  cardTitle: {
+    ...typography.headline,
+    color: colors.text,
+  },
+  scoreBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accentSoft,
+  },
+  scoreText: {
+    color: colors.accent,
+    fontWeight: '700',
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
+  outfitRow: { flexDirection: 'row', gap: spacing.md },
+  mini: { width: 96 },
   miniImg: {
-    width: 88,
-    height: 88,
-    borderRadius: 8,
-    backgroundColor: '#e5e7eb',
+    width: 96,
+    height: 96,
+    borderRadius: radii.md,
+    backgroundColor: '#EFEDE8',
   },
-  miniLabel: { fontSize: 11, color: '#6b7280', marginTop: 4 },
+  miniLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 6,
+    textAlign: 'center',
+  },
 });

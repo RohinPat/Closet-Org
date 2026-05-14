@@ -1,14 +1,41 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as api from '../api/client';
+import { GlassCard } from '../components/Glass';
+import { colors, radii, spacing, typography } from '../theme';
+
+type TileProps = {
+  value: number;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  tint?: string;
+};
+
+function Tile({ value, label, icon, tint }: TileProps) {
+  return (
+    <GlassCard padded style={styles.tile}>
+      <View style={[styles.iconWrap, { backgroundColor: tint || colors.accentSoft }]}>
+        <Ionicons
+          name={icon}
+          size={18}
+          color={tint ? colors.text : colors.accent}
+        />
+      </View>
+      <Text style={styles.tileValue}>{value}</Text>
+      <Text style={styles.tileLabel}>{label}</Text>
+    </GlassCard>
+  );
+}
 
 export function StatsScreen() {
   const [stats, setStats] = useState<Awaited<
@@ -41,7 +68,7 @@ export function StatsScreen() {
   if (loading && !stats) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4f46e5" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -59,11 +86,12 @@ export function StatsScreen() {
   const entries = Object.entries(stats.by_category || {}).sort(
     (a, b) => b[1] - a[1]
   );
+  const maxCount = entries.reduce((m, [, c]) => Math.max(m, c), 1);
 
   return (
     <ScrollView
-      style={styles.root}
       contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -71,87 +99,156 @@ export function StatsScreen() {
             setRefreshing(true);
             load();
           }}
+          tintColor={colors.accent}
         />
       }
     >
+      <Text style={styles.heading}>Stats</Text>
+      <Text style={styles.blurb}>An overview of your closet.</Text>
+
       <View style={styles.grid}>
-        <View style={styles.tile}>
-          <Text style={styles.tileValue}>{stats.total_items}</Text>
-          <Text style={styles.tileLabel}>Total items</Text>
-        </View>
-        <View style={styles.tile}>
-          <Text style={styles.tileValue}>{stats.clean_items}</Text>
-          <Text style={styles.tileLabel}>Clean</Text>
-        </View>
-        <View style={styles.tile}>
-          <Text style={styles.tileValue}>{stats.dirty_items}</Text>
-          <Text style={styles.tileLabel}>Needs wash</Text>
-        </View>
-        <View style={styles.tile}>
-          <Text style={styles.tileValue}>{stats.recently_added}</Text>
-          <Text style={styles.tileLabel}>New (7d)</Text>
-        </View>
+        <Tile
+          value={stats.total_items}
+          label="Total items"
+          icon="cube-outline"
+        />
+        <Tile
+          value={stats.clean_items}
+          label="Clean"
+          icon="checkmark-circle-outline"
+          tint="rgba(48, 209, 88, 0.18)"
+        />
+        <Tile
+          value={stats.dirty_items}
+          label="Needs wash"
+          icon="water-outline"
+          tint="rgba(255, 159, 10, 0.18)"
+        />
+        <Tile
+          value={stats.recently_added}
+          label="New (7d)"
+          icon="sparkles-outline"
+        />
       </View>
 
       <Text style={styles.sectionTitle}>By category</Text>
-      {entries.length === 0 ? (
-        <Text style={styles.muted}>No items yet.</Text>
-      ) : (
-        entries.map(([name, count]) => (
-          <View key={name} style={styles.row}>
-            <Text style={styles.rowName}>{name}</Text>
-            <Text style={styles.rowCount}>{count}</Text>
-          </View>
-        ))
-      )}
+      <GlassCard padded style={styles.listCard}>
+        {entries.length === 0 ? (
+          <Text style={styles.muted}>No items yet.</Text>
+        ) : (
+          entries.map(([name, count], i) => {
+            const ratio = count / maxCount;
+            return (
+              <View
+                key={name}
+                style={[styles.row, i === entries.length - 1 && styles.rowLast]}
+              >
+                <View style={{ flex: 1 }}>
+                  <View style={styles.rowHead}>
+                    <Text style={styles.rowName}>{name}</Text>
+                    <Text style={styles.rowCount}>{count}</Text>
+                  </View>
+                  <View style={styles.barTrack}>
+                    <View
+                      style={[
+                        styles.barFill,
+                        { width: `${Math.max(6, ratio * 100)}%` },
+                      ]}
+                    />
+                  </View>
+                </View>
+              </View>
+            );
+          })
+        )}
+      </GlassCard>
     </ScrollView>
   );
 }
 
+const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f9fafb' },
-  container: { padding: 16, paddingBottom: 40 },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    padding: spacing.xl,
   },
-  error: { color: '#dc2626', padding: 24 },
+  error: { color: colors.danger, padding: spacing.xl },
+  container: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: HEADER_PAD,
+    paddingBottom: 120,
+  },
+  heading: {
+    ...typography.title,
+    color: colors.text,
+    marginBottom: 6,
+  },
+  blurb: {
+    ...typography.callout,
+    color: colors.textSecondary,
+    marginBottom: spacing.xl,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 24,
+    gap: spacing.md,
+    marginBottom: spacing.xl,
   },
   tile: {
-    width: '47%',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    width: '47.5%',
+    padding: spacing.lg,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   tileValue: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.text,
+    letterSpacing: -0.5,
   },
-  tileLabel: { fontSize: 14, color: '#6b7280', marginTop: 4 },
+  tileLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.headline,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
+  listCard: { padding: spacing.lg },
   row: {
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.divider,
+  },
+  rowLast: { borderBottomWidth: 0 },
+  rowHead: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    marginBottom: 8,
   },
-  rowName: { fontSize: 16, color: '#374151' },
-  rowCount: { fontSize: 16, fontWeight: '600', color: '#4f46e5' },
-  muted: { color: '#9ca3af', fontSize: 15 },
+  rowName: { fontSize: 15, color: colors.text, fontWeight: '500' },
+  rowCount: { fontSize: 15, fontWeight: '700', color: colors.accent },
+  barTrack: {
+    height: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.divider,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    backgroundColor: colors.accent,
+    borderRadius: radii.pill,
+  },
+  muted: { color: colors.textMuted, fontSize: 15 },
 });

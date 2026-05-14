@@ -1,9 +1,10 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useAuth } from '../context/AuthContext';
 import type { ClothingItem } from '../api/types';
 import { LoginScreen } from '../screens/LoginScreen';
@@ -14,6 +15,7 @@ import { OutfitsScreen } from '../screens/OutfitsScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ItemDetailScreen } from '../screens/ItemDetailScreen';
+import { colors, shadow, typography } from '../theme';
 
 export type AuthStackParamList = {
   Login: undefined;
@@ -37,24 +39,101 @@ const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
+const navTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: colors.bg,
+    card: colors.bg,
+    text: colors.text,
+    primary: colors.accent,
+    border: 'transparent',
+  },
+};
+
+function GlassTabBarBackground() {
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <BlurView
+        intensity={Platform.OS === 'ios' ? 80 : 60}
+        tint="light"
+        style={StyleSheet.absoluteFill}
+      />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: 'rgba(255, 255, 255, 0.6)' },
+        ]}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: StyleSheet.hairlineWidth,
+          backgroundColor: 'rgba(255, 255, 255, 0.85)',
+        }}
+      />
+    </View>
+  );
+}
+
+function GlassHeaderBackground() {
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <BlurView
+        intensity={Platform.OS === 'ios' ? 70 : 50}
+        tint="light"
+        style={StyleSheet.absoluteFill}
+      />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: 'rgba(255, 255, 255, 0.6)' },
+        ]}
+      />
+    </View>
+  );
+}
+
 function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: '#4f46e5',
-        tabBarInactiveTintColor: '#6b7280',
-        headerStyle: { backgroundColor: '#fafafa' },
-        headerTitleStyle: { fontWeight: '600' },
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          letterSpacing: 0.2,
+        },
+        tabBarStyle: [
+          {
+            position: 'absolute',
+            backgroundColor: 'transparent',
+            borderTopWidth: 0,
+            height: Platform.OS === 'ios' ? 86 : 72,
+            paddingTop: 8,
+          },
+          shadow.tabBar,
+        ],
+        tabBarBackground: () => <GlassTabBarBackground />,
+        headerShown: false,
+        sceneStyle: { backgroundColor: colors.bg },
       }}
     >
       <Tab.Screen
         name="ClosetTab"
         component={ClosetScreen}
         options={{
-          title: 'Closet',
           tabBarLabel: 'Closet',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="shirt-outline" color={color} size={size} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'shirt' : 'shirt-outline'}
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
@@ -62,10 +141,13 @@ function MainTabs() {
         name="UploadTab"
         component={UploadScreen}
         options={{
-          title: 'Add item',
           tabBarLabel: 'Add',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cloud-upload-outline" color={color} size={size} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'add-circle' : 'add-circle-outline'}
+              color={color}
+              size={size + 4}
+            />
           ),
         }}
       />
@@ -73,10 +155,13 @@ function MainTabs() {
         name="OutfitsTab"
         component={OutfitsScreen}
         options={{
-          title: 'Outfits',
           tabBarLabel: 'Outfits',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="color-palette-outline" color={color} size={size} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'sparkles' : 'sparkles-outline'}
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
@@ -84,10 +169,13 @@ function MainTabs() {
         name="StatsTab"
         component={StatsScreen}
         options={{
-          title: 'Stats',
           tabBarLabel: 'Stats',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="stats-chart-outline" color={color} size={size} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'stats-chart' : 'stats-chart-outline'}
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
@@ -95,10 +183,13 @@ function MainTabs() {
         name="ProfileTab"
         component={ProfileScreen}
         options={{
-          title: 'Profile',
           tabBarLabel: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" color={color} size={size} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'person-circle' : 'person-circle-outline'}
+              color={color}
+              size={size + 2}
+            />
           ),
         }}
       />
@@ -108,7 +199,15 @@ function MainTabs() {
 
 function AppStackNavigator() {
   return (
-    <AppStack.Navigator>
+    <AppStack.Navigator
+      screenOptions={{
+        headerTransparent: true,
+        headerBackground: () => <GlassHeaderBackground />,
+        headerTitleStyle: { ...typography.headline, color: colors.text },
+        headerTintColor: colors.accent,
+        contentStyle: { backgroundColor: colors.bg },
+      }}
+    >
       <AppStack.Screen
         name="MainTabs"
         component={MainTabs}
@@ -117,7 +216,7 @@ function AppStackNavigator() {
       <AppStack.Screen
         name="ItemDetail"
         component={ItemDetailScreen}
-        options={{ title: 'Item' }}
+        options={{ title: 'Item', headerBackTitle: 'Back' }}
       />
     </AppStack.Navigator>
   );
@@ -125,16 +224,24 @@ function AppStackNavigator() {
 
 function AuthNavigator() {
   return (
-    <AuthStack.Navigator>
+    <AuthStack.Navigator
+      screenOptions={{
+        headerTransparent: true,
+        headerBackground: () => <GlassHeaderBackground />,
+        headerTitleStyle: { ...typography.headline, color: colors.text },
+        headerTintColor: colors.accent,
+        contentStyle: { backgroundColor: colors.bg },
+      }}
+    >
       <AuthStack.Screen
         name="Login"
         component={LoginScreen}
-        options={{ title: 'Sign in' }}
+        options={{ headerShown: false }}
       />
       <AuthStack.Screen
         name="Register"
         component={RegisterScreen}
-        options={{ title: 'Create account' }}
+        options={{ title: 'Create account', headerBackTitle: 'Back' }}
       />
     </AuthStack.Navigator>
   );
@@ -146,13 +253,13 @@ export function RootNavigator() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4f46e5" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navTheme}>
       {user ? <AppStackNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );
@@ -163,6 +270,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
   },
 });

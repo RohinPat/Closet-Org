@@ -3,12 +3,14 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -17,6 +19,8 @@ import type { MainTabParamList, AppStackParamList } from '../navigation/RootNavi
 import * as api from '../api/client';
 import type { ClothingItem } from '../api/types';
 import { itemImageUrl } from '../config';
+import { GlassButton } from '../components/Glass';
+import { colors, radii, shadow, spacing, typography } from '../theme';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'ClosetTab'>,
@@ -59,19 +63,53 @@ export function ClosetScreen() {
     const uri = itemImageUrl(item.image_path);
     return (
       <Pressable
-        style={styles.card}
+        style={({ pressed }) => [
+          styles.card,
+          shadow.card,
+          { transform: [{ scale: pressed ? 0.98 : 1 }] },
+        ]}
         onPress={() => navigation.navigate('ItemDetail', { item })}
       >
-        {uri ? (
-          <Image source={{ uri }} style={styles.thumb} resizeMode="cover" />
-        ) : (
-          <View style={[styles.thumb, styles.thumbPlaceholder]} />
-        )}
+        <View style={styles.thumbWrap}>
+          {uri ? (
+            <Image source={{ uri }} style={styles.thumb} resizeMode="cover" />
+          ) : (
+            <View style={[styles.thumb, styles.thumbPlaceholder]} />
+          )}
+          {item.is_favorite ? (
+            <View style={styles.favBadge}>
+              <BlurView
+                intensity={50}
+                tint="light"
+                style={StyleSheet.absoluteFill}
+              />
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor: 'rgba(255,255,255,0.6)',
+                    borderRadius: radii.pill,
+                  },
+                ]}
+              />
+              <Text style={styles.favBadgeText}>★</Text>
+            </View>
+          ) : null}
+          {!item.washed ? (
+            <View style={styles.dirtyBadge}>
+              <Text style={styles.dirtyText}>Needs wash</Text>
+            </View>
+          ) : null}
+        </View>
         <View style={styles.cardBody}>
-          <Text style={styles.cardTitle}>{item.category}</Text>
-          <Text style={styles.cardSub}>{item.subcategory}</Text>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {item.category}
+          </Text>
+          <Text style={styles.cardSub} numberOfLines={1}>
+            {item.subcategory}
+          </Text>
           <Text style={styles.cardMeta} numberOfLines={1}>
-            {(item.colors || []).join(', ')}
+            {(item.colors || []).join(' · ')}
           </Text>
         </View>
       </Pressable>
@@ -81,7 +119,7 @@ export function ClosetScreen() {
   if (loading && items.length === 0) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4f46e5" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -90,9 +128,7 @@ export function ClosetScreen() {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>{error}</Text>
-        <Pressable style={styles.retry} onPress={load}>
-          <Text style={styles.retryText}>Retry</Text>
-        </Pressable>
+        <GlassButton title="Retry" onPress={load} fullWidth={false} />
       </View>
     );
   }
@@ -106,58 +142,141 @@ export function ClosetScreen() {
       columnWrapperStyle={styles.row}
       contentContainerStyle={styles.list}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.accent}
+        />
+      }
+      ListHeaderComponent={
+        <View style={styles.header}>
+          <Text style={styles.heading}>Your Closet</Text>
+          <Text style={styles.count}>
+            {items.length} {items.length === 1 ? 'item' : 'items'}
+          </Text>
+        </View>
       }
       ListEmptyComponent={
-        <Text style={styles.empty}>No items yet. Add one from the Add tab.</Text>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTitle}>Closet's empty</Text>
+          <Text style={styles.empty}>
+            Tap Add to scan your first item.
+          </Text>
+        </View>
       }
     />
   );
 }
+
+const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
 
 const styles = StyleSheet.create({
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#f9fafb',
+    padding: spacing.xl,
   },
-  errorText: { color: '#dc2626', textAlign: 'center', marginBottom: 16 },
-  retry: {
-    backgroundColor: '#4f46e5',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+  errorText: {
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    fontSize: 15,
   },
-  retryText: { color: '#fff', fontWeight: '600' },
-  list: { padding: 12, paddingBottom: 32, backgroundColor: '#f9fafb' },
-  row: { justifyContent: 'space-between', gap: 12 },
+  list: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: HEADER_PAD,
+    paddingBottom: 120,
+  },
+  header: {
+    marginBottom: spacing.lg,
+  },
+  heading: {
+    ...typography.title,
+    color: colors.text,
+  },
+  count: {
+    ...typography.callout,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  row: { justifyContent: 'space-between', gap: spacing.md },
   card: {
     flex: 1,
-    maxWidth: '48%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 12,
+    maxWidth: '48.5%',
+    backgroundColor: colors.surfaceSolid,
+    borderRadius: radii.lg,
+    marginBottom: spacing.md,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.7)',
   },
-  thumb: { width: '100%', aspectRatio: 1, backgroundColor: '#e5e7eb' },
+  thumbWrap: { position: 'relative' },
+  thumb: {
+    width: '100%',
+    aspectRatio: 1,
+    backgroundColor: '#EFEDE8',
+  },
   thumbPlaceholder: { justifyContent: 'center', alignItems: 'center' },
-  cardBody: { padding: 10 },
-  cardTitle: { fontWeight: '700', fontSize: 15, color: '#111827' },
-  cardSub: { fontSize: 13, color: '#6b7280', marginTop: 2 },
-  cardMeta: { fontSize: 12, color: '#9ca3af', marginTop: 4 },
+  favBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: radii.pill,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  favBadgeText: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  dirtyBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: colors.dangerSoft,
+    borderRadius: radii.pill,
+  },
+  dirtyText: {
+    color: colors.danger,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  cardBody: { padding: spacing.md },
+  cardTitle: {
+    ...typography.bodyMedium,
+    color: colors.text,
+  },
+  cardSub: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  cardMeta: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 6,
+  },
+  emptyWrap: {
+    alignItems: 'center',
+    marginTop: 64,
+    paddingHorizontal: spacing.xl,
+  },
+  emptyTitle: {
+    ...typography.headline,
+    color: colors.text,
+    marginBottom: 6,
+  },
   empty: {
     textAlign: 'center',
-    color: '#6b7280',
-    marginTop: 48,
-    paddingHorizontal: 24,
+    color: colors.textSecondary,
+    fontSize: 15,
   },
 });

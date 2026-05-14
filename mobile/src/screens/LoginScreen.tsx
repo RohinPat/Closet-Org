@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../navigation/RootNavigator';
 import { useAuth } from '../context/AuthContext';
+import { GlassButton, GlassCard, GlassInputContainer } from '../components/Glass';
+import { colors, radii, spacing, typography } from '../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -39,103 +40,112 @@ export function LoginScreen({ navigation }: Props) {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <Text style={styles.title}>Closet Org</Text>
-      <Text style={styles.subtitle}>Sign in to your closet</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Username"
-        placeholderTextColor="#9ca3af"
-        autoCapitalize="none"
-        autoCorrect={false}
-        value={username}
-        onChangeText={setUsername}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#9ca3af"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <Pressable
-        style={[styles.button, busy && styles.buttonDisabled]}
-        onPress={onSubmit}
-        disabled={busy}
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {busy ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Sign in</Text>
-        )}
-      </Pressable>
+        <View style={styles.container}>
+          <View style={styles.brandWrap}>
+            <Text style={styles.brand}>Closet</Text>
+            <Text style={styles.brandAccent}>Org</Text>
+          </View>
+          <Text style={styles.subtitle}>Welcome back to your closet</Text>
 
-      <Pressable
-        style={styles.linkWrap}
-        onPress={() => navigation.navigate('Register')}
-        disabled={busy}
-      >
-        <Text style={styles.link}>Create an account</Text>
-      </Pressable>
-    </KeyboardAvoidingView>
+          <GlassCard padded style={styles.card}>
+            <GlassInputContainer style={styles.input}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Username"
+                placeholderTextColor={colors.placeholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={username}
+                onChangeText={setUsername}
+              />
+            </GlassInputContainer>
+            <GlassInputContainer style={styles.input}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Password"
+                placeholderTextColor={colors.placeholder}
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+            </GlassInputContainer>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <GlassButton
+              title="Sign in"
+              onPress={onSubmit}
+              loading={busy}
+              style={styles.submit}
+            />
+
+            <GlassButton
+              title="Create an account"
+              onPress={() => navigation.navigate('Register')}
+              variant="ghost"
+              disabled={busy}
+              style={styles.secondary}
+            />
+          </GlassCard>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  flex: { flex: 1 },
   container: {
     flex: 1,
-    padding: 24,
+    paddingHorizontal: spacing.xl,
     justifyContent: 'center',
-    backgroundColor: '#fff',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 8,
+  brandWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: spacing.sm,
+  },
+  brand: {
+    ...typography.largeTitle,
+    color: colors.text,
+  },
+  brandAccent: {
+    ...typography.largeTitle,
+    color: colors.accent,
+    marginLeft: 6,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginBottom: 32,
+    ...typography.callout,
+    color: colors.textSecondary,
+    marginBottom: spacing.xxl,
+  },
+  card: {
+    padding: spacing.lg,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    marginBottom: spacing.md,
+  },
+  textInput: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
-    marginBottom: 12,
-    backgroundColor: '#fafafa',
-    color: '#111827',
+    color: colors.text,
   },
   error: {
-    color: '#dc2626',
-    marginBottom: 12,
+    color: colors.danger,
+    marginBottom: spacing.sm,
     fontSize: 14,
   },
-  button: {
-    backgroundColor: '#4f46e5',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 8,
+  submit: {
+    marginTop: spacing.sm,
   },
-  buttonDisabled: { opacity: 0.7 },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  secondary: {
+    marginTop: spacing.md,
   },
-  linkWrap: { marginTop: 20, alignItems: 'center' },
-  link: { color: '#4f46e5', fontSize: 15, fontWeight: '500' },
 });
