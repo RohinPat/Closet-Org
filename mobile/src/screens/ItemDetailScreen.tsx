@@ -1,16 +1,20 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Image,
   KeyboardAvoidingView,
   Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +22,7 @@ import { BlurView } from 'expo-blur';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../navigation/RootNavigator';
 import * as api from '../api/client';
-import type { ItemDetailsPatch } from '../api/types';
+import type { ClothingItem, ItemDetailsPatch } from '../api/types';
 import { itemImageUrl } from '../config';
 import {
   GlassButton,
@@ -44,6 +48,7 @@ type EditableField =
   | 'purchase_price'
   | 'purchase_date'
   | 'purchase_location'
+  | 'storage_location'
   | 'notes';
 
 type FieldConfig = {
@@ -74,12 +79,28 @@ const FIELDS: FieldConfig[] = [
     placeholder: 'Add store',
   },
   {
+    key: 'storage_location',
+    label: 'Location',
+    placeholder: 'e.g. front rack, left',
+  },
+  {
     key: 'notes',
     label: 'Notes',
     placeholder: 'Add a note',
     multiline: true,
   },
 ];
+
+function useGalleryUris(item: ClothingItem): string[] {
+  return useMemo(() => {
+    const list = item.image_paths && item.image_paths.length > 0
+      ? item.image_paths
+      : [item.image_path];
+    return list
+      .map((p) => itemImageUrl(p))
+      .filter((u): u is string => !!u);
+  }, [item.image_path, item.image_paths]);
+}
 
 function confirmDelete(message: string): Promise<boolean> {
   if (Platform.OS === 'web') {
@@ -132,7 +153,24 @@ export function ItemDetailScreen({ route, navigation }: Props) {
     refresh();
   }, [refresh]);
 
-  const uri = itemImageUrl(item.image_path);
+  const galleryUris = useGalleryUris(item);
+  const { width: winWidth } = useWindowDimensions();
+  const pageWidth = winWidth - spacing.xl * 2;
+  const [pageIndex, setPageIndex] = useState(0);
+  const [lendModalOpen, setLendModalOpen] = useState(false);
+  const onPageChange = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const idx = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
+      setPageIndex(idx);
+    },
+    [pageWidth]
+  );
+  const carouselRef = useRef<FlatList<string>>(null);
+  useEffect(() => {
+    // Reset to first page if the item or photo list changes (e.g. after refresh).
+    setPageIndex(0);
+    carouselRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [item.id, galleryUris.length]);
 
   const cpw = item.cost_per_wear;
   const worn = item.times_worn ?? 0;
@@ -162,6 +200,25 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   async function setWashed(clean: boolean) {
     try {
       await api.updateItemStatus(item.id, { washed: clean });
+      await refresh();
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
+  }
+
+  async function onLendSave(lent_to: string, lent_until: string | null) {
+    try {
+      await api.lendItem(item.id, { lent_to, lent_until });
+      setLendModalOpen(false);
+      await refresh();
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
+  }
+
+  async function onReturn() {
+    try {
+      await api.returnItem(item.id);
       await refresh();
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
@@ -203,10 +260,28 @@ export function ItemDetailScreen({ route, navigation }: Props) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.imageWrap}>
-          {uri ? (
-            <Image source={{ uri }} style={styles.image} resizeMode="contain" />
+          {galleryUris.length > 0 ? (
+            <FlatList
+              ref={carouselRef}
+              data={galleryUris}
+              keyExtractor={(uri, idx) => `${idx}-${uri}`}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={onPageChange}
+              renderItem={({ item: u }) => (
+                <Image
+                  source={{ uri: u }}
+                  style={[styles.image, { width: pageWidth }]}
+                  resizeMode="contain"
+                />
+              )}
+              scrollEnabled={galleryUris.length > 1}
+            />
           ) : (
-            <View style={[styles.image, styles.imagePlaceholder]} />
+            <View
+              style={[styles.image, styles.imagePlaceholder, { width: pageWidth }]}
+            />
           )}
           <Pressable onPress={onToggleFavorite} style={styles.favBtn}>
             <View
@@ -224,6 +299,19 @@ export function ItemDetailScreen({ route, navigation }: Props) {
               color={item.is_favorite ? colors.danger : colors.text}
             />
           </Pressable>
+          {galleryUris.length > 1 ? (
+            <View style={styles.pageDots} pointerEvents="none">
+              {galleryUris.map((_, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.pageDot,
+                    idx === pageIndex && styles.pageDotActive,
+                  ]}
+                />
+              ))}
+            </View>
+          ) : null}
         </View>
 
         {loading ? (
@@ -251,6 +339,35 @@ export function ItemDetailScreen({ route, navigation }: Props) {
               </View>
             ))}
           </View>
+
+          {item.lent_to ? (
+            <GlassCard
+              padded
+              style={[
+                styles.lendBanner,
+                isLentOverdue(item) && styles.lendBannerOverdue,
+              ]}
+            >
+              <View style={styles.lendBannerRow}>
+                <Ionicons
+                  name="paper-plane-outline"
+                  size={18}
+                  color={
+                    isLentOverdue(item) ? colors.danger : colors.warning
+                  }
+                  style={{ marginRight: 8 }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.lendBannerTitle}>
+                    Lent to {item.lent_to}
+                  </Text>
+                  <Text style={styles.lendBannerSub}>
+                    {formatLentSubtitle(item)}
+                  </Text>
+                </View>
+              </View>
+            </GlassCard>
+          ) : null}
 
           <GlassCard padded style={styles.statsCard}>
             <View style={styles.statRow}>
@@ -344,6 +461,13 @@ export function ItemDetailScreen({ route, navigation }: Props) {
               onPress={onToggleFavorite}
               variant="ghost"
             />
+            <GlassButton
+              title={item.lent_to ? 'Mark returned' : 'Lend out'}
+              onPress={
+                item.lent_to ? onReturn : () => setLendModalOpen(true)
+              }
+              variant="ghost"
+            />
             <GlassButton title="Delete item" onPress={onDelete} variant="danger" />
           </View>
         </View>
@@ -355,7 +479,135 @@ export function ItemDetailScreen({ route, navigation }: Props) {
         onCancel={() => setEditing(null)}
         onSave={saveField}
       />
+
+      <LendModal
+        visible={lendModalOpen}
+        onCancel={() => setLendModalOpen(false)}
+        onSave={onLendSave}
+      />
     </View>
+  );
+}
+
+function isLentOverdue(item: ClothingItem): boolean {
+  if (!item.lent_until) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return item.lent_until < today;
+}
+
+function formatLentSubtitle(item: ClothingItem): string {
+  if (item.lent_until) {
+    return isLentOverdue(item)
+      ? `Overdue · was due ${item.lent_until}`
+      : `Returns ${item.lent_until}`;
+  }
+  return 'No return date';
+}
+
+type LendModalProps = {
+  visible: boolean;
+  onCancel: () => void;
+  onSave: (lent_to: string, lent_until: string | null) => void | Promise<void>;
+};
+
+function LendModal({ visible, onCancel, onSave }: LendModalProps) {
+  const { colors, surface } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const [name, setName] = useState('');
+  const [due, setDue] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setName('');
+      setDue('');
+      setSaving(false);
+    }
+  }, [visible]);
+
+  async function handleSave() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      Alert.alert('Name required', 'Who are you lending it to?');
+      return;
+    }
+    const dueTrim = due.trim();
+    if (dueTrim && !/^\d{4}-\d{2}-\d{2}$/.test(dueTrim)) {
+      Alert.alert('Invalid date', 'Use YYYY-MM-DD format, e.g. 2026-06-01');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(trimmed, dueTrim || null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.modalBackdrop}
+      >
+        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel}>
+          <BlurView
+            intensity={30}
+            tint={surface.blurTint}
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: 'rgba(0,0,0,0.35)' },
+            ]}
+          />
+        </Pressable>
+        <GlassCard padded style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Lend out</Text>
+          <GlassInputContainer style={styles.modalInputShell}>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Who's borrowing it?"
+              placeholderTextColor={colors.placeholder}
+              autoFocus
+              style={styles.modalInput}
+            />
+          </GlassInputContainer>
+          <GlassInputContainer style={styles.modalInputShell}>
+            <TextInput
+              value={due}
+              onChangeText={setDue}
+              placeholder="Return by (YYYY-MM-DD) — optional"
+              placeholderTextColor={colors.placeholder}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.modalInput}
+            />
+          </GlassInputContainer>
+          <View style={styles.modalActions}>
+            <GlassButton
+              title="Cancel"
+              variant="ghost"
+              onPress={onCancel}
+              style={{ flex: 1 }}
+            />
+            <GlassButton
+              title="Lend"
+              onPress={handleSave}
+              loading={saving}
+              style={{ flex: 1 }}
+            />
+          </View>
+        </GlassCard>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -481,6 +733,25 @@ function makeStyles({
       ...shadow.card,
     },
     imagePlaceholder: { justifyContent: 'center', alignItems: 'center' },
+    pageDots: {
+      position: 'absolute',
+      bottom: 12,
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    pageDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: 'rgba(255,255,255,0.5)',
+    },
+    pageDotActive: {
+      backgroundColor: '#fff',
+      width: 18,
+    },
     favBtn: {
       position: 'absolute',
       top: HEADER_PAD + 12,
@@ -529,6 +800,29 @@ function makeStyles({
     statsCard: {
       padding: spacing.lg,
       marginBottom: spacing.lg,
+    },
+    lendBanner: {
+      padding: spacing.md,
+      marginBottom: spacing.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.warning,
+    },
+    lendBannerOverdue: {
+      borderColor: colors.danger,
+      backgroundColor: colors.dangerSoft,
+    },
+    lendBannerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    lendBannerTitle: {
+      ...typography.bodyMedium,
+      color: colors.text,
+    },
+    lendBannerSub: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginTop: 2,
     },
     statRow: {
       flexDirection: 'row',

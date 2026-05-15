@@ -6,10 +6,12 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,11 +31,16 @@ import {
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import {
   cycleDensity,
+  cycleSort,
   densityColumns,
   densityLabel,
   densityMaxWidth,
+  sortLabel,
   useDensityPref,
+  useLayoutPref,
+  useSortPref,
   type Density,
+  type SortKey,
 } from '../preferences';
 import {
   radii,
@@ -49,12 +56,13 @@ type Nav = CompositeNavigationProp<
   NativeStackNavigationProp<AppStackParamList>
 >;
 
-type FilterKey = 'clean' | 'wash' | 'favorites';
+type FilterKey = 'clean' | 'wash' | 'favorites' | 'lent';
 
 const FILTER_OPTIONS: { key: FilterKey; label: string }[] = [
   { key: 'clean', label: 'Clean' },
   { key: 'wash', label: 'Needs wash' },
   { key: 'favorites', label: 'Favorites' },
+  { key: 'lent', label: 'Lent' },
 ];
 
 const DENSITY_ICON: Record<Density, keyof typeof Ionicons.glyphMap> = {
@@ -64,8 +72,40 @@ const DENSITY_ICON: Record<Density, keyof typeof Ionicons.glyphMap> = {
   dense: 'apps',
 };
 
-const STICKY_BAR_HEIGHT = 108; // search row + chip row + paddings
+const RAIL_SECTION_ORDER = [
+  'Top',
+  'Bottom',
+  'Dress',
+  'Footwear',
+  'Accessory',
+  'Other',
+];
+
 const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
+const RAIL_CARD_WIDTH = 140;
+
+// Display swatches for the named color buckets used by the classifier.
+// Mirrors backend/models/clothing_classifier.py COLOR_MAP minus the alpha tweaks.
+const COLOR_SWATCH: Record<string, string> = {
+  Black: '#1a1a1a',
+  White: '#f3f3f3',
+  Gray: '#909090',
+  Red: '#c8201e',
+  Blue: '#2846c8',
+  Green: '#2c8c3c',
+  Yellow: '#f0dc3c',
+  Orange: '#e68c28',
+  Purple: '#783296',
+  Pink: '#ebafb4',
+  Brown: '#784b28',
+  Beige: '#dcc8aa',
+  Navy: '#141e50',
+  Teal: '#1e8282',
+};
+
+function colorSwatch(name: string): string {
+  return COLOR_SWATCH[name] || '#888';
+}
 
 function itemMatchesQuery(item: ClothingItem, q: string): boolean {
   if (!q) return true;
@@ -74,6 +114,8 @@ function itemMatchesQuery(item: ClothingItem, q: string): boolean {
     item.subcategory,
     item.style ?? '',
     item.season ?? '',
+    item.brand ?? '',
+    item.notes ?? '',
     ...(item.colors || []),
   ]
     .join(' ')
@@ -81,9 +123,53 @@ function itemMatchesQuery(item: ClothingItem, q: string): boolean {
   return haystack.includes(q);
 }
 
+function itemCpw(item: ClothingItem): number | null {
+  if (typeof item.cost_per_wear === 'number') return item.cost_per_wear;
+  const price = item.purchase_price;
+  const worn = item.times_worn ?? 0;
+  if (typeof price === 'number' && price > 0 && worn > 0) {
+    return price / worn;
+  }
+  return null;
+}
+
+type NeglectTier = 'mild' | 'moderate' | 'severe';
+
+// Days since the item was last worn. Items that have never been worn fall back
+// to date_added so the badge can surface "never worn but added a while ago"
+// items. Returns null if there's no usable reference date. SQLite emits
+// "YYYY-MM-DD HH:MM:SS" which Hermes' Date.parse rejects — normalize to ISO.
+function daysSinceWorn(item: ClothingItem): number | null {
+  const ref = item.last_worn || item.date_added;
+  if (!ref) return null;
+  const iso = ref.includes('T') ? ref : ref.replace(' ', 'T');
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return null;
+  const diff = Date.now() - then;
+  if (diff < 0) return 0;
+  return Math.floor(diff / 86_400_000);
+}
+
+function neglectTier(days: number | null): NeglectTier | null {
+  if (days == null) return null;
+  if (days >= 90) return 'severe';
+  if (days >= 60) return 'moderate';
+  if (days >= 30) return 'mild';
+  return null;
+}
+
+function neglectLabel(item: ClothingItem, days: number): string {
+  const everWorn = (item.times_worn ?? 0) > 0 && !!item.last_worn;
+  if (!everWorn) return 'Never worn';
+  return `${days}d unworn`;
+}
+
 function applyFilters(
   items: ClothingItem[],
   filters: Set<FilterKey>,
+  categories: Set<string>,
+  colors: Set<string>,
+  locations: Set<string>,
   query: string
 ): ClothingItem[] {
   const q = query.trim().toLowerCase();
@@ -91,8 +177,55 @@ function applyFilters(
     if (filters.has('clean') && !item.washed) return false;
     if (filters.has('wash') && item.washed) return false;
     if (filters.has('favorites') && !item.is_favorite) return false;
+    if (filters.has('lent') && !item.lent_to) return false;
+    if (categories.size > 0 && !categories.has(item.category)) return false;
+    if (colors.size > 0) {
+      const hasMatch = (item.colors || []).some((c) => colors.has(c));
+      if (!hasMatch) return false;
+    }
+    if (locations.size > 0) {
+      const loc = item.storage_location?.trim() ?? '';
+      if (!loc || !locations.has(loc)) return false;
+    }
     return itemMatchesQuery(item, q);
   });
+}
+
+function sortItems(items: ClothingItem[], sort: SortKey): ClothingItem[] {
+  const copy = [...items];
+  switch (sort) {
+    case 'recent':
+      // date_added DESC, fall back to id (auto-increment) to keep stable order.
+      return copy.sort((a, b) => {
+        const da = a.date_added ?? '';
+        const db = b.date_added ?? '';
+        if (da === db) return b.id - a.id;
+        return db.localeCompare(da);
+      });
+    case 'most_worn':
+      return copy.sort((a, b) => (b.times_worn ?? 0) - (a.times_worn ?? 0));
+    case 'neglected':
+      // Longest unworn first. Items never worn rank just below truly stale
+      // items so the user still sees them.
+      return copy.sort((a, b) => {
+        const aa = a.last_worn ?? '';
+        const bb = b.last_worn ?? '';
+        if (aa === '' && bb === '') return 0;
+        if (aa === '') return -1;
+        if (bb === '') return 1;
+        return aa.localeCompare(bb);
+      });
+    case 'cpw':
+      // Lower CPW = better value; items with no CPW yet go last.
+      return copy.sort((a, b) => {
+        const ca = itemCpw(a);
+        const cb = itemCpw(b);
+        if (ca === null && cb === null) return 0;
+        if (ca === null) return 1;
+        if (cb === null) return -1;
+        return ca - cb;
+      });
+  }
 }
 
 type ChipProps = {
@@ -139,11 +272,62 @@ function FilterChip({ label, active, onPress }: ChipProps) {
   );
 }
 
+type ColorChipProps = {
+  name: string;
+  active: boolean;
+  onPress: () => void;
+};
+
+function ColorChip({ name, active, onPress }: ColorChipProps) {
+  const { colors, surface } = useTheme();
+  const swatch = colorSwatch(name);
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        chipStyles.colorChip,
+        { transform: [{ scale: pressed ? 0.96 : 1 }] },
+      ]}
+    >
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: active ? colors.accent : surface.chipInactive,
+            borderRadius: radii.pill,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: active ? colors.accent : surface.chipInactiveBorder,
+          },
+        ]}
+      />
+      <View
+        style={[
+          chipStyles.swatch,
+          {
+            backgroundColor: swatch,
+            borderColor: active ? '#fff' : surface.chipInactiveBorder,
+          },
+        ]}
+      />
+      <Text
+        style={[
+          chipStyles.chipText,
+          { color: active ? '#fff' : colors.text },
+        ]}
+      >
+        {name}
+      </Text>
+    </Pressable>
+  );
+}
+
 export function ClosetScreen() {
   const navigation = useNavigation<Nav>();
   const { colors, surface } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [density, setDensity] = useDensityPref();
+  const [sort, setSort] = useSortPref();
+  const [layout, setLayout] = useLayoutPref();
   const numColumns = densityColumns(density);
   const cardMaxWidth = densityMaxWidth(density);
 
@@ -152,7 +336,15 @@ export function ClosetScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Set<FilterKey>>(() => new Set());
+  const [categoryFilters, setCategoryFilters] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [colorFilters, setColorFilters] = useState<Set<string>>(() => new Set());
+  const [locationFilters, setLocationFilters] = useState<Set<string>>(
+    () => new Set()
+  );
   const [query, setQuery] = useState('');
+  const [stickyHeight, setStickyHeight] = useState(108);
 
   const load = useCallback(async () => {
     setError(null);
@@ -192,91 +384,255 @@ export function ClosetScreen() {
     });
   }
 
-  const visibleItems = useMemo(
-    () => applyFilters(items, filters, query),
-    [items, filters, query]
-  );
+  function toggleSetValue<T>(
+    setter: React.Dispatch<React.SetStateAction<Set<T>>>,
+    value: T
+  ) {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
+
+  // Derive the chip universes from the current closet.
+  const availableCategories = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const it of items) {
+      seen.set(it.category, (seen.get(it.category) ?? 0) + 1);
+    }
+    return [...seen.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k]) => k);
+  }, [items]);
+
+  const availableColors = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const it of items) {
+      for (const c of it.colors || []) {
+        seen.set(c, (seen.get(c) ?? 0) + 1);
+      }
+    }
+    return [...seen.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k]) => k);
+  }, [items]);
+
+  const availableLocations = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const it of items) {
+      const loc = it.storage_location?.trim();
+      if (!loc) continue;
+      seen.set(loc, (seen.get(loc) ?? 0) + 1);
+    }
+    return [...seen.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k]) => k);
+  }, [items]);
+
+  const visibleItems = useMemo(() => {
+    const filtered = applyFilters(
+      items,
+      filters,
+      categoryFilters,
+      colorFilters,
+      locationFilters,
+      query
+    );
+    return sortItems(filtered, sort);
+  }, [
+    items,
+    filters,
+    categoryFilters,
+    colorFilters,
+    locationFilters,
+    query,
+    sort,
+  ]);
 
   const isList = numColumns === 1;
   const isDense = numColumns >= 3;
 
-  function renderItem({ item }: { item: ClothingItem }) {
-    const uri = itemThumbnailUrl(item);
-    return (
-      <Pressable
-        style={({ pressed }) => [
-          styles.card,
-          { maxWidth: cardMaxWidth as any },
-          isList && styles.cardList,
-          shadow.card,
-          { transform: [{ scale: pressed ? 0.98 : 1 }] },
-        ]}
-        onPress={() => navigation.navigate('ItemDetail', { item })}
-      >
-        <View style={styles.thumbWrap}>
-          {uri ? (
-            <Image
-              source={{ uri }}
-              style={[styles.thumb, isList && styles.thumbList]}
-              resizeMode="contain"
-            />
-          ) : (
-            <View
-              style={[
-                styles.thumb,
-                isList && styles.thumbList,
-                styles.thumbPlaceholder,
-              ]}
-            />
-          )}
-          {item.is_favorite ? (
-            <View style={styles.favBadge}>
-              <BlurView
-                intensity={50}
-                tint={surface.blurTint}
-                style={StyleSheet.absoluteFill}
+  const renderItem = useCallback(
+    ({ item }: { item: ClothingItem }) => {
+      const uri = itemThumbnailUrl(item);
+      const days = daysSinceWorn(item);
+      const tier = neglectTier(days);
+      return (
+        <Pressable
+          style={({ pressed }) => [
+            styles.card,
+            { maxWidth: cardMaxWidth as any },
+            isList && styles.cardList,
+            shadow.card,
+            { transform: [{ scale: pressed ? 0.98 : 1 }] },
+          ]}
+          onPress={() => navigation.navigate('ItemDetail', { item })}
+        >
+          <View style={styles.thumbWrap}>
+            {uri ? (
+              <Image
+                source={{ uri }}
+                style={[styles.thumb, isList && styles.thumbList]}
+                resizeMode="contain"
               />
+            ) : (
               <View
                 style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    backgroundColor: surface.favBadgeBg,
-                    borderRadius: radii.pill,
-                  },
+                  styles.thumb,
+                  isList && styles.thumbList,
+                  styles.thumbPlaceholder,
                 ]}
               />
-              <Text style={styles.favBadgeText}>★</Text>
-            </View>
-          ) : null}
-          {!item.washed ? (
-            <View style={styles.dirtyBadge}>
-              <Text style={styles.dirtyText}>
-                {isDense ? '!' : 'Needs wash'}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-        <View style={styles.cardBody}>
-          <Text
-            style={[styles.cardTitle, isList && styles.cardTitleList]}
-            numberOfLines={1}
-          >
-            {item.category}
-          </Text>
-          <Text style={styles.cardSub} numberOfLines={1}>
-            {item.subcategory}
-          </Text>
-          {!isDense ? (
-            <Text style={styles.cardMeta} numberOfLines={1}>
-              {(item.colors || []).join(' · ')}
+            )}
+            {item.is_favorite ? (
+              <View style={styles.favBadge}>
+                <BlurView
+                  intensity={50}
+                  tint={surface.blurTint}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      backgroundColor: surface.favBadgeBg,
+                      borderRadius: radii.pill,
+                    },
+                  ]}
+                />
+                <Text style={styles.favBadgeText}>★</Text>
+              </View>
+            ) : null}
+            {!item.washed ? (
+              <View style={styles.dirtyBadge}>
+                <Text style={styles.dirtyText}>
+                  {isDense ? '!' : 'Needs wash'}
+                </Text>
+              </View>
+            ) : null}
+            {item.lent_to ? (
+              <View style={styles.lentBadge}>
+                <Text style={styles.lentText}>
+                  {isDense ? '↗' : `Lent · ${item.lent_to}`}
+                </Text>
+              </View>
+            ) : null}
+            {tier && !isDense ? (
+              <View
+                style={[
+                  styles.neglectBadge,
+                  tier === 'severe'
+                    ? styles.neglectSevere
+                    : tier === 'moderate'
+                    ? styles.neglectModerate
+                    : styles.neglectMild,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.neglectText,
+                    tier === 'severe'
+                      ? styles.neglectTextSevere
+                      : tier === 'moderate'
+                      ? styles.neglectTextModerate
+                      : styles.neglectTextMild,
+                  ]}
+                >
+                  {neglectLabel(item, days!)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.cardBody}>
+            <Text
+              style={[styles.cardTitle, isList && styles.cardTitleList]}
+              numberOfLines={1}
+            >
+              {item.category}
             </Text>
-          ) : null}
-        </View>
-      </Pressable>
-    );
-  }
+            <Text style={styles.cardSub} numberOfLines={1}>
+              {item.subcategory}
+            </Text>
+            {!isDense ? (
+              <Text style={styles.cardMeta} numberOfLines={1}>
+                {(item.colors || []).join(' · ')}
+              </Text>
+            ) : null}
+          </View>
+        </Pressable>
+      );
+    },
+    [cardMaxWidth, isDense, isList, navigation, styles, surface]
+  );
 
-  const filterActive = filters.size > 0 || query.length > 0;
+  const renderRailCard = useCallback(
+    ({ item }: { item: ClothingItem }) => {
+      const uri = itemThumbnailUrl(item);
+      return (
+        <Pressable
+          style={({ pressed }) => [
+            styles.railCard,
+            shadow.card,
+            { transform: [{ scale: pressed ? 0.98 : 1 }] },
+          ]}
+          onPress={() => navigation.navigate('ItemDetail', { item })}
+        >
+          {uri ? (
+            <Image source={{ uri }} style={styles.railThumb} resizeMode="contain" />
+          ) : (
+            <View style={[styles.railThumb, styles.thumbPlaceholder]} />
+          )}
+          <View style={styles.railBody}>
+            <Text style={styles.railTitle} numberOfLines={1}>
+              {item.category}
+            </Text>
+            <Text style={styles.railSub} numberOfLines={1}>
+              {item.subcategory}
+            </Text>
+          </View>
+        </Pressable>
+      );
+    },
+    [navigation, styles]
+  );
+
+  const railSections = useMemo(() => {
+    if (layout !== 'rails') return [];
+    const buckets = new Map<string, ClothingItem[]>();
+    for (const it of visibleItems) {
+      const key = it.subcategory || 'Other';
+      const list = buckets.get(key) ?? [];
+      list.push(it);
+      buckets.set(key, list);
+    }
+    const present = [...buckets.keys()];
+    present.sort((a, b) => {
+      const ai = RAIL_SECTION_ORDER.indexOf(a);
+      const bi = RAIL_SECTION_ORDER.indexOf(b);
+      const aRank = ai === -1 ? RAIL_SECTION_ORDER.length : ai;
+      const bRank = bi === -1 ? RAIL_SECTION_ORDER.length : bi;
+      if (aRank !== bRank) return aRank - bRank;
+      return a.localeCompare(b);
+    });
+    return present.map((k) => ({ title: k, data: buckets.get(k)! }));
+  }, [layout, visibleItems]);
+
+  const filterActive =
+    filters.size > 0 ||
+    categoryFilters.size > 0 ||
+    colorFilters.size > 0 ||
+    locationFilters.size > 0 ||
+    query.length > 0;
+
+  function clearAll() {
+    setFilters(new Set());
+    setCategoryFilters(new Set());
+    setColorFilters(new Set());
+    setLocationFilters(new Set());
+    setQuery('');
+  }
 
   if (loading && items.length === 0) {
     return (
@@ -310,13 +666,39 @@ export function ClosetScreen() {
             {visibleItems.length} of {items.length}{' '}
             {items.length === 1 ? 'item' : 'items'}
             {filterActive ? ' · filtered' : ''}
+            {' · '}
+            {sortLabel(sort)}
           </Text>
         </View>
+        <Pressable
+          onPress={() => setLayout(layout === 'grid' ? 'rails' : 'grid')}
+          accessibilityLabel={`View: ${layout}. Tap to change.`}
+          style={({ pressed }) => [
+            styles.headerBtn,
+            { opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <Ionicons
+            name={layout === 'rails' ? 'reorder-three-outline' : 'list-outline'}
+            size={20}
+            color={colors.text}
+          />
+        </Pressable>
+        <Pressable
+          onPress={() => setSort(cycleSort(sort))}
+          accessibilityLabel={`Sort: ${sortLabel(sort)}. Tap to change.`}
+          style={({ pressed }) => [
+            styles.headerBtn,
+            { opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <Ionicons name="swap-vertical-outline" size={20} color={colors.text} />
+        </Pressable>
         <Pressable
           onPress={() => setDensity(cycleDensity(density))}
           accessibilityLabel={`Layout: ${densityLabel(density)}. Tap to change.`}
           style={({ pressed }) => [
-            styles.densityBtn,
+            styles.headerBtn,
             { opacity: pressed ? 0.7 : 1 },
           ]}
         >
@@ -330,9 +712,58 @@ export function ClosetScreen() {
     </View>
   );
 
-  return (
-    <View style={{ flex: 1 }}>
-      <ScreenBackground />
+  const listBody =
+    layout === 'rails' ? (
+      <ScrollView
+        contentContainerStyle={[
+          styles.list,
+          { paddingTop: HEADER_PAD + stickyHeight, paddingHorizontal: 0 },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            progressViewOffset={HEADER_PAD + stickyHeight}
+          />
+        }
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={{ paddingHorizontal: spacing.lg }}>{scrollHeader}</View>
+        {railSections.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyTitle}>
+              {filterActive ? 'No matches' : "Closet's empty"}
+            </Text>
+            <Text style={styles.empty}>
+              {filterActive
+                ? 'Try clearing filters or a different search.'
+                : 'Tap Add to scan your first item.'}
+            </Text>
+          </View>
+        ) : (
+          railSections.map((section) => (
+            <View key={section.title} style={styles.railSection}>
+              <Text style={styles.railSectionTitle}>
+                {section.title}
+                <Text style={styles.railSectionCount}>
+                  {' · '}
+                  {section.data.length}
+                </Text>
+              </Text>
+              <FlatList
+                data={section.data}
+                keyExtractor={(item) => String(item.id)}
+                renderItem={renderRailCard}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.railContent}
+              />
+            </View>
+          ))
+        )}
+      </ScrollView>
+    ) : (
       <FlatList
         key={`cols-${numColumns}`}
         data={visibleItems}
@@ -342,14 +773,14 @@ export function ClosetScreen() {
         columnWrapperStyle={numColumns > 1 ? styles.row : undefined}
         contentContainerStyle={[
           styles.list,
-          { paddingTop: HEADER_PAD + STICKY_BAR_HEIGHT },
+          { paddingTop: HEADER_PAD + stickyHeight },
         ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={colors.accent}
-            progressViewOffset={HEADER_PAD + STICKY_BAR_HEIGHT}
+            progressViewOffset={HEADER_PAD + stickyHeight}
           />
         }
         ListHeaderComponent={scrollHeader}
@@ -367,12 +798,22 @@ export function ClosetScreen() {
         }
         keyboardShouldPersistTaps="handled"
       />
+    );
+
+  function onStickyLayout(e: LayoutChangeEvent) {
+    const h = e.nativeEvent.layout.height;
+    // We measure the inner block (excludes the top header pad applied as
+    // paddingTop). Store the inner height so content can sit just below it.
+    if (Math.abs(h - stickyHeight) > 2) setStickyHeight(h);
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      <ScreenBackground />
+      {listBody}
 
       <View
-        style={[
-          styles.stickyBar,
-          { paddingTop: HEADER_PAD - 4 },
-        ]}
+        style={[styles.stickyBar, { paddingTop: HEADER_PAD - 4 }]}
         pointerEvents="box-none"
       >
         <BlurView
@@ -397,7 +838,7 @@ export function ClosetScreen() {
           }}
         />
 
-        <View style={styles.stickyInner}>
+        <View style={styles.stickyInner} onLayout={onStickyLayout}>
           <GlassInputContainer style={styles.search}>
             <View style={styles.searchInner}>
               <Ionicons
@@ -409,7 +850,7 @@ export function ClosetScreen() {
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search category, color, style…"
+                placeholder="Search category, color, brand, notes…"
                 placeholderTextColor={colors.placeholder}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -443,10 +884,7 @@ export function ClosetScreen() {
             ))}
             {filterActive ? (
               <Pressable
-                onPress={() => {
-                  setFilters(new Set());
-                  setQuery('');
-                }}
+                onPress={clearAll}
                 style={({ pressed }) => [
                   chipStyles.chip,
                   { opacity: pressed ? 0.6 : 1 },
@@ -463,6 +901,60 @@ export function ClosetScreen() {
               </Pressable>
             ) : null}
           </View>
+
+          {availableCategories.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.scrollChipsRow}
+              keyboardShouldPersistTaps="handled"
+            >
+              {availableCategories.map((cat) => (
+                <FilterChip
+                  key={cat}
+                  label={cat}
+                  active={categoryFilters.has(cat)}
+                  onPress={() => toggleSetValue(setCategoryFilters, cat)}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
+
+          {availableColors.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.scrollChipsRow}
+              keyboardShouldPersistTaps="handled"
+            >
+              {availableColors.map((c) => (
+                <ColorChip
+                  key={c}
+                  name={c}
+                  active={colorFilters.has(c)}
+                  onPress={() => toggleSetValue(setColorFilters, c)}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
+
+          {availableLocations.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.scrollChipsRow}
+              keyboardShouldPersistTaps="handled"
+            >
+              {availableLocations.map((loc) => (
+                <FilterChip
+                  key={loc}
+                  label={loc}
+                  active={locationFilters.has(loc)}
+                  onPress={() => toggleSetValue(setLocationFilters, loc)}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
         </View>
       </View>
     </View>
@@ -481,6 +973,22 @@ const chipStyles = StyleSheet.create({
   chipText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  colorChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 8,
+    paddingRight: 14,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    overflow: 'hidden',
+  },
+  swatch: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginRight: 8,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });
 
@@ -514,6 +1022,7 @@ function makeStyles({
     titleRow: {
       flexDirection: 'row',
       alignItems: 'center',
+      gap: spacing.sm,
     },
     heading: {
       ...typography.title,
@@ -524,7 +1033,7 @@ function makeStyles({
       color: colors.textSecondary,
       marginTop: 4,
     },
-    densityBtn: {
+    headerBtn: {
       width: 40,
       height: 40,
       borderRadius: radii.md,
@@ -566,6 +1075,11 @@ function makeStyles({
       flexWrap: 'wrap',
       gap: 8,
     },
+    scrollChipsRow: {
+      gap: 8,
+      paddingTop: 8,
+      paddingRight: spacing.lg,
+    },
     row: { justifyContent: 'flex-start', gap: spacing.md },
     card: {
       flex: 1,
@@ -577,7 +1091,6 @@ function makeStyles({
       borderColor: surface.cardBorder,
     },
     cardList: {
-      // 1-col hero card: tall image on top, text below
       marginBottom: spacing.lg,
     },
     thumbWrap: { position: 'relative' },
@@ -621,6 +1134,50 @@ function makeStyles({
       fontWeight: '700',
       letterSpacing: 0.3,
     },
+    lentBadge: {
+      position: 'absolute',
+      top: 8,
+      left: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      backgroundColor: colors.accentSoft,
+      borderRadius: radii.pill,
+      maxWidth: '85%',
+    },
+    lentText: {
+      color: colors.accent,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.3,
+    },
+    neglectBadge: {
+      position: 'absolute',
+      bottom: 8,
+      right: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radii.pill,
+      maxWidth: '70%',
+    },
+    neglectMild: {
+      backgroundColor: surface.chipInactive,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surface.chipInactiveBorder,
+    },
+    neglectModerate: {
+      backgroundColor: colors.warning + '33',
+    },
+    neglectSevere: {
+      backgroundColor: colors.dangerSoft,
+    },
+    neglectText: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.3,
+    },
+    neglectTextMild: { color: colors.textSecondary },
+    neglectTextModerate: { color: colors.warning },
+    neglectTextSevere: { color: colors.danger },
     cardBody: { padding: spacing.md },
     cardTitle: {
       ...typography.bodyMedium,
@@ -654,6 +1211,50 @@ function makeStyles({
       textAlign: 'center',
       color: colors.textSecondary,
       fontSize: 15,
+    },
+    railSection: {
+      marginBottom: spacing.lg,
+    },
+    railSectionTitle: {
+      ...typography.headline,
+      color: colors.text,
+      paddingHorizontal: spacing.lg,
+      marginBottom: spacing.sm,
+    },
+    railSectionCount: {
+      ...typography.callout,
+      color: colors.textSecondary,
+      fontWeight: '400',
+    },
+    railContent: {
+      paddingHorizontal: spacing.lg,
+      gap: spacing.md,
+    },
+    railCard: {
+      width: RAIL_CARD_WIDTH,
+      backgroundColor: colors.surfaceSolid,
+      borderRadius: radii.lg,
+      overflow: 'hidden',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surface.cardBorder,
+    },
+    railThumb: {
+      width: '100%',
+      aspectRatio: 1,
+      backgroundColor: surface.thumbBg,
+    },
+    railBody: {
+      padding: spacing.sm,
+    },
+    railTitle: {
+      ...typography.bodyMedium,
+      color: colors.text,
+      fontSize: 14,
+    },
+    railSub: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 2,
     },
   });
 }

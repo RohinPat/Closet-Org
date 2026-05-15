@@ -2,32 +2,11 @@
 
 Realistic, solo-dev-sized work that fits the current stack (FastAPI + SQLite + Expo + CLIP). Add new ideas here as they come up. Retire items by moving them to the README's "Notes" section once shipped. The "Plausible but bigger" section at the end holds work that's doable but is more like a project than a feature.
 
-## Top of the list
-
-### Front + back photo per item
-Right now an item is one `image_path`. Most clothes look very different front vs back — a graphic tee, a jacket with a print, jeans with rear-pocket detail. Worth doing before the dataset gets big enough to make the migration painful.
-
-- Schema: replace `image_path` with `image_paths: list[str]` (or add `image_path_back`, `image_path_extra`). SQLite stores as JSON column.
-- Upload flow: the upload screen accepts multiple images, lets the user tag which is "front" and which is "back".
-- Classifier: run on each photo, merge results (color extraction in particular benefits — front of a tee may be solid green but the back has a logo).
-- Detail screen: small image carousel.
-
-### Closet density, search & sort
-Clean/Wash/Favorites filter chips already exist. The rest of the closet surface still needs work.
-
-- **Density toggle** — small (3 or 4 col, thumbnail only) / medium (current 2-col) / large (1-col with detail). Persist user's choice.
-- **Category chip row + color swatch row** in the sticky filter bar. Filters AND together.
-- **Search** — free-text over category, subcategory, color names, notes, brand.
-- **Sort options** — recently added, most worn, neglected (longest unworn), best CPW.
-- **Category rails view** — alternative layout: horizontal-scroll rails grouped by Top / Bottom / Footwear / Accessory. Toggle between rails view and grid view in the header.
-
 ## Capture & data
 
 - **Care label OCR** — point the camera at the tag, scrape wash temperature / dry / iron icons and store them. Show "machine wash cold" on the detail screen. (Bigger piece — see "Plausible but bigger".)
-- **Surface `physical_location` in the UI** — column already exists (defaults to 'closet'); just needs an input on the detail screen and a filter chip ("front rack, left").
 - **Batch / shelf import** — point the camera at a hung rack or shelf, app detects each garment and creates draft entries. User reviews and saves. Big speedup for the initial closet build.
 - **CSV / spreadsheet import** — for users who already track clothes elsewhere.
-- **Lending tracker** — when you lend an item to a friend, mark it "lent" with a return date. Item temporarily disappears from outfit suggestions; reminder fires near the due date.
 
 ### Bulk items (socks, underwear, basics)
 Not every garment needs its own photo + record. Plain socks, underwear, undershirts, and basic tees are interchangeable for outfit purposes and just clutter the closet view. Add a "bulk" mode.
@@ -42,7 +21,6 @@ Not every garment needs its own photo + record. Plain socks, underwear, undershi
 
 ## Wishlist & shopping (single-user, no scraping)
 
-- **Wishlist** — items you want; mark "would accept as gift" / "saving up" / "watching for sale"; convert to a real item when it arrives. Same table as `clothing_items` with a `status` flag, no new infra.
 - **Duplicate warning at upload** — when adding an item, check against existing closet by category + dominant color and warn "you already have 4 black tees" before saving.
 - **Closet-fit pre-check** — upload a candidate photo; the recommender tells you which existing items it would pair with. Decide if it fills a real gap.
 - **Capsule gap analysis** — "your closet is missing a neutral blazer / waterproof outer / dressy black shoe". Drives intentional buying instead of accumulation.
@@ -101,7 +79,6 @@ The schema has `wear_again_count` and `max_wear_before_wash` already — most of
 
 - **Laundry queue** — explicit states: `clean → worn → in_hamper → washing → drying → clean`. Tap "wore today" advances the state.
 - **Outfit of the day** — optional one-tap selfie or just a list of items worn today; feeds the wear history.
-- **Neglected items alert** — flag items unworn for 30/60/90 days.
 - **Wear history per item** — a small calendar/heatmap on the detail screen.
 
 ## Recommendations
@@ -197,18 +174,22 @@ Make every chore feel rewarding: uploading, tagging, doing laundry, even cleanin
 
 - **Haptic feedback** on iOS for key taps (favorite, wear, delete).
 - **Swipe actions** on closet items (swipe to mark clean / favorite / delete).
-- **Pull-to-refresh** on every list (Closet and Outfits — Stats already has it).
 - **Empty states with illustrations** instead of plain text.
 - **Skeleton loaders** instead of `ActivityIndicator` for grid screens.
 - **Native iOS Liquid Glass** — once `expo-glass-effect` stabilizes, swap our `BlurView` shim for the real thing on iOS 26+.
 
 ## Backend / infrastructure
 
-- **Move the JWT secret** out of source (currently hardcoded in [auth.py](backend/auth.py)).
-- **CORS** — drop the wildcard (`allow_origins=["*"]` in [main.py](backend/main.py)); pin to the actual frontend origins.
 - **Image storage** — `uploads/` is fine for local but won't scale. Move to S3/R2 with signed URLs if this ever leaves the laptop.
 - **Background jobs** — classification currently blocks the upload request. Move to a queue (RQ or just `BackgroundTasks`) so the API returns immediately and the result streams in.
-- **Rate limit** auth endpoints.
+- **Refresh tokens** — current JWTs are long-lived single tokens (7 days). Issue short-lived access + long-lived refresh, with refresh-token rotation.
+- **Audit log** — persist auth events (login, password change, friend request) into a separate table so abuse patterns are reviewable after the fact.
+- **TOTP / MFA enrolment** — optional second factor for the auth endpoints, gated on a `mfa_secret` user column.
+- **Multi-instance rate limiter** — the in-process limiter in [security.py](backend/security.py) only covers one uvicorn worker. Swap to Redis when fanning out.
+
+> Security posture lives in [SECURITY.md](SECURITY.md). The previous
+> hardcoded-JWT-secret / wildcard-CORS / unrate-limited-auth items in this
+> section have all shipped — see that doc for the current controls.
 
 ---
 
@@ -221,5 +202,5 @@ These are doable but cost weeks each — model pipelines or whole new surfaces. 
 - **Voice add** — "add black H&M jeans size 32" via Whisper + a slot-filler that maps to fields. Faster than typing on mobile.
 - **Daily fit pic with auto-detect** — one tap to take a body photo; segment garment regions (Grounding DINO + SAM or a fashion-segmentation model), embed each with CLIP, nearest-neighbor against the user's closet embeddings, advance `wear_again_count` for matched items. Show matches for user confirmation before saving — corrections become labeled data. The capture half is easy; the auto-detect pipeline is the real work.
 - **Browser extension wishlist drafter** — small MV3 extension; one click on a retailer product page drafts a wishlist item with image + price. Separate codebase but small.
-- **Friends & feed (single-instance social)** — follow/unfollow, chronological feed of friends' fit pics, hearts/comments, outfit repeat detector ("you wore this exact combo to Sarah's last Friday"). Needs hardened auth, push, and moderation primitives — it's a project, not a feature. Build the single-user product first; revisit if traction shows up.
+- **Friends & feed (single-instance social)** — _v1 in progress (2026-05-14)._ Friendships (request/accept/reject), avatar + bio profiles, fit-pic posts with item tags, chronological feed, emoji reactions, threaded comments. Schema: `friendships`, `fit_posts`, `post_reactions`, `post_comments`. Still TODO: outfit-repeat detector ("you wore this exact combo to Sarah's last Friday"), push notifications, moderation primitives (report, block, rate-limited comments), full pagination cursor instead of `before` timestamp.
 - **Year-in-review / "On this day"** — December montage of the year's fit pics, top items by wear count, "most worn outfit"; quiet replay of a fit pic from one year ago. Easy once the fit-pic stream exists.

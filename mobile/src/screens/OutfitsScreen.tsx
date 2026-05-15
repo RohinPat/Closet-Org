@@ -4,6 +4,7 @@ import {
   Image,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -91,6 +92,7 @@ export function OutfitsScreen() {
   const [season, setSeason] = useState('');
   const [outfits, setOutfits] = useState<OutfitRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const generate = useCallback(async () => {
@@ -107,8 +109,14 @@ export function OutfitsScreen() {
       setOutfits([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [occasion, season]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    generate();
+  }, [generate]);
 
   useEffect(() => {
     generate();
@@ -120,6 +128,14 @@ export function OutfitsScreen() {
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            progressViewOffset={HEADER_PAD}
+          />
+        }
       >
         <Text style={styles.heading}>Outfits</Text>
         <Text style={styles.blurb}>

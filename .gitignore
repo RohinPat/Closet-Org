@@ -50,9 +50,11 @@ Thumbs.db
 # Logs
 *.log
 
-# Environment
+# Environment / secrets
 .env
 .env.local
+.env.production
+backend/.secret_key
 
 # Expo / React Native
 mobile/node_modules/

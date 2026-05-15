@@ -21,6 +21,12 @@ import { OutfitsScreen } from '../screens/OutfitsScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ItemDetailScreen } from '../screens/ItemDetailScreen';
+import { WishlistScreen } from '../screens/WishlistScreen';
+import { FeedScreen } from '../screens/FeedScreen';
+import { FitDetailScreen } from '../screens/FitDetailScreen';
+import { CreateFitScreen } from '../screens/CreateFitScreen';
+import { FriendsScreen } from '../screens/FriendsScreen';
+import { PublicProfileScreen } from '../screens/PublicProfileScreen';
 import { shadow, typography } from '../theme';
 
 export type AuthStackParamList = {
@@ -30,15 +36,21 @@ export type AuthStackParamList = {
 
 export type MainTabParamList = {
   ClosetTab: undefined;
+  FeedTab: undefined;
   UploadTab: undefined;
   OutfitsTab: undefined;
-  StatsTab: undefined;
   ProfileTab: undefined;
 };
 
 export type AppStackParamList = {
   MainTabs: undefined;
   ItemDetail: { item: ClothingItem };
+  Wishlist: undefined;
+  Stats: undefined;
+  Friends: undefined;
+  CreateFit: undefined;
+  FitDetail: { postId: number };
+  PublicProfile: { userId: number };
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -133,6 +145,20 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
+        name="FeedTab"
+        component={FeedScreen}
+        options={{
+          tabBarLabel: 'Feed',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'people' : 'people-outline'}
+              color={color}
+              size={size}
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
         name="UploadTab"
         component={UploadScreen}
         options={{
@@ -154,20 +180,6 @@ function MainTabs() {
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
               name={focused ? 'sparkles' : 'sparkles-outline'}
-              color={color}
-              size={size}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="StatsTab"
-        component={StatsScreen}
-        options={{
-          tabBarLabel: 'Stats',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'stats-chart' : 'stats-chart-outline'}
               color={color}
               size={size}
             />
@@ -213,6 +225,36 @@ function AppStackNavigator() {
         name="ItemDetail"
         component={ItemDetailScreen}
         options={{ title: 'Item', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="Wishlist"
+        component={WishlistScreen}
+        options={{ title: 'Wishlist', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="Stats"
+        component={StatsScreen}
+        options={{ title: 'Stats', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="Friends"
+        component={FriendsScreen}
+        options={{ title: 'Friends', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="CreateFit"
+        component={CreateFitScreen}
+        options={{ title: 'New fit', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="FitDetail"
+        component={FitDetailScreen}
+        options={{ title: 'Fit', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="PublicProfile"
+        component={PublicProfileScreen}
+        options={{ title: 'Profile', headerBackTitle: 'Back' }}
       />
     </AppStack.Navigator>
   );

@@ -1,25 +1,44 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  Image,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as api from '../api/client';
+import type { FitPost, PublicProfile } from '../api/types';
+import { API_ORIGIN, absoluteUrl } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
-import { API_ORIGIN } from '../config';
-import { GlassButton, GlassCard, ScreenBackground } from '../components/Glass';
+import {
+  GlassButton,
+  GlassCard,
+  GlassInputContainer,
+  ScreenBackground,
+} from '../components/Glass';
+import { Avatar } from '../components/Avatar';
+import type { AppStackParamList } from '../navigation/RootNavigator';
 import {
   radii,
+  shadow,
   spacing,
   typography,
   type ThemeColors,
   type ThemeSurface,
   type ThemePref,
 } from '../theme';
+
+type Nav = NativeStackNavigationProp<AppStackParamList>;
 
 type ThemeOption = {
   value: ThemePref;
@@ -33,17 +52,111 @@ const THEME_OPTIONS: ThemeOption[] = [
   { value: 'dark', label: 'Dark', icon: 'moon-outline' },
 ];
 
+function inferMime(uri: string): string {
+  const lower = uri.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'image/jpeg';
+}
+
 export function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const navigation = useNavigation<Nav>();
+  const { user, signOut, refreshUser } = useAuth();
   const { colors, surface, pref, mode, setPref } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
-  const initials = (user?.full_name || user?.username || '?')
-    .split(' ')
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [posts, setPosts] = useState<FitPost[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [draftBio, setDraftBio] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const loadProfileAndPosts = useCallback(async () => {
+    if (!user) return;
+    try {
+      const [p, postsRes] = await Promise.all([
+        api.fetchPublicProfile(user.id),
+        api.fetchUserPosts(user.id),
+      ]);
+      setProfile(p);
+      setPosts(postsRes.posts);
+    } catch {
+      // Best-effort — profile counts are decorative.
+    } finally {
+      setLoadingPosts(false);
+    }
+  }, [user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoadingPosts(true);
+      loadProfileAndPosts();
+    }, [loadProfileAndPosts])
+  );
+
+  function beginEdit() {
+    setDraftName(user?.full_name ?? '');
+    setDraftBio(user?.bio ?? '');
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (savingEdit) return;
+    setSavingEdit(true);
+    try {
+      await api.updateProfile({
+        full_name: draftName.trim() || null,
+        bio: draftBio.trim() || null,
+      });
+      await refreshUser();
+      setEditing(false);
+    } catch (e) {
+      Alert.alert('Could not save', e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function changeAvatar() {
+    if (uploadingAvatar) return;
+    const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!lib.granted) {
+      Alert.alert('Permission needed', 'Allow photo library access first.');
+      return;
+    }
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (picked.canceled || !picked.assets?.[0]) return;
+    const asset = picked.assets[0];
+    const mime = asset.mimeType || inferMime(asset.uri);
+    setUploadingAvatar(true);
+    try {
+      await api.uploadAvatar({
+        uri: asset.uri,
+        filename: asset.fileName || `avatar.${mime.includes('png') ? 'png' : 'jpg'}`,
+        mimeType: mime,
+      });
+      await refreshUser();
+      await loadProfileAndPosts();
+    } catch (e) {
+      Alert.alert(
+        'Could not update photo',
+        e instanceof Error ? e.message : 'Error'
+      );
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  if (!user) return null;
 
   return (
     <View style={{ flex: 1 }}>
@@ -51,22 +164,226 @@ export function ProfileScreen() {
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.heading}>Profile</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.heading}>Profile</Text>
+          <Pressable
+            onPress={() => navigation.navigate('Friends')}
+            style={({ pressed }) => [
+              styles.headerBtn,
+              { opacity: pressed ? 0.7 : 1 },
+            ]}
+            accessibilityLabel="Friends"
+          >
+            <Ionicons name="people-outline" size={20} color={colors.text} />
+          </Pressable>
+        </View>
 
         <GlassCard padded style={styles.card}>
           <View style={styles.identityRow}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials}</Text>
-            </View>
+            <Pressable
+              onPress={changeAvatar}
+              disabled={uploadingAvatar}
+              style={styles.avatarWrap}
+            >
+              <Avatar
+                url={user.avatar_url}
+                name={user.full_name}
+                username={user.username}
+                size={68}
+              />
+              <View style={styles.cameraBadge}>
+                {uploadingAvatar ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="camera" size={12} color="#fff" />
+                )}
+              </View>
+            </Pressable>
             <View style={{ flex: 1, marginLeft: spacing.md }}>
               <Text style={styles.name}>
-                {user?.full_name || user?.username}
+                {user.full_name || user.username}
               </Text>
-              <Text style={styles.meta}>{user?.email}</Text>
+              <Text style={styles.handle}>@{user.username}</Text>
+              <Text style={styles.meta}>{user.email}</Text>
             </View>
           </View>
+
+          {!editing && user.bio ? (
+            <Text style={styles.bio}>{user.bio}</Text>
+          ) : null}
+
+          {editing ? (
+            <View style={styles.editBlock}>
+              <Text style={styles.fieldLabel}>Name</Text>
+              <GlassInputContainer style={styles.fieldShell}>
+                <TextInput
+                  value={draftName}
+                  onChangeText={setDraftName}
+                  placeholder="Display name"
+                  placeholderTextColor={colors.placeholder}
+                  style={styles.fieldInput}
+                  maxLength={80}
+                />
+              </GlassInputContainer>
+
+              <Text style={styles.fieldLabel}>Bio</Text>
+              <GlassInputContainer
+                style={[styles.fieldShell, { minHeight: 90 }]}
+              >
+                <TextInput
+                  value={draftBio}
+                  onChangeText={setDraftBio}
+                  placeholder="A line about you"
+                  placeholderTextColor={colors.placeholder}
+                  style={[styles.fieldInput, { minHeight: 90 }]}
+                  multiline
+                  maxLength={400}
+                  textAlignVertical="top"
+                />
+              </GlassInputContainer>
+
+              <View style={styles.editActions}>
+                <GlassButton
+                  title="Save"
+                  onPress={saveEdit}
+                  loading={savingEdit}
+                  style={{ flex: 1 }}
+                />
+                <GlassButton
+                  title="Cancel"
+                  onPress={() => setEditing(false)}
+                  variant="ghost"
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </View>
+          ) : (
+            <View style={styles.statsRow}>
+              <Stat
+                value={profile?.post_count ?? 0}
+                label="Fits"
+                styles={styles}
+              />
+              <Stat
+                value={profile?.friend_count ?? 0}
+                label="Friends"
+                styles={styles}
+                onPress={() => navigation.navigate('Friends')}
+              />
+              <Stat
+                value={profile?.item_count ?? 0}
+                label="Items"
+                styles={styles}
+              />
+            </View>
+          )}
+
+          {!editing ? (
+            <View style={styles.profileActions}>
+              <GlassButton
+                title="Edit profile"
+                onPress={beginEdit}
+                variant="ghost"
+                style={{ flex: 1 }}
+              />
+              <GlassButton
+                title="Post fit"
+                onPress={() => navigation.navigate('CreateFit')}
+                style={{ flex: 1 }}
+              />
+            </View>
+          ) : null}
         </GlassCard>
+
+        <Text style={styles.sectionLabel}>Your fits</Text>
+        {loadingPosts ? (
+          <View style={{ paddingVertical: spacing.lg }}>
+            <ActivityIndicator color={colors.accent} />
+          </View>
+        ) : posts.length === 0 ? (
+          <Text style={styles.emptyHint}>
+            You haven't posted yet. Tap Post fit to share today's look.
+          </Text>
+        ) : (
+          <View style={styles.grid}>
+            {posts.map((p) => {
+              const uri = absoluteUrl(p.image_path);
+              return (
+                <Pressable
+                  key={p.id}
+                  onPress={() =>
+                    navigation.navigate('FitDetail', { postId: p.id })
+                  }
+                  style={({ pressed }) => [
+                    styles.gridItem,
+                    { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                  ]}
+                >
+                  {uri ? (
+                    <Image source={{ uri }} style={styles.gridImage} />
+                  ) : (
+                    <View style={[styles.gridImage, styles.gridPlaceholder]} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        <Text style={styles.sectionLabel}>Closet</Text>
+        <Pressable
+          onPress={() => navigation.navigate('Wishlist')}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
+          <GlassCard padded style={styles.card}>
+            <View style={styles.rowHeader}>
+              <Ionicons
+                name="bookmark-outline"
+                size={18}
+                color={colors.accent}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.rowTitle}>Wishlist</Text>
+              <View style={{ flex: 1 }} />
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textMuted}
+              />
+            </View>
+            <Text style={styles.hint}>
+              Things you want — kept out of your closet, outfits, and stats
+              until you promote them.
+            </Text>
+          </GlassCard>
+        </Pressable>
+        <Pressable
+          onPress={() => navigation.navigate('Stats')}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
+          <GlassCard padded style={styles.card}>
+            <View style={styles.rowHeader}>
+              <Ionicons
+                name="stats-chart-outline"
+                size={18}
+                color={colors.accent}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.rowTitle}>Closet stats</Text>
+              <View style={{ flex: 1 }} />
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textMuted}
+              />
+            </View>
+            <Text style={styles.hint}>
+              Wear counts, category breakdown, most-loved items.
+            </Text>
+          </GlassCard>
+        </Pressable>
 
         <Text style={styles.sectionLabel}>Appearance</Text>
         <GlassCard padded style={styles.card}>
@@ -154,10 +471,42 @@ export function ProfileScreen() {
   );
 }
 
+function Stat({
+  value,
+  label,
+  styles,
+  onPress,
+}: {
+  value: number;
+  label: string;
+  styles: ReturnType<typeof makeStyles>;
+  onPress?: () => void;
+}) {
+  const inner = (
+    <View style={styles.stat}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        hitSlop={6}
+        style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, flex: 1 })}
+      >
+        {inner}
+      </Pressable>
+    );
+  }
+  return <View style={{ flex: 1 }}>{inner}</View>;
+}
+
 const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
 
 function makeStyles({
   colors,
+  surface,
 }: {
   colors: ThemeColors;
   surface: ThemeSurface;
@@ -168,10 +517,26 @@ function makeStyles({
       paddingTop: HEADER_PAD,
       paddingBottom: 120,
     },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginBottom: spacing.lg,
+    },
     heading: {
       ...typography.title,
       color: colors.text,
-      marginBottom: spacing.lg,
+      flex: 1,
+    },
+    headerBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: radii.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: surface.chipInactive,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surface.chipInactiveBorder,
     },
     card: {
       padding: spacing.lg,
@@ -181,28 +546,91 @@ function makeStyles({
       flexDirection: 'row',
       alignItems: 'center',
     },
-    avatar: {
-      width: 56,
-      height: 56,
-      borderRadius: radii.pill,
-      backgroundColor: colors.accentSoft,
+    avatarWrap: {
+      position: 'relative',
+      ...shadow.card,
+    },
+    cameraBadge: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    avatarText: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: colors.accent,
-      letterSpacing: 0.5,
+      borderWidth: 2,
+      borderColor: colors.bg,
     },
     name: {
       ...typography.headline,
       color: colors.text,
     },
-    meta: {
+    handle: {
       fontSize: 14,
       color: colors.textSecondary,
+      marginTop: 2,
+    },
+    meta: {
+      fontSize: 13,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+    bio: {
+      ...typography.body,
+      color: colors.text,
+      marginTop: spacing.md,
+      lineHeight: 22,
+    },
+    statsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      marginTop: spacing.lg,
+      paddingVertical: spacing.md,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairline,
+    },
+    stat: {
+      alignItems: 'center',
+    },
+    statValue: {
+      ...typography.headline,
+      color: colors.text,
+    },
+    statLabel: {
+      ...typography.micro,
+      color: colors.textSecondary,
       marginTop: 4,
+    },
+    profileActions: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    editBlock: {
+      marginTop: spacing.md,
+    },
+    fieldLabel: {
+      ...typography.micro,
+      color: colors.textSecondary,
+      marginBottom: 6,
+      marginLeft: 4,
+    },
+    fieldShell: {
+      marginBottom: spacing.md,
+      minHeight: 48,
+    },
+    fieldInput: {
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      color: colors.text,
+      fontSize: 15,
+    },
+    editActions: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: spacing.sm,
     },
     sectionLabel: {
       ...typography.micro,
@@ -210,6 +638,32 @@ function makeStyles({
       marginTop: spacing.lg,
       marginBottom: spacing.sm,
       marginLeft: 4,
+    },
+    emptyHint: {
+      color: colors.textMuted,
+      textAlign: 'center',
+      paddingVertical: spacing.xl,
+    },
+    grid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: spacing.md,
+    },
+    gridItem: {
+      width: '32%',
+      aspectRatio: 4 / 5,
+      borderRadius: radii.sm,
+      overflow: 'hidden',
+    },
+    gridImage: {
+      width: '100%',
+      height: '100%',
+      backgroundColor: surface.thumbBg,
+    },
+    gridPlaceholder: {
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     rowHeader: {
       flexDirection: 'row',

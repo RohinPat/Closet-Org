@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Image,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as api from '../api/client';
+import type { UploadPhoto } from '../api/client';
 import { GlassButton, GlassCard, ScreenBackground } from '../components/Glass';
 import { API_ORIGIN } from '../config';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
@@ -36,6 +38,8 @@ type ResultState = {
   previewUri: string;
 };
 
+const MAX_PHOTOS = 4;
+
 function inferMime(uri: string): string {
   const lower = uri.toLowerCase();
   if (lower.endsWith('.png')) return 'image/png';
@@ -51,67 +55,103 @@ function inferFilename(uri: string, mime: string): string {
   return `upload.${ext}`;
 }
 
+function assetToPhoto(asset: ImagePicker.ImagePickerAsset): UploadPhoto {
+  const mime = asset.mimeType || inferMime(asset.uri);
+  return {
+    uri: asset.uri,
+    filename: inferFilename(asset.uri, mime),
+    mimeType: mime,
+  };
+}
+
 export function UploadScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const [photos, setPhotos] = useState<UploadPhoto[]>([]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ResultState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function pickAndUpload(useCamera: boolean) {
+  function reset() {
+    setPhotos([]);
+    setResult(null);
+    setError(null);
+  }
+
+  async function pickFromLibrary() {
     setError(null);
     setResult(null);
-
-    if (useCamera) {
-      const cam = await ImagePicker.requestCameraPermissionsAsync();
-      if (!cam.granted) {
-        setError('Camera permission is required.');
-        return;
-      }
-    } else {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!lib.granted) {
-        setError('Photo library permission is required.');
-        return;
-      }
+    const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!lib.granted) {
+      setError('Photo library permission is required.');
+      return;
     }
+    const remaining = MAX_PHOTOS - photos.length;
+    if (remaining <= 0) return;
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
+    });
+    if (picked.canceled || !picked.assets?.length) return;
+    setPhotos((prev) => [...prev, ...picked.assets.map(assetToPhoto)].slice(0, MAX_PHOTOS));
+  }
 
-    const picked = useCamera
-      ? await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          quality: 0.85,
-        })
-      : await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          quality: 0.85,
-        });
-
+  async function takePhoto() {
+    setError(null);
+    setResult(null);
+    const cam = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cam.granted) {
+      setError('Camera permission is required.');
+      return;
+    }
+    if (photos.length >= MAX_PHOTOS) return;
+    const picked = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+    });
     if (picked.canceled || !picked.assets?.[0]) return;
+    setPhotos((prev) => [...prev, assetToPhoto(picked.assets[0])].slice(0, MAX_PHOTOS));
+  }
 
-    const asset = picked.assets[0];
-    const uri = asset.uri;
-    const mime = asset.mimeType || inferMime(uri);
-    const filename = inferFilename(uri, mime);
+  function removePhoto(idx: number) {
+    setPhotos((prev) => prev.filter((_, i) => i !== idx));
+  }
 
+  function makeFront(idx: number) {
+    if (idx === 0) return;
+    setPhotos((prev) => {
+      const next = [...prev];
+      const [picked] = next.splice(idx, 1);
+      next.unshift(picked);
+      return next;
+    });
+  }
+
+  async function upload() {
+    if (photos.length === 0) return;
     setBusy(true);
+    setError(null);
     try {
-      const data = await api.uploadClothing(uri, filename, mime);
-      // Prefer the server's background-removed thumbnail so the preview
-      // matches what the closet grid will show; fall back to the local pick.
+      const data = await api.uploadClothing(photos);
       const previewUri = data.thumbnail_url
         ? `${API_ORIGIN}${data.thumbnail_url}`
-        : uri;
+        : photos[0].uri;
       setResult({
         itemId: data.item_id,
         classification: data.classification as Classification,
         previewUri,
       });
+      setPhotos([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
       setBusy(false);
     }
   }
+
+  const canAdd = photos.length < MAX_PHOTOS;
 
   return (
     <View style={{ flex: 1 }}>
@@ -123,28 +163,67 @@ export function UploadScreen() {
       >
         <Text style={styles.heading}>Add an item</Text>
         <Text style={styles.blurb}>
-          Snap or pick a photo of a clothing item. We'll classify it and add it
-          to your closet.
+          Snap a photo of the front, then add a back shot for items with prints,
+          logos, or rear details. We'll classify the front and merge the colors.
         </Text>
+
+        {photos.length > 0 ? (
+          <View style={styles.photoRow}>
+            {photos.map((p, idx) => (
+              <View key={`${p.uri}-${idx}`} style={styles.photoTile}>
+                <Image source={{ uri: p.uri }} style={styles.photoImage} />
+                {idx === 0 ? (
+                  <View style={styles.frontBadge}>
+                    <Text style={styles.frontBadgeText}>Front</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => makeFront(idx)}
+                    style={styles.makeFrontBtn}
+                  >
+                    <Text style={styles.makeFrontText}>Make front</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={() => removePhoto(idx)}
+                  style={styles.removeBtn}
+                  hitSlop={8}
+                >
+                  <Ionicons name="close" size={14} color={colors.text} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <GlassCard padded={false} style={styles.actionCard}>
           <View style={styles.actionRow}>
             <GlassButton
-              title="Pick from library"
-              onPress={() => pickAndUpload(false)}
-              loading={busy}
+              title={canAdd ? 'Pick from library' : 'Limit reached'}
+              onPress={pickFromLibrary}
+              disabled={!canAdd || busy}
               style={styles.flexBtn}
             />
           </View>
           <View style={[styles.actionRow, { paddingTop: 0 }]}>
             <GlassButton
               title="Take photo"
-              onPress={() => pickAndUpload(true)}
+              onPress={takePhoto}
               variant="ghost"
-              disabled={busy}
+              disabled={!canAdd || busy}
               style={styles.flexBtn}
             />
           </View>
+          {photos.length > 0 ? (
+            <View style={[styles.actionRow, { paddingTop: 0 }]}>
+              <GlassButton
+                title={`Add ${photos.length} photo${photos.length === 1 ? '' : 's'} to closet`}
+                onPress={upload}
+                loading={busy}
+                style={styles.flexBtn}
+              />
+            </View>
+          ) : null}
         </GlassCard>
 
         {error ? (
@@ -199,6 +278,15 @@ export function UploadScreen() {
                 </View>
               ))}
             </View>
+
+            <View style={[styles.actionRow, { paddingTop: spacing.md, paddingHorizontal: 0 }]}>
+              <GlassButton
+                title="Add another item"
+                onPress={reset}
+                variant="ghost"
+                style={styles.flexBtn}
+              />
+            </View>
           </GlassCard>
         ) : null}
       </ScrollView>
@@ -241,6 +329,63 @@ function makeStyles({
       paddingVertical: 4,
     },
     flexBtn: { flex: 1 },
+    photoRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.md,
+      marginBottom: spacing.lg,
+    },
+    photoTile: {
+      width: 92,
+      height: 92,
+      borderRadius: radii.md,
+      backgroundColor: surface.thumbBg,
+      overflow: 'hidden',
+      ...shadow.card,
+    },
+    photoImage: {
+      width: '100%',
+      height: '100%',
+    },
+    frontBadge: {
+      position: 'absolute',
+      bottom: 6,
+      left: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radii.pill,
+      backgroundColor: colors.accent,
+    },
+    frontBadgeText: {
+      ...typography.micro,
+      color: '#fff',
+      fontWeight: '700',
+    },
+    makeFrontBtn: {
+      position: 'absolute',
+      bottom: 6,
+      left: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radii.pill,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    makeFrontText: {
+      ...typography.micro,
+      color: '#fff',
+      fontWeight: '600',
+    },
+    removeBtn: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     errorBox: {
       flexDirection: 'row',
       alignItems: 'center',

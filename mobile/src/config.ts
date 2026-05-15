@@ -28,3 +28,14 @@ export function itemThumbnailUrl(item: {
 }): string {
   return itemImageUrl(item.thumbnail_path || item.image_path);
 }
+
+/**
+ * Convert an absolute URL or server-relative path (e.g. "/uploads/foo.jpg")
+ * to a fetchable URL. Pass through full URLs untouched.
+ */
+export function absoluteUrl(path: string | null | undefined): string {
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  if (path.startsWith('/')) return `${API_ORIGIN}${path}`;
+  return itemImageUrl(path);
+}

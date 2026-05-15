@@ -7,6 +7,41 @@ let selectedFile = null;
 let currentUser = null;
 let authToken = null;
 
+// ---- XSS defence ------------------------------------------------------------
+// Every place we drop string data into innerHTML must wrap it in escapeHtml.
+// We've also got a separate `safeUrl` for src= / href= so a stored
+// `javascript:` URL can't surface from a malicious item record. The CSP
+// already blocks inline-script execution, but escaping keeps even visual
+// injection (broken layouts via injected <style>) off the table.
+
+const _ESC_MAP = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+    '`': '&#96;',
+    '/': '&#x2F;',
+};
+
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).replace(/[&<>"'`/]/g, (ch) => _ESC_MAP[ch]);
+}
+
+function safeUrl(value) {
+    // Allow only http(s), relative paths, and our own /uploads/. Anything
+    // else (javascript:, data:, vbscript:) collapses to an empty string.
+    if (value === null || value === undefined) return '';
+    const s = String(value).trim();
+    if (s === '') return '';
+    if (/^https?:\/\//i.test(s)) return escapeHtml(s);
+    if (s.startsWith('/') || s.startsWith('./') || s.startsWith('uploads/')) {
+        return escapeHtml(s);
+    }
+    return '';
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     checkAuthentication();
@@ -215,8 +250,10 @@ function initProfile() {
 }
 
 function loadProfileData() {
-    document.getElementById('profile-username').textContent = currentUser.username;
-    document.getElementById('profile-email').textContent = currentUser.email;
+    // .textContent and .value sinks already neutralise HTML — no escapeHtml
+    // needed here, but keep that in mind when porting any of this to innerHTML.
+    document.getElementById('profile-username').textContent = currentUser.username || '';
+    document.getElementById('profile-email').textContent = currentUser.email || '';
     document.getElementById('profile-full-name').value = currentUser.full_name || '';
     document.getElementById('profile-bio').value = currentUser.bio || '';
     
@@ -394,26 +431,27 @@ function showClassificationResult(data) {
     const resultDiv = document.getElementById('classification-result');
     const detailsDiv = resultDiv.querySelector('.result-details');
     
+    const c = data.classification || {};
     detailsDiv.innerHTML = `
         <div class="result-row">
             <span class="result-label">Category:</span>
-            <span class="result-value">${data.classification.category}</span>
+            <span class="result-value">${escapeHtml(c.category)}</span>
         </div>
         <div class="result-row">
             <span class="result-label">Subcategory:</span>
-            <span class="result-value">${data.classification.subcategory}</span>
+            <span class="result-value">${escapeHtml(c.subcategory)}</span>
         </div>
         <div class="result-row">
             <span class="result-label">Style:</span>
-            <span class="result-value">${data.classification.style}</span>
+            <span class="result-value">${escapeHtml(c.style)}</span>
         </div>
         <div class="result-row">
             <span class="result-label">Season:</span>
-            <span class="result-value">${data.classification.season}</span>
+            <span class="result-value">${escapeHtml(c.season)}</span>
         </div>
         <div class="result-row">
             <span class="result-label">Colors:</span>
-            <span class="result-value">${data.classification.colors.join(', ')}</span>
+            <span class="result-value">${escapeHtml((c.colors || []).join(', '))}</span>
         </div>
     `;
     
@@ -522,8 +560,8 @@ function sortItems(items, sortBy) {
 }
 
 function createClothingCard(item) {
-    const colorSwatches = item.colors.map(color => 
-        `<div class="color-swatch" style="background-color: ${color}"></div>`
+    const colorSwatches = (item.colors || []).map(color =>
+        `<div class="color-swatch" style="background-color: ${escapeHtml(color)}"></div>`
     ).join('');
     
     // Status badge with multi-wear tracking
@@ -578,37 +616,38 @@ function createClothingCard(item) {
         ? '<span class="favorite-star favorite-active" title="Favorite">⭐</span>'
         : '<span class="favorite-star" title="Add to favorites">☆</span>';
     
+    const itemId = Number(item.id) || 0;
     return `
-        <div class="clothing-card" data-item-id="${item.id}">
+        <div class="clothing-card" data-item-id="${itemId}">
             <div class="card-image-container">
-                <img src="${item.image_path}" alt="${item.subcategory}" class="clothing-card-image">
+                <img src="${safeUrl(item.image_path)}" alt="${escapeHtml(item.subcategory)}" class="clothing-card-image">
                 ${favoriteIcon}
                 ${rotationBadge}
             </div>
             <div class="clothing-card-content">
-                <h3 class="clothing-card-title">${item.subcategory}</h3>
-                ${item.brand ? `<p class="item-brand">${item.brand}</p>` : ''}
+                <h3 class="clothing-card-title">${escapeHtml(item.subcategory)}</h3>
+                ${item.brand ? `<p class="item-brand">${escapeHtml(item.brand)}</p>` : ''}
                 <div class="clothing-card-meta">
-                    <span class="badge badge-category">${item.category}</span>
-                    <span class="badge badge-season">${item.season}</span>
-                    <span class="badge badge-style">${item.style}</span>
+                    <span class="badge badge-category">${escapeHtml(item.category)}</span>
+                    <span class="badge badge-season">${escapeHtml(item.season)}</span>
+                    <span class="badge badge-style">${escapeHtml(item.style)}</span>
                 </div>
                 <div class="color-swatches">${colorSwatches}</div>
-                
+
                 <div class="freshness-bar">
-                    <div class="freshness-fill ${freshnessClass}" style="width: ${freshnessPercent}%"></div>
+                    <div class="freshness-fill ${escapeHtml(freshnessClass)}" style="width: ${freshnessPercent}%"></div>
                     <span class="freshness-label">Freshness: ${freshnessPercent}%</span>
                 </div>
-                
+
                 <div class="clothing-card-status">
-                    <span class="status-badge ${statusClass}">
-                        ${statusBadge}
+                    <span class="status-badge ${escapeHtml(statusClass)}">
+                        ${escapeHtml(statusBadge)}
                     </span>
                     <span class="status-badge">
-                        Worn ${item.times_worn}x
+                        Worn ${Number(item.times_worn) || 0}x
                     </span>
                 </div>
-                
+
                 <div class="card-metrics">
                     ${cpwBadge}
                     ${daysSince}
@@ -631,8 +670,8 @@ async function showItemModal(itemId) {
         const modal = document.getElementById('item-modal');
         const modalBody = document.getElementById('modal-body');
         
-        const colorSwatches = item.colors.map(color => 
-            `<div class="color-swatch" style="background-color: ${color}"></div>`
+        const colorSwatches = (item.colors || []).map(color =>
+            `<div class="color-swatch" style="background-color: ${escapeHtml(color)}"></div>`
         ).join('');
         
         // Calculate metrics
@@ -644,32 +683,32 @@ async function showItemModal(itemId) {
         const daysSince = item.days_since_worn !== null ? `${item.days_since_worn} days ago` : 'Never worn';
         const daysOwned = item.days_owned !== null ? `${item.days_owned} days` : 'N/A';
         
-        // Purchase info
-        const purchaseInfo = item.purchase_price 
+        // Purchase info — purchase_location is user-controlled, must escape.
+        const purchaseInfo = item.purchase_price
             ? `
             <div class="modal-section">
                 <h3>💰 Value Tracking</h3>
                 <div class="metric-grid">
                     <div class="metric">
                         <span class="metric-label">Purchase Price</span>
-                        <span class="metric-value">$${item.purchase_price}</span>
+                        <span class="metric-value">$${escapeHtml(item.purchase_price)}</span>
                     </div>
                     <div class="metric">
                         <span class="metric-label">Cost Per Wear</span>
-                        <span class="metric-value ${item.times_worn > 10 ? 'value-good' : 'value-improving'}">${cpw}</span>
+                        <span class="metric-value ${item.times_worn > 10 ? 'value-good' : 'value-improving'}">${escapeHtml(cpw)}</span>
                     </div>
                     <div class="metric">
                         <span class="metric-label">Times Worn</span>
-                        <span class="metric-value">${item.times_worn}x</span>
+                        <span class="metric-value">${Number(item.times_worn) || 0}x</span>
                     </div>
                     ${item.purchase_date ? `
                     <div class="metric">
                         <span class="metric-label">Owned For</span>
-                        <span class="metric-value">${daysOwned}</span>
+                        <span class="metric-value">${escapeHtml(daysOwned)}</span>
                     </div>
                     ` : ''}
                 </div>
-                ${item.purchase_location ? `<p class="meta-info">📍 ${item.purchase_location}</p>` : ''}
+                ${item.purchase_location ? `<p class="meta-info">📍 ${escapeHtml(item.purchase_location)}</p>` : ''}
             </div>
             ` : '';
         
@@ -689,80 +728,81 @@ async function showItemModal(itemId) {
             </div>
         ` : '';
         
+        const safeItemId = Number(itemId) || 0;
         modalBody.innerHTML = `
-            <img src="${item.image_path}" alt="${item.subcategory}" class="modal-image">
-            
+            <img src="${safeUrl(item.image_path)}" alt="${escapeHtml(item.subcategory)}" class="modal-image">
+
             <div class="modal-header-section">
-                <h2>${item.subcategory}</h2>
-                <button class="btn-favorite ${item.is_favorite ? 'active' : ''}" onclick="toggleFavorite(${itemId})">
+                <h2>${escapeHtml(item.subcategory)}</h2>
+                <button class="btn-favorite ${item.is_favorite ? 'active' : ''}" onclick="toggleFavorite(${safeItemId})">
                     ${item.is_favorite ? '⭐ Favorite' : '☆ Add to Favorites'}
                 </button>
             </div>
-            
-            ${item.brand ? `<p class="item-brand-modal">${item.brand}</p>` : ''}
-            
+
+            ${item.brand ? `<p class="item-brand-modal">${escapeHtml(item.brand)}</p>` : ''}
+
             <div class="clothing-card-meta">
-                <span class="badge badge-category">${item.category}</span>
-                <span class="badge badge-season">${item.season}</span>
-                <span class="badge badge-style">${item.style}</span>
-                ${item.size ? `<span class="badge badge-size">Size: ${item.size}</span>` : ''}
+                <span class="badge badge-category">${escapeHtml(item.category)}</span>
+                <span class="badge badge-season">${escapeHtml(item.season)}</span>
+                <span class="badge badge-style">${escapeHtml(item.style)}</span>
+                ${item.size ? `<span class="badge badge-size">Size: ${escapeHtml(item.size)}</span>` : ''}
             </div>
-            
+
             <div class="color-swatches">${colorSwatches}</div>
-            
+
             <div class="modal-section">
                 <h3>📊 Current Status</h3>
                 <div class="status-grid">
                     <div class="status-item">
                         <span class="status-icon">${item.washed && wearCount === 0 ? '✓' : wearCount > 0 ? '🔄' : '⚠'}</span>
                         <span class="status-text">
-                            ${item.washed && wearCount === 0 ? 'Clean & Ready' : 
-                              wearCount > 0 ? `Worn ${wearCount}x, can wear again` : 
+                            ${item.washed && wearCount === 0 ? 'Clean & Ready' :
+                              wearCount > 0 ? `Worn ${Number(wearCount) || 0}x, can wear again` :
                               'Needs Washing'}
                         </span>
                     </div>
                     <div class="status-item">
                         <span class="status-icon">📅</span>
-                        <span class="status-text">Last worn: ${daysSince}</span>
+                        <span class="status-text">Last worn: ${escapeHtml(daysSince)}</span>
                     </div>
                     <div class="status-item">
                         <span class="status-icon">📍</span>
-                        <span class="status-text">${item.physical_location || 'Closet'}</span>
+                        <span class="status-text">${escapeHtml(item.physical_location || 'Closet')}</span>
                     </div>
                 </div>
             </div>
-            
+
             ${wearAgainSection}
-            
+
             <div class="modal-section">
                 <h3>💚 Freshness & Condition</h3>
                 <div class="score-bars">
                     <div class="score-bar-container">
                         <label>Freshness Score</label>
                         <div class="score-bar">
-                            <div class="score-fill ${freshness >= 80 ? 'fresh-high' : freshness >= 60 ? 'fresh-medium' : 'fresh-low'}" 
-                                 style="width: ${freshness}%"></div>
+                            <div class="score-fill ${freshness >= 80 ? 'fresh-high' : freshness >= 60 ? 'fresh-medium' : 'fresh-low'}"
+                                 style="width: ${Number(freshness) || 0}%"></div>
                         </div>
-                        <span class="score-value">${freshness}%</span>
+                        <span class="score-value">${Number(freshness) || 0}%</span>
                     </div>
                     <div class="score-bar-container">
                         <label>Condition Score</label>
                         <div class="score-bar">
-                            <div class="score-fill ${condition >= 80 ? 'fresh-high' : condition >= 60 ? 'fresh-medium' : 'fresh-low'}" 
-                                 style="width: ${condition}%"></div>
+                            <div class="score-fill ${condition >= 80 ? 'fresh-high' : condition >= 60 ? 'fresh-medium' : 'fresh-low'}"
+                                 style="width: ${Number(condition) || 0}%"></div>
                         </div>
-                        <span class="score-value">${condition}%</span>
+                        <span class="score-value">${Number(condition) || 0}%</span>
                     </div>
                 </div>
                 ${freshness < 60 ? '<p class="score-hint">😴 You might be getting tired of this item. Consider giving it a 2-week break!</p>' : ''}
             </div>
-            
+
             ${purchaseInfo}
-            
+
             ${item.notes ? `
             <div class="modal-section">
                 <h3>📝 Notes</h3>
-                <p class="item-notes">${item.notes}</p>
+                <p class="item-notes">${escapeHtml(item.notes)}</p>
             </div>
             ` : ''}
             
@@ -993,20 +1033,20 @@ async function generateOutfits() {
 }
 
 function createOutfitCard(outfit, index) {
-    const items = outfit.items.map(item => `
+    const items = (outfit.items || []).map(item => `
         <div class="outfit-item">
-            <img src="${item.image_path}" alt="${item.subcategory}">
+            <img src="${safeUrl(item.image_path)}" alt="${escapeHtml(item.subcategory)}">
             <div class="outfit-item-info">
-                <div class="outfit-item-category">${item.subcategory}</div>
+                <div class="outfit-item-category">${escapeHtml(item.subcategory)}</div>
             </div>
         </div>
     `).join('');
-    
+
     return `
         <div class="outfit-card">
             <div class="outfit-header">
-                <h3>Outfit ${index + 1}</h3>
-                <span class="outfit-score">Score: ${outfit.score}/100</span>
+                <h3>Outfit ${Number(index) + 1}</h3>
+                <span class="outfit-score">Score: ${Number(outfit.score) || 0}/100</span>
             </div>
             <div class="outfit-items">
                 ${items}
@@ -1048,8 +1088,8 @@ async function loadStats() {
             <div class="stat-card">
                 <h3>By Category</h3>
                 <ul class="stat-list">
-                    ${Object.entries(stats.by_category).map(([cat, count]) => 
-                        `<li><span>${cat}</span><span>${count}</span></li>`
+                    ${Object.entries(stats.by_category || {}).map(([cat, count]) =>
+                        `<li><span>${escapeHtml(cat)}</span><span>${Number(count) || 0}</span></li>`
                     ).join('')}
                 </ul>
             </div>
@@ -1143,29 +1183,30 @@ async function loadLaundry() {
 function createLaundryCard(item) {
     const addedDate = new Date(item.added_date);
     const daysInQueue = Math.floor((new Date() - addedDate) / (1000 * 60 * 60 * 24));
-    
+    const queueId = Number(item.id) || 0;
+
     return `
         <div class="laundry-card">
-            <img src="${item.image_path}" alt="${item.subcategory}">
+            <img src="${safeUrl(item.image_path)}" alt="${escapeHtml(item.subcategory)}">
             <div class="laundry-card-content">
-                <h4>${item.subcategory}</h4>
+                <h4>${escapeHtml(item.subcategory)}</h4>
                 <p class="laundry-meta">
                     ${item.priority === 'urgent' ? '⚡ Urgent' : ''}
                     ${daysInQueue > 0 ? `• ${daysInQueue}d in queue` : ''}
                 </p>
                 <div class="laundry-actions">
                     ${item.status === 'queued' ? `
-                        <button class="btn-small btn-primary" onclick="updateLaundryStatus(${item.id}, 'washing')">
+                        <button class="btn-small btn-primary" onclick="updateLaundryStatus(${queueId}, 'washing')">
                             Start Washing
                         </button>
                     ` : ''}
                     ${item.status === 'washing' ? `
-                        <button class="btn-small btn-primary" onclick="updateLaundryStatus(${item.id}, 'drying')">
+                        <button class="btn-small btn-primary" onclick="updateLaundryStatus(${queueId}, 'drying')">
                             Move to Drying
                         </button>
                     ` : ''}
                     ${item.status === 'drying' ? `
-                        <button class="btn-small btn-success" onclick="updateLaundryStatus(${item.id}, 'ready')">
+                        <button class="btn-small btn-success" onclick="updateLaundryStatus(${queueId}, 'ready')">
                             ✓ Done
                         </button>
                     ` : ''}
@@ -1221,11 +1262,11 @@ async function loadInsights() {
         container.innerHTML = `
             <div class="insights-header">
                 <p class="insights-intro">
-                    ⚠️ Found <strong>${data.items.length} items</strong> that haven't been worn in ${days}+ days.
+                    ⚠️ Found <strong>${Number(data.items.length) || 0} items</strong> that haven't been worn in ${Number(days) || 0}+ days.
                     Consider styling them in new ways or letting them go!
                 </p>
             </div>
-            
+
             <div class="insights-grid">
                 ${data.items.map(item => createInsightCard(item)).join('')}
             </div>
@@ -1238,27 +1279,28 @@ async function loadInsights() {
 
 function createInsightCard(item) {
     const daysSince = item.days_since_worn || 'Never worn';
-    const cpw = item.cost_per_wear ? `$${item.cost_per_wear}` : item.purchase_price ? `$${item.purchase_price}` : 'N/A';
-    
+    const cpw = item.cost_per_wear ? `$${escapeHtml(item.cost_per_wear)}` : item.purchase_price ? `$${escapeHtml(item.purchase_price)}` : 'N/A';
+    const itemId = Number(item.id) || 0;
+
     return `
-        <div class="insight-card" onclick="showItemModal(${item.id})">
-            <img src="${item.image_path}" alt="${item.subcategory}">
+        <div class="insight-card" onclick="showItemModal(${itemId})">
+            <img src="${safeUrl(item.image_path)}" alt="${escapeHtml(item.subcategory)}">
             <div class="insight-overlay">
                 <div class="insight-badge">
-                    ${item.times_worn === 0 ? '🆕 Never Worn' : `😴 ${daysSince}d ago`}
+                    ${item.times_worn === 0 ? '🆕 Never Worn' : `😴 ${escapeHtml(daysSince)}d ago`}
                 </div>
             </div>
             <div class="insight-content">
-                <h4>${item.subcategory}</h4>
+                <h4>${escapeHtml(item.subcategory)}</h4>
                 <div class="insight-stats">
-                    <span>Worn: ${item.times_worn}x</span>
+                    <span>Worn: ${Number(item.times_worn) || 0}x</span>
                     <span>CPW: ${cpw}</span>
                 </div>
                 <div class="insight-actions">
-                    <button class="btn-small btn-primary" onclick="event.stopPropagation(); planOutfitWith(${item.id})">
+                    <button class="btn-small btn-primary" onclick="event.stopPropagation(); planOutfitWith(${itemId})">
                         📋 Plan Outfit
                     </button>
-                    <button class="btn-small btn-secondary" onclick="event.stopPropagation(); considerDonating(${item.id})">
+                    <button class="btn-small btn-secondary" onclick="event.stopPropagation(); considerDonating(${itemId})">
                         💝 Donate?
                     </button>
                 </div>
