@@ -1040,7 +1040,8 @@ def _try_claude_copy(
 
     try:
 
-        with urllib.request.urlopen(req, timeout=8) as res:
+        # URL is always https://api.anthropic.com/… (no user-controlled scheme).
+        with urllib.request.urlopen(req, timeout=8) as res:  # nosec B310
 
             raw = json.loads(res.read().decode("utf-8"))
 

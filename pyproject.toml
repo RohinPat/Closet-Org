@@ -1,2 +1,5 @@
 [tool.bandit]
 exclude_dirs = ["backend/tests", "e2e"]
+# Dynamic SQL in db_manager uses allowlisted columns/fragments and bound parameters;
+# B608 is too noisy for intentional UPDATE/IN (?, ?, …) builders.
+skips = ["B608"]

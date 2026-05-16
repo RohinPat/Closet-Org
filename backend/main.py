@@ -4894,13 +4894,11 @@ async def delete_comment_endpoint(
 
 if __name__ == "__main__":
 
-    # `0.0.0.0` only binds to all interfaces in dev (so LAN devices can hit it
+    # Default `127.0.0.1` avoids binding all interfaces. For Expo Go on a LAN
+    # device, run with `HOST=0.0.0.0`. Production should use a reverse proxy
+    # and typically bind loopback.
 
-    # via your laptop's IP for Expo Go). Production deployments should put a
-
-    # reverse proxy in front and bind to 127.0.0.1.
-
-    host = os.getenv("HOST", "127.0.0.1" if PRODUCTION else "0.0.0.0")
+    host = os.getenv("HOST", "127.0.0.1")
 
     port = int(os.getenv("PORT", "8000"))
 

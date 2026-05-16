@@ -139,7 +139,8 @@ class OpenMeteoWeatherProvider:
 
         req = urllib.request.Request(url, headers={"User-Agent": "Closet-Org/1.0"})
         try:
-            with urllib.request.urlopen(req, timeout=8) as response:
+            # URL is always Open-Meteo HTTPS; query args are urlencoded.
+            with urllib.request.urlopen(req, timeout=8) as response:  # nosec B310
                 payload = json.loads(response.read().decode("utf-8"))
         except Exception as exc:
             raise WeatherServiceError("Weather provider unavailable") from exc
