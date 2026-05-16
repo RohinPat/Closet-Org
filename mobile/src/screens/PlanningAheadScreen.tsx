@@ -26,7 +26,10 @@ import { itemThumbnailUrl } from '../config';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import type { AppStackParamList } from '../navigation/RootNavigator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import {
+  stackScrollContentPaddingTop,
+  STACK_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   shadow,
@@ -75,7 +78,7 @@ function formatDate(raw: string) {
 
 export function PlanningAheadScreen({}: Props) {
   const insets = useSafeAreaInsets();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [plans, setPlans] = useState<PlannedOutfit[]>([]);
@@ -213,7 +216,7 @@ export function PlanningAheadScreen({}: Props) {
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
+        contentContainerStyle={[styles.container, { paddingTop: scrollTop }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -222,7 +225,7 @@ export function PlanningAheadScreen({}: Props) {
               load();
             }}
             tintColor={colors.accent}
-            progressViewOffset={headerPad}
+            progressViewOffset={scrollTop}
           />
         }
       >
@@ -470,7 +473,7 @@ function makeStyles({
     },
     container: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: 140,
+      paddingBottom: STACK_SCREEN_SCROLL_BOTTOM,
     },
     heading: {
       ...typography.title,

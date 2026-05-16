@@ -1,3 +1,13 @@
+/**
+ * Theme tokens — consumer mobile shell.
+ *
+ * Palette (see DESIGN_REBIRTH.md):
+ * - `accent` / `accentSoft`: solid hit target and selected wash (chips, links).
+ * - `accentGradient`: primary CTAs (GlassButton) — three stops, indigo→violet→blue.
+ * - `surface.*` overlay tints: glass cards, inputs, thumbnails (not photo content).
+ * - Orbs: ambient only; keep garment photography as the hero.
+ */
+
 import { Appearance, Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
@@ -90,8 +100,9 @@ type SurfacePalette = {
 };
 
 const LIGHT_COLORS: Palette = {
-  bg: '#FAF7FF',
-  bgGradient: ['#FFE4F1', '#E8DEFF', '#D8EAFF'] as const,
+  bg: '#F8FAFC',
+  /* Slate-neutral stops; matches web shell — brand only via soft orbs below */
+  bgGradient: ['#F8FAFC', '#F6F7FB', '#F1F5F9'] as const,
   surface: 'rgba(255, 255, 255, 0.62)',
   surfaceSolid: '#FFFFFF',
   hairline: 'rgba(60, 60, 67, 0.12)',
@@ -111,15 +122,16 @@ const LIGHT_COLORS: Palette = {
   success: '#30D158',
   warning: '#FF9F0A',
 
-  orbPink: 'rgba(255, 138, 200, 0.55)',
-  orbPurple: 'rgba(155, 110, 255, 0.5)',
-  orbBlue: 'rgba(90, 170, 255, 0.5)',
-  orbPeach: 'rgba(255, 180, 130, 0.45)',
+  /* Indigo/violet family only — ambient light, same hue story as web primary */
+  orbPink: 'rgba(124, 77, 255, 0.12)',
+  orbPurple: 'rgba(99, 102, 241, 0.1)',
+  orbBlue: 'rgba(79, 70, 229, 0.09)',
+  orbPeach: 'rgba(139, 92, 246, 0.08)',
 };
 
 const DARK_COLORS: Palette = {
-  bg: '#0A0A14',
-  bgGradient: ['#1A0B2E', '#0A1B3D', '#082631'] as const,
+  bg: '#0F172A',
+  bgGradient: ['#0F172A', '#0D1424', '#0C1322'] as const,
   surface: 'rgba(255, 255, 255, 0.08)',
   surfaceSolid: '#1A1A24',
   hairline: 'rgba(255, 255, 255, 0.10)',
@@ -139,10 +151,10 @@ const DARK_COLORS: Palette = {
   success: '#34D399',
   warning: '#FBBF24',
 
-  orbPink: 'rgba(236, 72, 153, 0.55)',
-  orbPurple: 'rgba(167, 139, 250, 0.55)',
-  orbBlue: 'rgba(56, 189, 248, 0.5)',
-  orbPeach: 'rgba(251, 146, 60, 0.45)',
+  orbPink: 'rgba(167, 139, 250, 0.14)',
+  orbPurple: 'rgba(99, 102, 241, 0.12)',
+  orbBlue: 'rgba(129, 140, 248, 0.1)',
+  orbPeach: 'rgba(139, 92, 246, 0.1)',
 };
 
 const LIGHT_SURFACE: SurfacePalette = {
@@ -151,13 +163,13 @@ const LIGHT_SURFACE: SurfacePalette = {
   cardBorder: 'rgba(255, 255, 255, 0.6)',
   inputOverlay: 'rgba(255, 255, 255, 0.55)',
   inputBorder: 'rgba(255, 255, 255, 0.65)',
-  ghostOverlay: 'rgba(255, 255, 255, 0.4)',
-  secondaryOverlay: 'rgba(255, 255, 255, 0.55)',
-  secondaryBorder: 'rgba(255, 255, 255, 0.7)',
+  ghostOverlay: 'rgba(241, 245, 249, 0.65)',
+  secondaryOverlay: 'rgba(255, 255, 255, 0.78)',
+  secondaryBorder: 'rgba(15, 23, 42, 0.1)',
   tabBarOverlay: 'rgba(255, 255, 255, 0.6)',
   tabBarTopLine: 'rgba(255, 255, 255, 0.85)',
   headerOverlay: 'rgba(255, 255, 255, 0.6)',
-  thumbBg: '#EFEDE8',
+  thumbBg: '#E8EDF4',
   chipInactive: 'rgba(255, 255, 255, 0.55)',
   chipInactiveBorder: 'rgba(255, 255, 255, 0.7)',
   favBadgeBg: 'rgba(255, 255, 255, 0.85)',

@@ -29,7 +29,10 @@ import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { CLOTHING_SUBCATEGORIES } from '../constants/classification';
 import { forecastSummary, weatherDetail, weatherHeadline } from '../weather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import {
+  stackScrollContentPaddingTop,
+  PACK_MODE_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   shadow,
@@ -168,7 +171,7 @@ function selectCoveragePlan(
 
 export function PackModeScreen({}: Props) {
   const insets = useSafeAreaInsets();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [items, setItems] = useState<ClothingItem[]>([]);
@@ -801,7 +804,7 @@ export function PackModeScreen({}: Props) {
         keyExtractor={(item) => String(item.id)}
         numColumns={2}
         ListHeaderComponent={header}
-        contentContainerStyle={[styles.list, { paddingTop: headerPad }]}
+        contentContainerStyle={[styles.list, { paddingTop: scrollTop }]}
         columnWrapperStyle={styles.row}
         refreshControl={
           <RefreshControl
@@ -811,7 +814,7 @@ export function PackModeScreen({}: Props) {
               load();
             }}
             tintColor={colors.accent}
-            progressViewOffset={headerPad}
+            progressViewOffset={scrollTop}
           />
         }
         ListEmptyComponent={
@@ -916,7 +919,7 @@ function makeStyles({
     },
     list: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: 180,
+      paddingBottom: PACK_MODE_SCROLL_BOTTOM,
     },
     heading: {
       ...typography.title,

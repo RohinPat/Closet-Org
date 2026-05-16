@@ -3,6 +3,7 @@ const API_BASE = window.location.origin + '/api';
 
 // State
 let currentTab = 'closet';
+let activeCarePane = 'laundry';
 let selectedFile = null;
 let currentUser = null;
 let authToken = null;
@@ -91,13 +92,10 @@ function initializeApp() {
     
     // Load initial data
     loadCloset();
-    loadStats();
     
-    // Event listeners for filters
-    document.getElementById('category-filter').addEventListener('change', loadCloset);
-    document.getElementById('status-filter').addEventListener('change', loadCloset);
-    document.getElementById('rotation-filter').addEventListener('change', loadCloset);
-    document.getElementById('sort-by').addEventListener('change', loadCloset);
+    initClosetFilterUi();
+    initCareSubnav();
+
     document.getElementById('generate-outfits-btn').addEventListener('click', generateOutfits);
     document.getElementById('refresh-laundry-btn').addEventListener('click', loadLaundry);
     document.getElementById('refresh-insights-btn').addEventListener('click', loadInsights);
@@ -156,8 +154,15 @@ function initThemeToggle() {
 }
 
 function updateThemeIcon(theme) {
-    const themeIcon = document.getElementById('theme-icon');
-    themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    const isDark = theme === 'dark';
+    const btn = document.getElementById('theme-toggle');
+    if (btn) {
+        btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+    }
+    const moon = document.querySelector('.theme-icon-moon');
+    const sun = document.querySelector('.theme-icon-sun');
+    if (moon) moon.classList.toggle('hidden', isDark);
+    if (sun) sun.classList.toggle('hidden', !isDark);
 }
 
 // User Menu
@@ -311,20 +316,101 @@ function showTab(tabName) {
     const tabs = document.querySelectorAll('.tab-content');
     
     tabs.forEach(tab => tab.classList.remove('active'));
-    document.getElementById(`${tabName}-tab`).classList.add('active');
+    const tabEl = document.getElementById(`${tabName}-tab`);
+    if (tabEl) {
+        tabEl.classList.add('active');
+    }
     
-    // Load data for specific tabs
     if (tabName === 'closet') {
         loadCloset();
-    } else if (tabName === 'stats') {
-        loadStats();
+    } else if (tabName === 'care') {
+        showCarePane(activeCarePane || 'laundry');
     } else if (tabName === 'profile') {
         loadProfileData();
-    } else if (tabName === 'laundry') {
-        loadLaundry();
-    } else if (tabName === 'insights') {
-        loadInsights();
     }
+}
+
+function showCarePane(paneName) {
+    activeCarePane = paneName;
+    document.querySelectorAll('.care-pane').forEach(p => p.classList.remove('active'));
+    const pane = document.getElementById(`care-pane-${paneName}`);
+    if (pane) pane.classList.add('active');
+
+    document.querySelectorAll('.care-subnav-btn').forEach(b => {
+        const on = b.dataset.carePane === paneName;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+
+    if (paneName === 'laundry') {
+        loadLaundry();
+    } else if (paneName === 'insights') {
+        loadInsights();
+    } else if (paneName === 'stats') {
+        loadStats();
+    }
+}
+
+function initCareSubnav() {
+    document.querySelectorAll('.care-subnav-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            showCarePane(btn.dataset.carePane);
+        });
+    });
+}
+
+function setChipGroupActive(group, value) {
+    document.querySelectorAll(`[data-chip-group="${group}"]`).forEach((chip) => {
+        chip.classList.toggle('active', chip.dataset.value === value);
+    });
+}
+
+function syncChipsFromSelects() {
+    setChipGroupActive('category', document.getElementById('category-filter').value);
+    setChipGroupActive('status', document.getElementById('status-filter').value);
+    setChipGroupActive('rotation', document.getElementById('rotation-filter').value);
+}
+
+function initClosetFilterUi() {
+    const onSelectFiltersChange = () => {
+        syncChipsFromSelects();
+        loadCloset();
+    };
+
+    ['category-filter', 'status-filter', 'rotation-filter'].forEach((id) => {
+        document.getElementById(id).addEventListener('change', onSelectFiltersChange);
+    });
+
+    document.getElementById('sort-by').addEventListener('change', loadCloset);
+
+    document.querySelectorAll('.filter-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            const group = chip.dataset.chipGroup;
+            const value = chip.dataset.value;
+            const map = {
+                category: 'category-filter',
+                status: 'status-filter',
+                rotation: 'rotation-filter',
+            };
+            const selectId = map[group];
+            if (!selectId) return;
+            document.getElementById(selectId).value = value;
+            setChipGroupActive(group, value);
+            loadCloset();
+        });
+    });
+
+    const moreBtn = document.getElementById('closet-filter-more');
+    const panel = document.getElementById('closet-filter-panel');
+    if (moreBtn && panel) {
+        moreBtn.addEventListener('click', () => {
+            const opening = panel.classList.contains('hidden');
+            panel.classList.toggle('hidden', !opening ? false : true);
+            moreBtn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+        });
+    }
+
+    syncChipsFromSelects();
 }
 
 // Upload functionality
@@ -634,9 +720,11 @@ function createClothingCard(item) {
                 </div>
                 <div class="color-swatches">${colorSwatches}</div>
 
-                <div class="freshness-bar">
+                <div class="freshness-track-wrap">
+                <div class="freshness-bar" role="progressbar" aria-valuenow="${freshnessPercent}" aria-valuemin="0" aria-valuemax="100" aria-label="Freshness ${freshnessPercent} percent">
                     <div class="freshness-fill ${escapeHtml(freshnessClass)}" style="width: ${freshnessPercent}%"></div>
-                    <span class="freshness-label">Freshness: ${freshnessPercent}%</span>
+                </div>
+                <span class="freshness-label-outside">Freshness: ${freshnessPercent}%</span>
                 </div>
 
                 <div class="clothing-card-status">
@@ -680,7 +768,7 @@ async function showItemModal(itemId) {
         const freshness = Math.round((item.freshness_score || 1.0) * 100);
         const condition = Math.round((item.condition_score || 1.0) * 100);
         const cpw = item.cost_per_wear ? `$${item.cost_per_wear}` : 'N/A';
-        const daysSince = item.days_since_worn !== null ? `${item.days_since_worn} days ago` : 'Never worn';
+        const daysSince = item.days_since_worn !== null ? `${item.days_since_worn} days ago` : 'Not worn yet';
         const daysOwned = item.days_owned !== null ? `${item.days_owned} days` : 'N/A';
         
         // Purchase info — purchase_location is user-controlled, must escape.
@@ -717,7 +805,7 @@ async function showItemModal(itemId) {
             <div class="modal-section wear-again-section">
                 <h3>🔄 Multi-Wear Tracking</h3>
                 <div class="wear-progress">
-                    <div class="wear-progress-bar">
+                    <div class="wear-progress-bar" role="progressbar" aria-valuenow="${Number(wearCount) || 0}" aria-valuemin="0" aria-valuemax="${Number(maxWear) || 1}" aria-label="Times worn since last wash, ${Number(wearCount) || 0} of ${Number(maxWear) || 1}">
                         <div class="wear-progress-fill" style="width: ${(wearCount / maxWear) * 100}%"></div>
                     </div>
                     <p class="wear-status">Worn ${wearCount}/${maxWear} times since last wash</p>
@@ -779,7 +867,7 @@ async function showItemModal(itemId) {
                 <div class="score-bars">
                     <div class="score-bar-container">
                         <label>Freshness Score</label>
-                        <div class="score-bar">
+                        <div class="score-bar" role="progressbar" aria-valuenow="${Number(freshness) || 0}" aria-valuemin="0" aria-valuemax="100" aria-label="Freshness score ${Number(freshness) || 0} percent">
                             <div class="score-fill ${freshness >= 80 ? 'fresh-high' : freshness >= 60 ? 'fresh-medium' : 'fresh-low'}"
                                  style="width: ${Number(freshness) || 0}%"></div>
                         </div>
@@ -787,7 +875,7 @@ async function showItemModal(itemId) {
                     </div>
                     <div class="score-bar-container">
                         <label>Condition Score</label>
-                        <div class="score-bar">
+                        <div class="score-bar" role="progressbar" aria-valuenow="${Number(condition) || 0}" aria-valuemin="0" aria-valuemax="100" aria-label="Condition score ${Number(condition) || 0} percent">
                             <div class="score-fill ${condition >= 80 ? 'fresh-high' : condition >= 60 ? 'fresh-medium' : 'fresh-low'}"
                                  style="width: ${Number(condition) || 0}%"></div>
                         </div>

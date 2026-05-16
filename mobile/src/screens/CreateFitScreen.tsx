@@ -21,7 +21,10 @@ import type { ClothingItem } from '../api/types';
 import { itemThumbnailUrl } from '../config';
 import { imagePickerAssetToUpload } from '../utils/imageUpload';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import {
+  stackScrollContentPaddingTop,
+  STACK_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   GlassButton,
   GlassCard,
@@ -42,7 +45,7 @@ type Props = NativeStackScreenProps<AppStackParamList, 'CreateFit'>;
 
 export function CreateFitScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const tripParams = route.params;
@@ -164,7 +167,7 @@ export function CreateFitScreen({ navigation, route }: Props) {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
+          contentContainerStyle={[styles.container, { paddingTop: scrollTop }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -321,7 +324,7 @@ function makeStyles({
   return StyleSheet.create({
     container: {
       paddingHorizontal: spacing.xl,
-      paddingBottom: 80,
+      paddingBottom: STACK_SCREEN_SCROLL_BOTTOM,
     },
     heading: {
       ...typography.title,

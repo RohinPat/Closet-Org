@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -29,7 +29,11 @@ import type { ClothingItem, ClosetLocation, VisualSearchMatch } from '../api/typ
 import { itemThumbnailUrl } from '../config';
 import { imagePickerAssetToUpload } from '../utils/imageUpload';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { tabTopPadding } from '../utils/screenSpacing';
+import {
+  tabTopPadding,
+  tabScrollContentPaddingTop,
+  TAB_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   GlassButton,
   GlassInputContainer,
@@ -43,6 +47,7 @@ import {
   densityLabel,
   densityMaxWidth,
   sortLabel,
+  useClosetFilterBarSections,
   useDensityPref,
   useLayoutPref,
   useSortPref,
@@ -168,7 +173,7 @@ function neglectTier(days: number | null): NeglectTier | null {
 
 function neglectLabel(item: ClothingItem, days: number): string {
   const everWorn = (item.times_worn ?? 0) > 0 && !!item.last_worn;
-  if (!everWorn) return 'Never worn';
+  if (!everWorn) return 'Still unworn';
   return `${days}d unworn`;
 }
 
@@ -198,6 +203,39 @@ function applyFilters(
     }
     return itemMatchesQuery(item, q);
   });
+}
+
+/** Show a status chip only when both outcomes exist (same idea as hiding single-option rows). */
+function statusFilterChipApplies(
+  key: FilterKey,
+  scoped: ClothingItem[]
+): boolean {
+  if (scoped.length === 0) return false;
+  switch (key) {
+    case 'clean':
+    case 'wash': {
+      const anyWashed = scoped.some((i) => Boolean(i.washed));
+      const anyNeedsWash = scoped.some((i) => !i.washed);
+      return anyWashed && anyNeedsWash;
+    }
+    case 'favorites': {
+      const anyFav = scoped.some((i) => Boolean(i.is_favorite));
+      const anyNot = scoped.some((i) => !i.is_favorite);
+      return anyFav && anyNot;
+    }
+    case 'lent': {
+      const anyLent = scoped.some((i) => Boolean(i.lent_to?.trim()));
+      const anyNot = scoped.some((i) => !i.lent_to?.trim());
+      return anyLent && anyNot;
+    }
+    case 'packed': {
+      const anyPacked = scoped.some((i) => Boolean(i.packed_for_trip));
+      const anyNot = scoped.some((i) => !i.packed_for_trip);
+      return anyPacked && anyNot;
+    }
+    default:
+      return false;
+  }
 }
 
 function sortItems(items: ClothingItem[], sort: SortKey): ClothingItem[] {
@@ -244,7 +282,8 @@ type ChipProps = {
 };
 
 function FilterChip({ label, active, onPress }: ChipProps) {
-  const { colors, surface } = useTheme();
+  const { colors, surface, mode } = useTheme();
+  const lightChip = mode === 'light';
   return (
     <Pressable
       onPress={onPress}
@@ -253,18 +292,20 @@ function FilterChip({ label, active, onPress }: ChipProps) {
         { transform: [{ scale: pressed ? 0.96 : 1 }] },
       ]}
     >
-      <BlurView
-        intensity={active ? 0 : 30}
-        tint={surface.blurTint}
-        style={[StyleSheet.absoluteFill, { borderRadius: radii.pill }]}
-      />
+      {!lightChip ? (
+        <BlurView
+          intensity={active ? 0 : 30}
+          tint={surface.blurTint}
+          style={[StyleSheet.absoluteFill, { borderRadius: radii.pill }]}
+        />
+      ) : null}
       <View
         style={[
           StyleSheet.absoluteFill,
           {
             backgroundColor: active ? colors.accent : surface.chipInactive,
             borderRadius: radii.pill,
-            borderWidth: StyleSheet.hairlineWidth,
+            borderWidth: lightChip ? 0 : StyleSheet.hairlineWidth,
             borderColor: active ? colors.accent : surface.chipInactiveBorder,
           },
         ]}
@@ -288,7 +329,8 @@ type ColorChipProps = {
 };
 
 function ColorChip({ name, active, onPress }: ColorChipProps) {
-  const { colors, surface } = useTheme();
+  const { colors, surface, mode } = useTheme();
+  const lightChip = mode === 'light';
   const swatch = colorSwatch(name);
   return (
     <Pressable
@@ -304,7 +346,7 @@ function ColorChip({ name, active, onPress }: ColorChipProps) {
           {
             backgroundColor: active ? colors.accent : surface.chipInactive,
             borderRadius: radii.pill,
-            borderWidth: StyleSheet.hairlineWidth,
+            borderWidth: lightChip ? 0 : StyleSheet.hairlineWidth,
             borderColor: active ? colors.accent : surface.chipInactiveBorder,
           },
         ]}
@@ -314,6 +356,8 @@ function ColorChip({ name, active, onPress }: ColorChipProps) {
           chipStyles.swatch,
           {
             backgroundColor: swatch,
+            borderWidth:
+              lightChip && !active ? 0 : StyleSheet.hairlineWidth,
             borderColor: active ? '#fff' : surface.chipInactiveBorder,
           },
         ]}
@@ -330,12 +374,68 @@ function ColorChip({ name, active, onPress }: ColorChipProps) {
   );
 }
 
+function FilterSectionHeader({
+  label,
+  expanded,
+  onPress,
+  showActiveDot,
+}: {
+  label: string;
+  expanded: boolean;
+  onPress: () => void;
+  showActiveDot?: boolean;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 4,
+        opacity: pressed ? 0.75 : 1,
+      })}
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      accessibilityLabel={`${expanded ? 'Hide' : 'Show'} ${label}`}
+    >
+      <Ionicons
+        name={expanded ? 'chevron-down' : 'chevron-forward'}
+        size={18}
+        color={colors.textMuted}
+      />
+      <Text
+        style={{
+          fontSize: 13,
+          fontWeight: '600',
+          color: colors.textSecondary,
+        }}
+      >
+        {label}
+      </Text>
+      {showActiveDot ? (
+        <View
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: 4,
+            backgroundColor: colors.accent,
+          }}
+        />
+      ) : null}
+    </Pressable>
+  );
+}
+
 export function ClosetScreen() {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
   const headerPad = tabTopPadding(insets);
+  const scrollTop = tabScrollContentPaddingTop(insets);
   const { colors, surface } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const [filterBarSections, toggleFilterBarSection] = useClosetFilterBarSections();
   const [density, setDensity] = useDensityPref();
   const [sort, setSort] = useSortPref();
   const [layout, setLayout] = useLayoutPref();
@@ -373,9 +473,12 @@ export function ClosetScreen() {
       ]);
       setItems(data.items);
       setClosetLocations(locs.locations);
-      setActiveClosetLocationId((prev) =>
-        prev === null ? settings.default_closet_location_id ?? null : prev
-      );
+      setActiveClosetLocationId((prev) => {
+        if (locs.locations.length <= 1) {
+          return null;
+        }
+        return prev === null ? settings.default_closet_location_id ?? null : prev;
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load closet');
     } finally {
@@ -490,13 +593,48 @@ export function ClosetScreen() {
       .map(([k]) => k);
   }, [items]);
 
+  const baseItemsForFilters = useMemo(() => {
+    const effectiveClosetLocationId =
+      closetLocations.length <= 1 ? null : activeClosetLocationId;
+    if (effectiveClosetLocationId == null) return items;
+    return items.filter(
+      (item) => item.closet_location_id === effectiveClosetLocationId
+    );
+  }, [items, closetLocations.length, activeClosetLocationId]);
+
+  const visibleStatusFilterOptions = useMemo(
+    () =>
+      FILTER_OPTIONS.filter((opt) =>
+        statusFilterChipApplies(opt.key, baseItemsForFilters)
+      ),
+    [baseItemsForFilters]
+  );
+
+  const visibleStatusKeysStr = useMemo(
+    () => visibleStatusFilterOptions.map((o) => o.key).join(','),
+    [visibleStatusFilterOptions]
+  );
+
+  useEffect(() => {
+    const allowed = new Set(
+      visibleStatusKeysStr.length > 0 ? visibleStatusKeysStr.split(',') : []
+    );
+    setFilters((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const k of FILTER_OPTIONS) {
+        if (!allowed.has(k.key) && next.has(k.key)) {
+          next.delete(k.key);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [visibleStatusKeysStr]);
+
   const visibleItems = useMemo(() => {
-    const locationScoped =
-      activeClosetLocationId == null
-        ? items
-        : items.filter((item) => item.closet_location_id === activeClosetLocationId);
     const filtered = applyFilters(
-      locationScoped,
+      baseItemsForFilters,
       filters,
       categoryFilters,
       colorFilters,
@@ -505,8 +643,7 @@ export function ClosetScreen() {
     );
     return sortItems(filtered, sort);
   }, [
-    items,
-    activeClosetLocationId,
+    baseItemsForFilters,
     filters,
     categoryFilters,
     colorFilters,
@@ -750,7 +887,7 @@ export function ClosetScreen() {
 
   const filterActive =
     filters.size > 0 ||
-    activeClosetLocationId !== null ||
+    (closetLocations.length > 1 && activeClosetLocationId !== null) ||
     categoryFilters.size > 0 ||
     colorFilters.size > 0 ||
     locationFilters.size > 0 ||
@@ -766,11 +903,57 @@ export function ClosetScreen() {
   }
 
   if (loading && items.length === 0) {
+    const skeletonKeys = [0, 1, 2, 3, 4, 5];
     return (
       <View style={{ flex: 1 }}>
         <ScreenBackground />
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.accent} />
+        <View
+          style={{
+            flex: 1,
+            paddingTop: scrollTop + spacing.xl,
+            paddingHorizontal: spacing.lg,
+          }}
+        >
+          <View
+            style={{
+              height: 28,
+              width: '55%',
+              borderRadius: radii.sm,
+              backgroundColor: surface.secondaryOverlay,
+              marginBottom: spacing.md,
+            }}
+          />
+          <View
+            style={{
+              height: 14,
+              width: '40%',
+              borderRadius: radii.sm,
+              backgroundColor: surface.chipInactive,
+              marginBottom: spacing.xl,
+            }}
+          />
+          <View
+            style={{
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              gap: spacing.md,
+            }}
+          >
+            {skeletonKeys.map((k) => (
+              <View
+                key={k}
+                style={{
+                  width: '47%',
+                  maxWidth: 200,
+                  aspectRatio: 0.72,
+                  borderRadius: radii.md,
+                  backgroundColor: surface.cardOverlay,
+                  borderWidth: 1,
+                  borderColor: surface.cardBorder,
+                }}
+              />
+            ))}
+          </View>
         </View>
       </View>
     );
@@ -790,8 +973,11 @@ export function ClosetScreen() {
 
   const titleHeader = (
     <View style={styles.titleRow}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.heading}>Your Closet</Text>
+      <View style={styles.titleCol}>
+        <Text style={styles.heading}>
+          Your{' '}
+          <Text style={styles.headingAccent}>Closet</Text>
+        </Text>
         <Text style={styles.count}>
           {visibleItems.length} of {items.length}{' '}
           {items.length === 1 ? 'item' : 'items'}
@@ -799,7 +985,19 @@ export function ClosetScreen() {
           {' · '}
           {sortLabel(sort)}
         </Text>
+        {filterActive ? (
+          <Pressable
+            onPress={clearAll}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Clear all closet filters"
+            style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, marginTop: 4 })}
+          >
+            <Text style={styles.clearFiltersText}>Clear filters</Text>
+          </Pressable>
+        ) : null}
       </View>
+      <View style={styles.titleHeaderActions}>
       <Pressable
         onPress={() => setLayout(layout === 'grid' ? 'rails' : 'grid')}
         accessibilityLabel={`View: ${layout}. Tap to change.`}
@@ -838,6 +1036,7 @@ export function ClosetScreen() {
           color={colors.text}
         />
       </Pressable>
+      </View>
     </View>
   );
 
@@ -846,14 +1045,14 @@ export function ClosetScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.list,
-          { paddingTop: headerPad + stickyHeight, paddingHorizontal: 0 },
+          { paddingTop: scrollTop + stickyHeight, paddingHorizontal: 0 },
         ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={colors.accent}
-            progressViewOffset={headerPad + stickyHeight}
+            progressViewOffset={scrollTop + stickyHeight}
           />
         }
         keyboardShouldPersistTaps="handled"
@@ -861,12 +1060,12 @@ export function ClosetScreen() {
         {railSections.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyTitle}>
-              {filterActive ? 'No matches' : "Closet's empty"}
+              {filterActive ? 'No matches' : 'Your closet is waiting'}
             </Text>
             <Text style={styles.empty}>
               {filterActive
                 ? 'Try clearing filters or a different search.'
-                : 'Tap Add to scan your first item.'}
+                : 'Add your first piece from the Add tab — we will help classify and organize it.'}
             </Text>
           </View>
         ) : (
@@ -901,25 +1100,25 @@ export function ClosetScreen() {
         columnWrapperStyle={numColumns > 1 ? styles.row : undefined}
         contentContainerStyle={[
           styles.list,
-          { paddingTop: headerPad + stickyHeight },
+          { paddingTop: scrollTop + stickyHeight },
         ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={colors.accent}
-            progressViewOffset={headerPad + stickyHeight}
+            progressViewOffset={scrollTop + stickyHeight}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyTitle}>
-              {filterActive ? 'No matches' : "Closet's empty"}
+              {filterActive ? 'No matches' : 'Your closet is waiting'}
             </Text>
             <Text style={styles.empty}>
               {filterActive
                 ? 'Try clearing filters or a different search.'
-                : 'Tap Add to scan your first item.'}
+                : 'Add your first piece from the Add tab — we will help classify and organize it.'}
             </Text>
           </View>
         }
@@ -1020,110 +1219,163 @@ export function ClosetScreen() {
             </View>
           </GlassInputContainer>
 
-          {closetLocations.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.scrollChipsRow}
-              keyboardShouldPersistTaps="handled"
-            >
-              <FilterChip
-                label="All closets"
-                active={activeClosetLocationId === null}
-                onPress={() => setActiveClosetLocationId(null)}
+          {closetLocations.length > 1 ? (
+            <View style={styles.filterChipSection}>
+              <FilterSectionHeader
+                label="Closets"
+                expanded={filterBarSections.closets}
+                onPress={() => toggleFilterBarSection('closets')}
+                showActiveDot={activeClosetLocationId != null}
               />
-              {closetLocations.map((loc) => (
-                <FilterChip
-                  key={loc.id}
-                  label={loc.name}
-                  active={activeClosetLocationId === loc.id}
-                  onPress={() => setActiveClosetLocationId(loc.id)}
-                />
-              ))}
-            </ScrollView>
+              {filterBarSections.closets ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.closetLocationChipsWrap}
+                  contentContainerStyle={styles.scrollChipsRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <FilterChip
+                    label="All closets"
+                    active={activeClosetLocationId === null}
+                    onPress={() => setActiveClosetLocationId(null)}
+                  />
+                  {closetLocations.map((loc) => (
+                    <FilterChip
+                      key={loc.id}
+                      label={loc.name}
+                      active={activeClosetLocationId === loc.id}
+                      onPress={() => setActiveClosetLocationId(loc.id)}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+            </View>
           ) : null}
 
-          <View style={styles.chips}>
-            {FILTER_OPTIONS.map((opt) => (
-              <FilterChip
-                key={opt.key}
-                label={opt.label}
-                active={filters.has(opt.key)}
-                onPress={() => toggleFilter(opt.key)}
+          {visibleStatusFilterOptions.length > 0 || filterActive ? (
+            <View style={styles.filterChipSection}>
+              <FilterSectionHeader
+                label="Quick filters"
+                expanded={filterBarSections.status}
+                onPress={() => toggleFilterBarSection('status')}
+                showActiveDot={filters.size > 0}
               />
-            ))}
-            {filterActive ? (
-              <Pressable
-                onPress={clearAll}
-                style={({ pressed }) => [
-                  chipStyles.chip,
-                  { opacity: pressed ? 0.6 : 1 },
-                ]}
-              >
-                <Text
-                  style={[
-                    chipStyles.chipText,
-                    { color: colors.textSecondary },
-                  ]}
-                >
-                  Clear
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
+              {filterBarSections.status ? (
+                <View style={styles.chips}>
+                  {visibleStatusFilterOptions.map((opt) => (
+                    <FilterChip
+                      key={opt.key}
+                      label={opt.label}
+                      active={filters.has(opt.key)}
+                      onPress={() => toggleFilter(opt.key)}
+                    />
+                  ))}
+                  {filterActive ? (
+                    <Pressable
+                      onPress={clearAll}
+                      style={({ pressed }) => [
+                        chipStyles.chip,
+                        { opacity: pressed ? 0.6 : 1 },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          chipStyles.chipText,
+                          { color: colors.textSecondary },
+                        ]}
+                      >
+                        Clear
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           {availableCategories.length > 1 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.scrollChipsRow}
-              keyboardShouldPersistTaps="handled"
-            >
-              {availableCategories.map((cat) => (
-                <FilterChip
-                  key={cat}
-                  label={cat}
-                  active={categoryFilters.has(cat)}
-                  onPress={() => toggleSetValue(setCategoryFilters, cat)}
-                />
-              ))}
-            </ScrollView>
+            <View style={styles.filterChipSection}>
+              <FilterSectionHeader
+                label="Categories"
+                expanded={filterBarSections.categories}
+                onPress={() => toggleFilterBarSection('categories')}
+                showActiveDot={categoryFilters.size > 0}
+              />
+              {filterBarSections.categories ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.scrollChipsRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {availableCategories.map((cat) => (
+                    <FilterChip
+                      key={cat}
+                      label={cat}
+                      active={categoryFilters.has(cat)}
+                      onPress={() => toggleSetValue(setCategoryFilters, cat)}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+            </View>
           ) : null}
 
           {availableColors.length > 1 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.scrollChipsRow}
-              keyboardShouldPersistTaps="handled"
-            >
-              {availableColors.map((c) => (
-                <ColorChip
-                  key={c}
-                  name={c}
-                  active={colorFilters.has(c)}
-                  onPress={() => toggleSetValue(setColorFilters, c)}
-                />
-              ))}
-            </ScrollView>
+            <View style={styles.filterChipSection}>
+              <FilterSectionHeader
+                label="Colors"
+                expanded={filterBarSections.colors}
+                onPress={() => toggleFilterBarSection('colors')}
+                showActiveDot={colorFilters.size > 0}
+              />
+              {filterBarSections.colors ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.scrollChipsRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {availableColors.map((c) => (
+                    <ColorChip
+                      key={c}
+                      name={c}
+                      active={colorFilters.has(c)}
+                      onPress={() => toggleSetValue(setColorFilters, c)}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+            </View>
           ) : null}
 
           {availableLocations.length > 1 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.scrollChipsRow}
-              keyboardShouldPersistTaps="handled"
-            >
-              {availableLocations.map((loc) => (
-                <FilterChip
-                  key={loc}
-                  label={loc}
-                  active={locationFilters.has(loc)}
-                  onPress={() => toggleSetValue(setLocationFilters, loc)}
-                />
-              ))}
-            </ScrollView>
+            <View style={styles.filterChipSection}>
+              <FilterSectionHeader
+                label="Storage"
+                expanded={filterBarSections.locations}
+                onPress={() => toggleFilterBarSection('locations')}
+                showActiveDot={locationFilters.size > 0}
+              />
+              {filterBarSections.locations ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.scrollChipsRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {availableLocations.map((loc) => (
+                    <FilterChip
+                      key={loc}
+                      label={loc}
+                      active={locationFilters.has(loc)}
+                      onPress={() => toggleSetValue(setLocationFilters, loc)}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+            </View>
           ) : null}
         </View>
       </View>
@@ -1265,22 +1517,36 @@ function makeStyles({
     },
     list: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: 120,
+      paddingBottom: TAB_SCREEN_SCROLL_BOTTOM,
     },
     titleRow: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       gap: spacing.sm,
       marginBottom: spacing.md,
+    },
+    titleCol: {
+      flex: 1,
+      minWidth: 0,
+      paddingRight: spacing.xs,
     },
     heading: {
       ...typography.title,
       color: colors.text,
     },
+    headingAccent: {
+      color: colors.accent,
+    },
     count: {
       ...typography.callout,
       color: colors.textSecondary,
-      marginTop: 4,
+      marginTop: spacing.xs,
+      lineHeight: 20,
+    },
+    clearFiltersText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.accent,
     },
     headerBtn: {
       width: 40,
@@ -1291,6 +1557,12 @@ function makeStyles({
       backgroundColor: surface.chipInactive,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: surface.chipInactiveBorder,
+    },
+    titleHeaderActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginTop: 2,
     },
     stickyBar: {
       position: 'absolute',
@@ -1386,6 +1658,12 @@ function makeStyles({
       gap: 8,
       paddingTop: 8,
       paddingRight: spacing.lg,
+    },
+    filterChipSection: {
+      marginBottom: spacing.xs,
+    },
+    closetLocationChipsWrap: {
+      marginBottom: spacing.md,
     },
     row: { justifyContent: 'flex-start', gap: spacing.md },
     card: {

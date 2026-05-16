@@ -12,6 +12,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useHeaderHeight } from '@react-navigation/elements';
 import type { AuthStackParamList } from '../navigation/RootNavigator';
+import { STACK_SCREEN_SCROLL_BOTTOM } from '../utils/screenSpacing';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import {
@@ -76,16 +77,23 @@ export function RegisterScreen({ navigation }: Props) {
         <ScrollView
           contentContainerStyle={[
             styles.container,
-            { paddingTop: headerHeight + spacing.lg },
+            {
+              paddingTop: headerHeight + spacing.xs,
+              flexGrow: 1,
+            },
           ]}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.title}>Join Closet Org</Text>
+          <Text style={styles.eyebrow}>Join</Text>
+          <View style={styles.brandWrap}>
+            <Text style={styles.brand}>Closet</Text>
+            <Text style={styles.brandAccent}>Org</Text>
+          </View>
           <Text style={styles.subtitle}>
             A few details and your closet is ready.
           </Text>
 
-          <GlassCard padded style={styles.card}>
+          <GlassCard padded>
             {[
               {
                 key: 'u',
@@ -166,20 +174,32 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
     flex: { flex: 1 },
     container: {
       paddingHorizontal: spacing.xl,
-      paddingBottom: spacing.xxl,
+      paddingBottom: STACK_SCREEN_SCROLL_BOTTOM,
+      justifyContent: 'center',
     },
-    title: {
-      ...typography.title,
+    eyebrow: {
+      ...typography.micro,
+      color: colors.accent,
+      marginBottom: spacing.xs,
+    },
+    brandWrap: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      marginBottom: spacing.sm,
+    },
+    brand: {
+      ...typography.largeTitle,
       color: colors.text,
-      marginBottom: 6,
+    },
+    brandAccent: {
+      ...typography.largeTitle,
+      color: colors.accent,
+      marginLeft: 6,
     },
     subtitle: {
       ...typography.callout,
       color: colors.textSecondary,
-      marginBottom: spacing.xl,
-    },
-    card: {
-      padding: spacing.lg,
+      marginBottom: spacing.xxl,
     },
     input: {
       marginBottom: spacing.md,

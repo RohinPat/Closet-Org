@@ -167,13 +167,18 @@ exports[`GlassButton snapshots primary + secondary variants (mocked blur / gradi
   <View
     intensity={50}
     style={
-      {
-        "bottom": 0,
-        "left": 0,
-        "position": "absolute",
-        "right": 0,
-        "top": 0,
-      }
+      [
+        {
+          "bottom": 0,
+          "left": 0,
+          "position": "absolute",
+          "right": 0,
+          "top": 0,
+        },
+        {
+          "borderRadius": 16,
+        },
+      ]
     }
     testID="mock-expo-blur"
     tint="dark"

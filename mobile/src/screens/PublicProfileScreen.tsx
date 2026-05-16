@@ -23,7 +23,10 @@ import {
 import { Avatar } from '../components/Avatar';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import {
+  stackScrollContentPaddingTop,
+  STACK_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   shadow,
@@ -38,7 +41,7 @@ type Props = NativeStackScreenProps<AppStackParamList, 'PublicProfile'>;
 export function PublicProfileScreen({ route, navigation }: Props) {
   const { userId } = route.params;
   const insets = useSafeAreaInsets();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
@@ -219,7 +222,7 @@ export function PublicProfileScreen({ route, navigation }: Props) {
   return (
     <View style={{ flex: 1 }}>
       <ScreenBackground />
-      <ScrollView contentContainerStyle={[styles.container, { paddingTop: headerPad }]}>
+      <ScrollView contentContainerStyle={[styles.container, { paddingTop: scrollTop }]}>
         <GlassCard padded style={styles.headerCard}>
           <View style={styles.headerTop}>
             <Avatar
@@ -228,7 +231,7 @@ export function PublicProfileScreen({ route, navigation }: Props) {
               username={profile.username}
               size={76}
             />
-            <View style={{ flex: 1, marginLeft: spacing.lg }}>
+            <View style={styles.identityText}>
               <Text style={styles.name}>
                 {profile.full_name || profile.username}
               </Text>
@@ -330,15 +333,20 @@ function makeStyles({
     },
     container: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: 100,
+      paddingBottom: STACK_SCREEN_SCROLL_BOTTOM,
     },
     headerCard: {
-      padding: spacing.lg,
       marginBottom: spacing.lg,
     },
     headerTop: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
+    },
+    identityText: {
+      flex: 1,
+      marginLeft: spacing.lg,
+      minWidth: 0,
+      paddingTop: 2,
     },
     name: {
       ...typography.headline,

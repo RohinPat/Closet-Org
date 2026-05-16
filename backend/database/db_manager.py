@@ -1,9 +1,13 @@
 import json
 import os
 import sqlite3
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+
+from bulk_placeholders import bulk_placeholder_paths, repo_uploads_dir
 
 
 
@@ -315,6 +319,38 @@ class DatabaseManager:
 
         ''')
 
+        cursor.execute(
+
+            '''
+
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                user_id INTEGER NOT NULL,
+
+                token_hash TEXT NOT NULL,
+
+                expires_at INTEGER NOT NULL,
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+
+            )
+
+            '''
+
+        )
+
+        cursor.execute(
+
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_password_reset_token_hash "
+
+            "ON password_reset_tokens (token_hash)"
+
+        )
+
         
 
         # Lightweight migration: add columns to existing tables if missing.
@@ -388,6 +424,35 @@ class DatabaseManager:
             )
 
 
+
+        # Exactly one account per email, case-insensitive. Refuse to boot if the
+        # DB already violates this (legacy case-only duplicates or manual edits).
+        cursor.execute(
+            """
+            SELECT lower(email) AS lem, COUNT(*) AS n
+            FROM users
+            GROUP BY lem
+            HAVING n > 1
+            """
+        )
+        bad = cursor.fetchall()
+        if bad:
+            detail = ", ".join(
+                f"{row['lem']!r} ({int(row['n'])} rows)" for row in bad
+            )
+            raise RuntimeError(
+                "Duplicate emails (case-insensitive) in users table: "
+                f"{detail}. "
+                "Delete or merge duplicate rows, or change emails so each is "
+                "unique ignoring case, then restart."
+            )
+
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_lower "
+            "ON users (lower(email))"
+        )
+
+        
 
         cursor.execute("PRAGMA table_info(clothing_items)")
 
@@ -1207,7 +1272,7 @@ class DatabaseManager:
 
         cursor.execute(
 
-            "SELECT * FROM users WHERE email = ? COLLATE NOCASE",
+            "SELECT * FROM users WHERE email = ? COLLATE NOCASE ORDER BY id LIMIT 1",
 
             (email,),
 
@@ -2065,6 +2130,32 @@ class DatabaseManager:
 
         washed_flag = 1 if c > 0 else 0
 
+        if is_bulk:
+
+            bulk_img, bulk_thumb = bulk_placeholder_paths(
+
+                repo_uploads_dir(),
+
+                category.strip() or "Bulk item",
+
+                subcategory.strip() or "Other",
+
+            )
+
+            bulk_images_json = json.dumps([bulk_img])
+
+            bulk_thumbs_json = json.dumps([bulk_thumb])
+
+        else:
+
+            bulk_img = ""
+
+            bulk_thumb = None
+
+            bulk_images_json = "[]"
+
+            bulk_thumbs_json = "[]"
+
         cursor.execute(
 
             """
@@ -2083,7 +2174,7 @@ class DatabaseManager:
 
              closet_location_id)
 
-            VALUES (?, '', NULL, '[]', '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 
                     ?, ?, ?, ?, ?, ?)
 
@@ -2092,6 +2183,14 @@ class DatabaseManager:
             (
 
                 user_id,
+
+                bulk_img,
+
+                bulk_thumb,
+
+                bulk_images_json,
+
+                bulk_thumbs_json,
 
                 category.strip() or "Other",
 
@@ -2203,13 +2302,25 @@ class DatabaseManager:
 
         colors_json = json.dumps(cols)
 
+        primary_path = (image_path or "").strip()
+
+        thumb_val: Optional[str] = thumbnail_path if thumbnail_path else None
+
+        if not primary_path:
+
+            primary_path, thumb_val = bulk_placeholder_paths(
+
+                repo_uploads_dir(), name, subcategory
+
+            )
+
         if image_paths is None:
 
-            image_paths = [image_path] if image_path else [""]
+            image_paths = [primary_path]
 
         if thumbnail_paths is None:
 
-            thumbnail_paths = [thumbnail_path]
+            thumbnail_paths = [thumb_val]
 
         image_paths_json = json.dumps(image_paths)
 
@@ -2245,9 +2356,9 @@ class DatabaseManager:
 
                 user_id,
 
-                image_path,
+                primary_path,
 
-                thumbnail_path,
+                thumb_val,
 
                 image_paths_json,
 
@@ -7832,6 +7943,108 @@ class DatabaseManager:
         conn.close()
 
         return success
+
+    
+
+    def issue_password_reset_token(
+
+        self, user_id: int, token_hash: str, expires_at_unix: int
+
+    ) -> None:
+
+        """Replace any existing reset tokens for this user with a new one."""
+
+        conn = self.get_connection()
+
+        cursor = conn.cursor()
+
+        cursor.execute(
+
+            "DELETE FROM password_reset_tokens WHERE user_id = ?",
+
+            (user_id,),
+
+        )
+
+        cursor.execute(
+
+            """
+
+            INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+
+            VALUES (?, ?, ?)
+
+            """,
+
+            (user_id, token_hash, expires_at_unix),
+
+        )
+
+        conn.commit()
+
+        conn.close()
+
+    
+
+    def consume_password_reset_token(self, token_hash: str) -> Optional[int]:
+
+        """If the token exists and is not expired, delete it and return user_id."""
+
+        now = int(time.time())
+
+        conn = self.get_connection()
+
+        cursor = conn.cursor()
+
+        cursor.execute(
+
+            """
+
+            SELECT id, user_id, expires_at FROM password_reset_tokens
+
+            WHERE token_hash = ?
+
+            """,
+
+            (token_hash,),
+
+        )
+
+        row = cursor.fetchone()
+
+        if row is None:
+
+            conn.close()
+
+            return None
+
+        row_id = int(row["id"])
+
+        if int(row["expires_at"]) < now:
+
+            cursor.execute(
+
+                "DELETE FROM password_reset_tokens WHERE id = ?", (row_id,)
+
+            )
+
+            conn.commit()
+
+            conn.close()
+
+            return None
+
+        cursor.execute(
+
+            "DELETE FROM password_reset_tokens WHERE id = ?", (row_id,)
+
+        )
+
+        conn.commit()
+
+        conn.close()
+
+        return int(row["user_id"])
 
 
 

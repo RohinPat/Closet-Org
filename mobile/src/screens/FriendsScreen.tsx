@@ -26,7 +26,10 @@ import {
 import { Avatar } from '../components/Avatar';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import {
+  stackScrollContentPaddingTop,
+  STACK_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   spacing,
@@ -42,7 +45,7 @@ type TabKey = 'friends' | 'requests' | 'search';
 export function FriendsScreen() {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -172,7 +175,7 @@ export function FriendsScreen() {
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
+        contentContainerStyle={[styles.container, { paddingTop: scrollTop }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -447,7 +450,7 @@ function makeStyles({
   return StyleSheet.create({
     container: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: 100,
+      paddingBottom: STACK_SCREEN_SCROLL_BOTTOM,
     },
     heading: {
       ...typography.title,

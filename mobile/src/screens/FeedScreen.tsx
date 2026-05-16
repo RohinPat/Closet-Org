@@ -24,7 +24,10 @@ import { GlassButton, ScreenBackground } from '../components/Glass';
 import { PostCard } from '../components/PostCard';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { tabTopPadding } from '../utils/screenSpacing';
+import {
+  TAB_SCREEN_SCROLL_BOTTOM,
+  tabScrollContentPaddingTop,
+} from '../utils/screenSpacing';
 import {
   radii,
   spacing,
@@ -43,7 +46,7 @@ const PAGE_SIZE = 30;
 export function FeedScreen() {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
-  const headerPad = tabTopPadding(insets);
+  const scrollTop = tabScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -258,13 +261,13 @@ export function FeedScreen() {
             }
           />
         )}
-        contentContainerStyle={[styles.list, { paddingTop: headerPad }]}
+        contentContainerStyle={[styles.list, { paddingTop: scrollTop }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={colors.accent}
-            progressViewOffset={headerPad}
+            progressViewOffset={scrollTop}
           />
         }
         onEndReached={loadMore}
@@ -338,7 +341,7 @@ function makeStyles({
     },
     list: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: 120,
+      paddingBottom: TAB_SCREEN_SCROLL_BOTTOM,
     },
     headerRow: {
       flexDirection: 'row',

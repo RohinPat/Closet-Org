@@ -16,6 +16,8 @@ import type { ThemeColors, ThemeSurface } from '../theme';
 import type { ClothingItem } from '../api/types';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
+import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
+import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { ClosetScreen } from '../screens/ClosetScreen';
 import { UploadScreen } from '../screens/UploadScreen';
 import { OutfitsScreen } from '../screens/OutfitsScreen';
@@ -37,6 +39,8 @@ import { shadow, typography } from '../theme';
 export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { token?: string } | undefined;
 };
 
 export type MainTabParamList = {
@@ -332,6 +336,16 @@ function AuthNavigator() {
         name="Register"
         component={RegisterScreen}
         options={{ title: 'Create account', headerBackTitle: 'Back' }}
+      />
+      <AuthStack.Screen
+        name="ForgotPassword"
+        component={ForgotPasswordScreen}
+        options={{ title: 'Forgot password', headerBackTitle: 'Back' }}
+      />
+      <AuthStack.Screen
+        name="ResetPassword"
+        component={ResetPasswordScreen}
+        options={{ title: 'Reset password', headerBackTitle: 'Back' }}
       />
     </AuthStack.Navigator>
   );

@@ -28,6 +28,10 @@ import type {
 
   CsvImportResult,
 
+  ManualClosetImportPayload,
+
+  ManualClosetImportResult,
+
   FitCheckPairing,
 
   FitComment,
@@ -263,6 +267,68 @@ export async function register(payload: {
       headers: { 'Content-Type': 'application/json' },
 
       body: JSON.stringify(payload),
+
+    },
+
+    null
+
+  );
+
+}
+
+
+
+export async function requestPasswordReset(email: string) {
+
+  return apiFetch<{
+
+    success: boolean;
+
+    message: string;
+
+    dev_reset_token?: string;
+
+  }>(
+
+    '/auth/forgot-password',
+
+    {
+
+      method: 'POST',
+
+      headers: { 'Content-Type': 'application/json' },
+
+      body: JSON.stringify({ email: email.trim() }),
+
+    },
+
+    null
+
+  );
+
+}
+
+
+
+export async function resetPasswordWithToken(
+
+  token: string,
+
+  new_password: string
+
+) {
+
+  return apiFetch<{ success: boolean; message: string }>(
+
+    '/auth/reset-password',
+
+    {
+
+      method: 'POST',
+
+      headers: { 'Content-Type': 'application/json' },
+
+      body: JSON.stringify({ token: token.trim(), new_password }),
 
     },
 
@@ -642,6 +708,22 @@ export async function importClosetCsv(csvText: string) {
     headers: { 'Content-Type': 'application/json' },
 
     body: JSON.stringify({ csv_text: csvText }),
+
+  });
+
+}
+
+
+
+export async function importClosetManual(body: ManualClosetImportPayload) {
+
+  return apiFetch<ManualClosetImportResult>('/closet/import-manual', {
+
+    method: 'POST',
+
+    headers: { 'Content-Type': 'application/json' },
+
+    body: JSON.stringify(body),
 
   });
 

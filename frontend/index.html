@@ -13,17 +13,21 @@
         <div class="container">
             <div class="header-content">
                 <h1 class="logo">Closet-Org</h1>
-                <nav class="nav">
-                    <button class="nav-btn active" data-tab="closet">My Closet</button>
-                    <button class="nav-btn" data-tab="upload">Upload</button>
-                    <button class="nav-btn" data-tab="outfits">Outfits</button>
-                    <button class="nav-btn" data-tab="laundry">Laundry</button>
-                    <button class="nav-btn" data-tab="insights">Insights</button>
-                    <button class="nav-btn" data-tab="stats">Stats</button>
+                <nav class="nav" aria-label="Main">
+                    <button type="button" class="nav-btn active" data-tab="closet">My Closet</button>
+                    <button type="button" class="nav-btn" data-tab="upload">Upload</button>
+                    <button type="button" class="nav-btn" data-tab="outfits">Outfits</button>
+                    <button type="button" class="nav-btn" data-tab="care">Care</button>
                 </nav>
                 <div class="user-menu">
-                    <button class="theme-toggle" id="theme-toggle" title="Toggle theme">
-                        <span id="theme-icon">🌙</span>
+                    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to dark mode">
+                        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                        <svg class="theme-icon theme-icon-sun hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="4"></circle>
+                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+                        </svg>
                     </button>
                     <div class="user-profile-btn" id="user-profile-btn">
                         <div class="user-avatar" id="user-avatar">
@@ -50,36 +54,82 @@
             <section id="closet-tab" class="tab-content active">
                 <div class="section-header">
                     <h2>My Virtual Closet</h2>
-                    <div class="filters">
-                        <select id="category-filter" class="filter-select">
-                            <option value="">All Categories</option>
-                            <option value="Top">Tops</option>
-                            <option value="Bottom">Bottoms</option>
-                            <option value="Dress">Dresses</option>
-                            <option value="Footwear">Footwear</option>
-                            <option value="Accessory">Accessories</option>
-                        </select>
-                        <select id="status-filter" class="filter-select">
-                            <option value="">All Items</option>
-                            <option value="clean">Clean</option>
-                            <option value="dirty">Needs Washing</option>
-                        </select>
-                        <select id="rotation-filter" class="filter-select">
-                            <option value="">All Rotation</option>
-                            <option value="favorites">⭐ Favorites</option>
-                            <option value="high">High Rotation</option>
-                            <option value="medium">Medium Rotation</option>
-                            <option value="low">Low Rotation</option>
-                            <option value="neglected">Neglected</option>
-                        </select>
-                        <select id="sort-by" class="filter-select">
-                            <option value="recent">Recently Added</option>
-                            <option value="last-worn">Last Worn (Oldest)</option>
-                            <option value="most-worn">Most Worn</option>
-                            <option value="least-worn">Least Worn</option>
-                            <option value="best-cpw">Best Value</option>
-                            <option value="freshness">Freshness Score</option>
-                        </select>
+                    <div class="closet-filter-bar">
+                        <div class="filter-chip-rows">
+                            <div class="filter-chip-row" role="group" aria-label="Category">
+                                <span class="filter-chip-label">Category</span>
+                                <button type="button" class="filter-chip active" data-chip-group="category" data-value="">All</button>
+                                <button type="button" class="filter-chip" data-chip-group="category" data-value="Top">Tops</button>
+                                <button type="button" class="filter-chip" data-chip-group="category" data-value="Bottom">Bottoms</button>
+                                <button type="button" class="filter-chip" data-chip-group="category" data-value="Dress">Dresses</button>
+                                <button type="button" class="filter-chip" data-chip-group="category" data-value="Footwear">Footwear</button>
+                                <button type="button" class="filter-chip" data-chip-group="category" data-value="Accessory">Accessories</button>
+                            </div>
+                            <div class="filter-chip-row" role="group" aria-label="Laundry status">
+                                <span class="filter-chip-label">Status</span>
+                                <button type="button" class="filter-chip active" data-chip-group="status" data-value="">All items</button>
+                                <button type="button" class="filter-chip" data-chip-group="status" data-value="clean">Clean</button>
+                                <button type="button" class="filter-chip" data-chip-group="status" data-value="dirty">Needs washing</button>
+                            </div>
+                            <div class="filter-chip-row" role="group" aria-label="Rotation">
+                                <span class="filter-chip-label">Rotation</span>
+                                <button type="button" class="filter-chip active" data-chip-group="rotation" data-value="">All</button>
+                                <button type="button" class="filter-chip" data-chip-group="rotation" data-value="favorites">Favorites</button>
+                                <button type="button" class="filter-chip" data-chip-group="rotation" data-value="high">High</button>
+                                <button type="button" class="filter-chip" data-chip-group="rotation" data-value="medium">Medium</button>
+                                <button type="button" class="filter-chip" data-chip-group="rotation" data-value="low">Low</button>
+                                <button type="button" class="filter-chip" data-chip-group="rotation" data-value="neglected">Neglected</button>
+                            </div>
+                        </div>
+                        <div class="filter-bar-actions">
+                            <label class="visually-hidden" for="sort-by">Sort closet by</label>
+                            <select id="sort-by" class="filter-select filter-select--sort" aria-label="Sort closet by">
+                                <option value="recent">Recently added</option>
+                                <option value="last-worn">Last worn (oldest first)</option>
+                                <option value="most-worn">Most worn</option>
+                                <option value="least-worn">Least worn</option>
+                                <option value="best-cpw">Best value</option>
+                                <option value="freshness">Freshness score</option>
+                            </select>
+                            <button type="button" class="btn-filter-more" id="closet-filter-more" aria-expanded="false" aria-controls="closet-filter-panel">
+                                More filters
+                            </button>
+                        </div>
+                        <div id="closet-filter-panel" class="filter-advanced-panel hidden" role="region" aria-label="All closet filters">
+                            <p class="visually-hidden" id="closet-filter-panel-hint">Use these menus for precise filtering or keyboard access.</p>
+                            <div class="filters">
+                                <div>
+                                    <label class="visually-hidden" for="category-filter">Category</label>
+                                    <select id="category-filter" class="filter-select" aria-describedby="closet-filter-panel-hint">
+                                        <option value="">All Categories</option>
+                                        <option value="Top">Tops</option>
+                                        <option value="Bottom">Bottoms</option>
+                                        <option value="Dress">Dresses</option>
+                                        <option value="Footwear">Footwear</option>
+                                        <option value="Accessory">Accessories</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="visually-hidden" for="status-filter">Laundry status</label>
+                                    <select id="status-filter" class="filter-select">
+                                        <option value="">All Items</option>
+                                        <option value="clean">Clean</option>
+                                        <option value="dirty">Needs Washing</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="visually-hidden" for="rotation-filter">Rotation</label>
+                                    <select id="rotation-filter" class="filter-select">
+                                        <option value="">All Rotation</option>
+                                        <option value="favorites">Favorites</option>
+                                        <option value="high">High Rotation</option>
+                                        <option value="medium">Medium Rotation</option>
+                                        <option value="low">Low Rotation</option>
+                                        <option value="neglected">Neglected</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div id="closet-grid" class="closet-grid">
@@ -155,40 +205,44 @@
                 </div>
             </section>
 
-            <!-- Laundry Tab -->
-            <section id="laundry-tab" class="tab-content">
-                <div class="section-header">
-                    <h2>🧺 Laundry Management</h2>
-                    <button class="btn btn-primary" id="refresh-laundry-btn">Refresh</button>
+            <!-- Care: laundry, insights, stats -->
+            <section id="care-tab" class="tab-content">
+                <div class="care-subnav" role="tablist" aria-label="Care sections">
+                    <button type="button" class="care-subnav-btn active" role="tab" aria-selected="true" data-care-pane="laundry">Laundry</button>
+                    <button type="button" class="care-subnav-btn" role="tab" aria-selected="false" data-care-pane="insights">Insights</button>
+                    <button type="button" class="care-subnav-btn" role="tab" aria-selected="false" data-care-pane="stats">Stats</button>
                 </div>
-                <div id="laundry-container">
-                    <div class="loading">Loading laundry queue...</div>
-                </div>
-            </section>
-
-            <!-- Insights Tab -->
-            <section id="insights-tab" class="tab-content">
-                <div class="section-header">
-                    <h2>💡 Wardrobe Insights</h2>
-                    <div class="filters">
-                        <select id="neglect-days-filter" class="filter-select">
-                            <option value="30">30+ days unworn</option>
-                            <option value="60">60+ days unworn</option>
-                            <option value="90">90+ days unworn</option>
-                        </select>
-                        <button class="btn btn-primary" id="refresh-insights-btn">Refresh</button>
+                <div id="care-pane-laundry" class="care-pane active" role="tabpanel">
+                    <div class="section-header">
+                        <h2>Laundry</h2>
+                        <button type="button" class="btn btn-primary" id="refresh-laundry-btn">Refresh</button>
+                    </div>
+                    <div id="laundry-container">
+                        <div class="loading">Loading laundry queue...</div>
                     </div>
                 </div>
-                <div id="insights-container">
-                    <div class="loading">Loading insights...</div>
+                <div id="care-pane-insights" class="care-pane" role="tabpanel">
+                    <div class="section-header">
+                        <h2>Wardrobe insights</h2>
+                        <div class="filters">
+                            <label class="visually-hidden" for="neglect-days-filter">Unworn threshold</label>
+                            <select id="neglect-days-filter" class="filter-select">
+                                <option value="30">30+ days unworn</option>
+                                <option value="60">60+ days unworn</option>
+                                <option value="90">90+ days unworn</option>
+                            </select>
+                            <button type="button" class="btn btn-primary" id="refresh-insights-btn">Refresh</button>
+                        </div>
+                    </div>
+                    <div id="insights-container">
+                        <div class="loading">Loading insights...</div>
+                    </div>
                 </div>
-            </section>
-
-            <!-- Stats Tab -->
-            <section id="stats-tab" class="tab-content">
-                <h2>Closet Statistics</h2>
-                <div id="stats-container" class="stats-container">
-                    <div class="loading">Loading statistics...</div>
+                <div id="care-pane-stats" class="care-pane" role="tabpanel">
+                    <h2>Closet statistics</h2>
+                    <div id="stats-container" class="stats-container">
+                        <div class="loading">Loading statistics...</div>
+                    </div>
                 </div>
             </section>
 

@@ -1,0 +1,69 @@
+/**
+ * Closet-Org design tokens (web)
+ * Names align with mobile/src/theme.ts: accent, accentSoft, accentGradient, danger, success, warning.
+ * See DESIGN_REBIRTH.md §5–7.
+ */
+
+:root {
+    color-scheme: light;
+    --color-accent: #7c4dff;
+    --color-accent-hover: #6847e8;
+    --color-accent-2: #6366f1;
+    --color-accent-soft: rgba(124, 77, 255, 0.12);
+    --gradient-accent: linear-gradient(135deg, #a371ff 0%, #7c4dff 45%, #5b6cff 100%);
+
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+
+    /* Semantic tags / chips (light) */
+    --tag-cool-bg: #e8eefa;
+    --tag-cool-fg: #1e3a5f;
+    --tag-warm-bg: #f5efe6;
+    --tag-warm-fg: #7c4a12;
+    --tag-accent-bg: #efe8ff;
+    --tag-accent-fg: #4c1d95;
+    --tag-neutral-bg: #eef2f7;
+    --tag-neutral-fg: #334155;
+
+    /* Status surfaces (light) — always pair with text label in UI */
+    --status-clean-bg: #d8f5e8;
+    --status-clean-fg: #065f46;
+    --status-dirty-bg: #fde8e8;
+    --status-dirty-fg: #991b1b;
+    --status-laundry-bg: #e0e8f7;
+    --status-laundry-fg: #1e3a5f;
+    --status-wear-bg: #f8efd8;
+    --status-wear-fg: #92400e;
+
+    /* Progress tracks (unified) */
+    --progress-track-height: 8px;
+    --progress-track-radius: 9999px;
+}
+
+[data-theme='dark'] {
+    color-scheme: dark;
+    --color-accent: #a78bfa;
+    --color-accent-hover: #c4b5fd;
+    --color-accent-2: #818cf8;
+    --color-accent-soft: rgba(167, 139, 250, 0.2);
+    --gradient-accent: linear-gradient(135deg, #c4b5fd 0%, #a78bfa 45%, #7c3aed 100%);
+
+    --tag-cool-bg: rgba(129, 140, 248, 0.22);
+    --tag-cool-fg: #c7d2fe;
+    --tag-warm-bg: rgba(251, 191, 36, 0.18);
+    --tag-warm-fg: #fcd34d;
+    --tag-accent-bg: rgba(167, 139, 250, 0.22);
+    --tag-accent-fg: #ede9fe;
+    --tag-neutral-bg: rgba(148, 163, 184, 0.2);
+    --tag-neutral-fg: #e2e8f0;
+
+    --status-clean-bg: rgba(52, 211, 153, 0.2);
+    --status-clean-fg: #6ee7b7;
+    --status-dirty-bg: rgba(248, 113, 113, 0.2);
+    --status-dirty-fg: #fca5a5;
+    --status-laundry-bg: rgba(129, 140, 248, 0.2);
+    --status-laundry-fg: #c7d2fe;
+    --status-wear-bg: rgba(251, 191, 36, 0.18);
+    --status-wear-fg: #fcd34d;
+}

@@ -1,57 +1,6 @@
 // Advanced Landing Page JavaScript with Mouse Tracking & Scroll Animations
 
 // ============================================
-// Custom Cursor
-// ============================================
-const cursor = {
-    dot: document.querySelector('.cursor-dot'),
-    outline: document.querySelector('.cursor-outline'),
-    
-    init() {
-        if (!this.dot || !this.outline) return;
-        
-        let mouseX = 0, mouseY = 0;
-        let dotX = 0, dotY = 0;
-        let outlineX = 0, outlineY = 0;
-        
-        document.addEventListener('mousemove', (e) => {
-            mouseX = e.clientX;
-            mouseY = e.clientY;
-        });
-        
-        // Smooth cursor animation
-        const animate = () => {
-            // Dot follows quickly
-            dotX += (mouseX - dotX) * 0.3;
-            dotY += (mouseY - dotY) * 0.3;
-            
-            // Outline follows with delay
-            outlineX += (mouseX - outlineX) * 0.15;
-            outlineY += (mouseY - outlineY) * 0.15;
-            
-            this.dot.style.transform = `translate(${dotX - 4}px, ${dotY - 4}px)`;
-            this.outline.style.transform = `translate(${outlineX - 16}px, ${outlineY - 16}px)`;
-            
-            requestAnimationFrame(animate);
-        };
-        animate();
-        
-        // Expand cursor on interactive elements
-        const interactiveElements = document.querySelectorAll('a, button, .btn, .feature-card, .demo-card');
-        
-        interactiveElements.forEach(el => {
-            el.addEventListener('mouseenter', () => {
-                this.outline.classList.add('expand');
-            });
-            
-            el.addEventListener('mouseleave', () => {
-                this.outline.classList.remove('expand');
-            });
-        });
-    }
-};
-
-// ============================================
 // Parallax Mouse Effect
 // ============================================
 const parallaxEffect = {
@@ -515,8 +464,7 @@ const ctaMagnetic = {
 // Initialize Everything
 // ============================================
 const initLandingPage = () => {
-    // Core functionality
-    cursor.init();
+    // Core functionality (custom cursor removed — keep system cursor for accessibility)
     navbar.init();
     scrollReveal.init();
     smoothScroll.init();

@@ -16,11 +16,14 @@ import * as api from '../api/client';
 import type { UploadPhoto } from '../api/client';
 import { imagePickerAssetToUpload } from '../utils/imageUpload';
 import { GlassButton, GlassCard, GlassInputContainer, ScreenBackground } from '../components/Glass';
-import { CLOTHING_SUBCATEGORIES } from '../constants/classification';
+import { CLOTHING_SUBCATEGORIES, CLOTHING_COLORS } from '../constants/classification';
 import { API_ORIGIN } from '../config';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { tabTopPadding } from '../utils/screenSpacing';
+import {
+  tabScrollContentPaddingTop,
+  TAB_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   shadow,
@@ -53,7 +56,10 @@ type BulkResultState = {
   quantity: number;
 };
 
+type ImportFlow = 'csv' | 'manual';
+
 type AddMode = 'individual' | 'bulk' | 'import';
+
 type BulkSuggestion = {
   name: string;
   subcategory: string;
@@ -88,7 +94,7 @@ function smartBulkSuggestion(classification: Classification): BulkSuggestion | n
 
 export function UploadScreen() {
   const insets = useSafeAreaInsets();
-  const headerPad = tabTopPadding(insets);
+  const scrollTop = tabScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [photos, setPhotos] = useState<UploadPhoto[]>([]);
@@ -116,6 +122,14 @@ export function UploadScreen() {
   const [wishlistNotes, setWishlistNotes] = useState('');
   const [csvText, setCsvText] = useState('');
   const [csvResult, setCsvResult] = useState<{ created: number; skipped: number } | null>(null);
+  const [importFlow, setImportFlow] = useState<ImportFlow>('csv');
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualSubcategory, setManualSubcategory] = useState<string>('Other');
+  const [manualColorPicks, setManualColorPicks] = useState<string[]>([]);
+  const [manualColorExtras, setManualColorExtras] = useState('');
+  const [manualDescription, setManualDescription] = useState('');
+  const [manualLabelsRaw, setManualLabelsRaw] = useState('');
+  const [manualSaved, setManualSaved] = useState<{ title: string; itemId: number } | null>(null);
   const [bulkSuggestion, setBulkSuggestion] = useState<BulkSuggestion | null>(null);
 
   function presetBulkSocks() {
@@ -144,6 +158,13 @@ export function UploadScreen() {
     setBulkRefPhoto(null);
     setWishlistOpen(false);
     setCsvResult(null);
+    setManualTitle('');
+    setManualSubcategory('Other');
+    setManualColorPicks([]);
+    setManualColorExtras('');
+    setManualDescription('');
+    setManualLabelsRaw('');
+    setManualSaved(null);
     setBulkSuggestion(null);
   }
 
@@ -400,6 +421,7 @@ export function UploadScreen() {
     setBusy(true);
     setError(null);
     setCsvResult(null);
+    setManualSaved(null);
     try {
       const imported = await api.importClosetCsv(csvText);
       setCsvResult({
@@ -414,13 +436,83 @@ export function UploadScreen() {
     }
   }
 
+  function toggleManualColor(name: string) {
+    setManualColorPicks((prev) =>
+      prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]
+    );
+  }
+
+  function mergeManualColors(chips: string[], extrasRaw: string): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (s: string) => {
+      const t = s.trim();
+      if (!t) return;
+      const k = t.toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(t);
+    };
+    for (const c of chips) add(c);
+    for (const part of extrasRaw.split(/[,;/\n]/)) add(part);
+    return out.slice(0, 24);
+  }
+
+  function parseManualTags(raw: string): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const part of raw.split(/[,;/\n]/)) {
+      const t = part.trim();
+      if (!t) continue;
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(t);
+      if (out.length >= 48) break;
+    }
+    return out;
+  }
+
+  async function submitManualImport() {
+    const title = manualTitle.trim();
+    if (!title) {
+      setError('Add a title — it is what shows on your closet card.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setCsvResult(null);
+    setManualSaved(null);
+    try {
+      const colors = mergeManualColors(manualColorPicks, manualColorExtras);
+      const tags = parseManualTags(manualLabelsRaw);
+      const res = await api.importClosetManual({
+        title,
+        subcategory: manualSubcategory,
+        colors: colors.length > 0 ? colors : undefined,
+        description: manualDescription.trim() || null,
+        tags: tags.length > 0 ? tags : undefined,
+      });
+      setManualSaved({ title, itemId: res.item_id });
+      setManualTitle('');
+      setManualColorPicks([]);
+      setManualColorExtras('');
+      setManualDescription('');
+      setManualLabelsRaw('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add item');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const canAdd = photos.length < MAX_PHOTOS;
 
   return (
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
+        contentContainerStyle={[styles.container, { paddingTop: scrollTop }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -471,6 +563,8 @@ export function UploadScreen() {
             onPress={() => {
               setMode('import');
               setError(null);
+              setCsvResult(null);
+              setManualSaved(null);
             }}
             style={({ pressed }) => [
               styles.modeChip,
@@ -494,7 +588,9 @@ export function UploadScreen() {
             ? "Snap a photo of the front, then add a back shot for items with prints, logos, or rear details. We'll classify the front and merge the colors."
             : mode === 'bulk'
               ? 'Socks, underwear, and plain tees can live as one card with a total count and how many are clean. Add an optional reference photo for the grid and similarity search.'
-              : 'Paste rows from a spreadsheet. Supported headers include name/category, subcategory, colors, brand, size, quantity, tags, notes, price, and care.'}
+              : importFlow === 'csv'
+                ? 'Paste rows from a spreadsheet (CSV). Keep the first row as headers — name, category, colors, tags, notes, price, care, and more.'
+                : 'Skip the camera: give the piece a title, tap colors or type extra ones, and add notes and labels — saved like a spreadsheet row without a photo.'}
         </Text>
 
         {mode === 'individual' && photos.length > 0 ? (
@@ -633,49 +729,202 @@ export function UploadScreen() {
 
         {mode === 'import' ? (
           <GlassCard padded style={styles.bulkCard}>
-            <Text style={styles.bulkHint}>CSV / spreadsheet import</Text>
-            <Text style={styles.resultSub}>
-              Copy rows from Sheets or Excel and paste them here. Keep the first row
-              as headers.
-            </Text>
-            <GlassInputContainer>
-              <TextInput
-                value={csvText}
-                onChangeText={setCsvText}
-                multiline
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder={'name,category,subcategory,colors,brand,size\nWhite tee,T-Shirt,Top,White,Hanes,M'}
-                placeholderTextColor={colors.textMuted}
-                style={[styles.textField, styles.csvField]}
-              />
-            </GlassInputContainer>
-            <GlassButton
-              title="Import rows"
-              onPress={importCsv}
-              loading={busy}
-              style={{ marginTop: spacing.md }}
-            />
-            {csvResult ? (
-              <Text style={styles.resultSub}>
-                Imported {csvResult.created} item{csvResult.created === 1 ? '' : 's'}
-                {csvResult.skipped ? ` · ${csvResult.skipped} skipped` : ''}.
-              </Text>
-            ) : null}
+            <View style={styles.importModeRow}>
+              <Pressable
+                onPress={() => {
+                  setImportFlow('csv');
+                  setError(null);
+                }}
+                style={({ pressed }) => [
+                  styles.modeChip,
+                  importFlow === 'csv' && styles.modeChipOn,
+                  { opacity: pressed ? 0.85 : 1, flex: 1 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.modeChipText,
+                    importFlow === 'csv' && styles.modeChipTextOn,
+                  ]}
+                >
+                  Paste CSV
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setImportFlow('manual');
+                  setError(null);
+                }}
+                style={({ pressed }) => [
+                  styles.modeChip,
+                  importFlow === 'manual' && styles.modeChipOn,
+                  { opacity: pressed ? 0.85 : 1, flex: 1 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.modeChipText,
+                    importFlow === 'manual' && styles.modeChipTextOn,
+                  ]}
+                >
+                  Manual
+                </Text>
+              </Pressable>
+            </View>
+
+            {importFlow === 'csv' ? (
+              <>
+                <Text style={styles.bulkHint}>Spreadsheet rows</Text>
+                <Text style={styles.resultSub}>
+                  Copy from Sheets or Excel. The first line must be column headers.
+                </Text>
+                <GlassInputContainer>
+                  <TextInput
+                    value={csvText}
+                    onChangeText={setCsvText}
+                    multiline
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder={
+                      'name,category,subcategory,colors,brand,size\nWhite tee,T-Shirt,Top,White,Hanes,M'
+                    }
+                    placeholderTextColor={colors.textMuted}
+                    style={[styles.textField, styles.csvField]}
+                  />
+                </GlassInputContainer>
+                <GlassButton
+                  title="Import rows"
+                  onPress={importCsv}
+                  loading={busy}
+                  style={{ marginTop: spacing.md }}
+                />
+                {csvResult ? (
+                  <Text style={styles.resultSub}>
+                    Imported {csvResult.created} item{csvResult.created === 1 ? '' : 's'}
+                    {csvResult.skipped ? ` · ${csvResult.skipped} skipped` : ''}.
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <Text style={styles.bulkHint}>One item, no photo</Text>
+                <Text style={styles.fieldLabel}>Title</Text>
+                <GlassInputContainer>
+                  <TextInput
+                    value={manualTitle}
+                    onChangeText={setManualTitle}
+                    placeholder="e.g. black wool peacoat"
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.textField}
+                  />
+                </GlassInputContainer>
+                <Text style={styles.fieldLabel}>Outfit slot</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.subScroll}
+                >
+                  {CLOTHING_SUBCATEGORIES.map((slot) => (
+                    <Pressable
+                      key={slot}
+                      onPress={() => setManualSubcategory(slot)}
+                      style={[
+                        styles.subChip,
+                        manualSubcategory === slot && styles.subChipOn,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.subChipText,
+                          manualSubcategory === slot && styles.subChipTextOn,
+                        ]}
+                      >
+                        {slot}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+                <Text style={styles.fieldLabel}>Colors</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.subScroll}
+                >
+                  {CLOTHING_COLORS.map((c) => {
+                    const on = manualColorPicks.includes(c);
+                    return (
+                      <Pressable
+                        key={c}
+                        onPress={() => toggleManualColor(c)}
+                        style={[styles.subChip, on && styles.subChipOn]}
+                      >
+                        <Text
+                          style={[
+                            styles.subChipText,
+                            on && styles.subChipTextOn,
+                          ]}
+                        >
+                          {c}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+                <GlassInputContainer>
+                  <TextInput
+                    value={manualColorExtras}
+                    onChangeText={setManualColorExtras}
+                    placeholder="Or type extra colors: burgundy, cream"
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.textField}
+                  />
+                </GlassInputContainer>
+                <Text style={styles.fieldLabel}>Description</Text>
+                <GlassInputContainer>
+                  <TextInput
+                    value={manualDescription}
+                    onChangeText={setManualDescription}
+                    multiline
+                    placeholder="Fit, fabric, where you got it…"
+                    placeholderTextColor={colors.textMuted}
+                    style={[styles.textField, styles.notesField]}
+                  />
+                </GlassInputContainer>
+                <Text style={styles.fieldLabel}>Labels (comma-separated)</Text>
+                <GlassInputContainer>
+                  <TextInput
+                    value={manualLabelsRaw}
+                    onChangeText={setManualLabelsRaw}
+                    placeholder="work, winter, sustainable"
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.textField}
+                  />
+                </GlassInputContainer>
+                <GlassButton
+                  title="Add to closet"
+                  onPress={submitManualImport}
+                  loading={busy}
+                  style={{ marginTop: spacing.md }}
+                />
+                {manualSaved ? (
+                  <Text style={styles.resultSub}>
+                    {`Saved "${manualSaved.title}" · item #${manualSaved.itemId}`}
+                  </Text>
+                ) : null}
+              </>
+            )}
           </GlassCard>
         ) : null}
 
         {mode === 'individual' ? (
         <GlassCard padded={false} style={styles.actionCard}>
-          <View style={styles.actionRow}>
+          <View style={styles.actionStack}>
             <GlassButton
               title={canAdd ? 'Pick from library' : 'Limit reached'}
               onPress={pickFromLibrary}
               disabled={!canAdd || busy}
               style={styles.flexBtn}
             />
-          </View>
-          <View style={[styles.actionRow, { paddingTop: 0 }]}>
             <GlassButton
               title="Take photo"
               onPress={takePhoto}
@@ -683,9 +932,7 @@ export function UploadScreen() {
               disabled={!canAdd || busy}
               style={styles.flexBtn}
             />
-          </View>
-          {photos.length > 0 ? (
-            <View style={[styles.actionRow, { paddingTop: 0 }]}>
+            {photos.length > 0 ? (
               <GlassButton
                 title="Preview pairings (first photo, not saved)"
                 onPress={previewPairings}
@@ -694,10 +941,8 @@ export function UploadScreen() {
                 disabled={busy}
                 style={styles.flexBtn}
               />
-            </View>
-          ) : null}
-          {photos.length > 0 ? (
-            <View style={[styles.actionRow, { paddingTop: 0 }]}>
+            ) : null}
+            {photos.length > 0 ? (
               <GlassButton
                 title="Save photos to wishlist"
                 onPress={() => {
@@ -711,18 +956,16 @@ export function UploadScreen() {
                 disabled={busy}
                 style={styles.flexBtn}
               />
-            </View>
-          ) : null}
-          {photos.length > 0 ? (
-            <View style={[styles.actionRow, { paddingTop: 0 }]}>
+            ) : null}
+            {photos.length > 0 ? (
               <GlassButton
                 title={`Add ${photos.length} photo${photos.length === 1 ? '' : 's'} to closet`}
                 onPress={upload}
                 loading={busy}
                 style={styles.flexBtn}
               />
-            </View>
-          ) : null}
+            ) : null}
+          </View>
         </GlassCard>
         ) : null}
 
@@ -968,12 +1211,12 @@ function makeStyles({
   return StyleSheet.create({
     container: {
       paddingHorizontal: spacing.xl,
-      paddingBottom: 120,
+      paddingBottom: TAB_SCREEN_SCROLL_BOTTOM,
     },
     heading: {
       ...typography.title,
       color: colors.text,
-      marginBottom: 6,
+      marginBottom: spacing.md,
     },
     blurb: {
       ...typography.callout,
@@ -982,6 +1225,11 @@ function makeStyles({
       lineHeight: 22,
     },
     modeRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginBottom: spacing.lg,
+    },
+    importModeRow: {
       flexDirection: 'row',
       gap: spacing.sm,
       marginBottom: spacing.md,
@@ -1131,7 +1379,10 @@ function makeStyles({
       borderColor: surface.chipInactiveBorder,
     },
     actionCard: {
-      padding: spacing.md,
+      padding: spacing.lg,
+    },
+    actionStack: {
+      gap: spacing.sm,
     },
     actionRow: {
       flexDirection: 'row',

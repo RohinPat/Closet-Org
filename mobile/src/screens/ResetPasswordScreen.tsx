@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -9,8 +10,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as api from '../api/client';
 import type { AuthStackParamList } from '../navigation/RootNavigator';
-import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import {
   GlassButton,
@@ -20,28 +21,46 @@ import {
 } from '../components/Glass';
 import { spacing, typography, type ThemeColors } from '../theme';
 
-type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+type Props = NativeStackScreenProps<AuthStackParamList, 'ResetPassword'>;
 
-export function LoginScreen({ navigation }: Props) {
-  const { signIn } = useAuth();
+export function ResetPasswordScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const [username, setUsername] = useState('');
+  const [token, setToken] = useState(route.params?.token ?? '');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    const t = route.params?.token;
+    if (t) setToken(t);
+  }, [route.params?.token]);
+
   async function onSubmit() {
     setError(null);
-    if (!username.trim() || !password) {
-      setError('Enter username and password.');
+    if (!token.trim()) {
+      setError('Paste the reset token from your email (or dev flow).');
+      return;
+    }
+    if (password.length < 10) {
+      setError(
+        'Password must be at least 10 characters (upper, lower, digit, symbol).'
+      );
+      return;
+    }
+    if (password !== confirm) {
+      setError('Passwords do not match.');
       return;
     }
     setBusy(true);
     try {
-      await signIn(username.trim(), password);
+      const data = await api.resetPasswordWithToken(token.trim(), password);
+      Alert.alert('Success', data.message, [
+        { text: 'Sign in', onPress: () => navigation.navigate('Login') },
+      ]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Sign in failed');
+      setError(e instanceof Error ? e.message : 'Reset failed');
     } finally {
       setBusy(false);
     }
@@ -56,60 +75,60 @@ export function LoginScreen({ navigation }: Props) {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.container}>
-            <View style={styles.brandWrap}>
-              <Text style={styles.brand}>Closet</Text>
-              <Text style={styles.brandAccent}>Org</Text>
-            </View>
-            <Text style={styles.subtitle}>Welcome back to your closet</Text>
+            <Text style={styles.title}>New password</Text>
+            <Text style={styles.subtitle}>
+              Paste the token from the reset email, then choose a new password
+              (10+ characters with upper, lower, number, and symbol).
+            </Text>
 
             <GlassCard padded>
               <GlassInputContainer style={styles.input}>
                 <TextInput
-                  testID="login-username"
-                  accessibilityLabel="Username"
+                  accessibilityLabel="Reset token"
                   style={styles.textInput}
-                  placeholder="Username"
+                  placeholder="Reset token"
                   placeholderTextColor={colors.placeholder}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  value={username}
-                  onChangeText={setUsername}
+                  value={token}
+                  onChangeText={setToken}
                 />
               </GlassInputContainer>
               <GlassInputContainer style={styles.input}>
                 <TextInput
-                  testID="login-password"
-                  accessibilityLabel="Password"
+                  accessibilityLabel="New password"
                   style={styles.textInput}
-                  placeholder="Password"
+                  placeholder="New password"
                   placeholderTextColor={colors.placeholder}
                   secureTextEntry
                   value={password}
                   onChangeText={setPassword}
                 />
               </GlassInputContainer>
+              <GlassInputContainer style={styles.input}>
+                <TextInput
+                  accessibilityLabel="Confirm new password"
+                  style={styles.textInput}
+                  placeholder="Confirm password"
+                  placeholderTextColor={colors.placeholder}
+                  secureTextEntry
+                  value={confirm}
+                  onChangeText={setConfirm}
+                />
+              </GlassInputContainer>
 
               {error ? <Text style={styles.error}>{error}</Text> : null}
 
               <GlassButton
-                testID="login-submit"
-                title="Sign in"
+                title="Update password"
                 onPress={onSubmit}
                 loading={busy}
                 style={styles.submit}
               />
 
               <GlassButton
-                title="Forgot password?"
-                onPress={() => navigation.navigate('ForgotPassword')}
-                variant="ghost"
-                disabled={busy}
-                style={styles.secondary}
-              />
-
-              <GlassButton
-                title="Create an account"
-                onPress={() => navigation.navigate('Register')}
+                title="Back to sign in"
+                onPress={() => navigation.navigate('Login')}
                 variant="ghost"
                 disabled={busy}
                 style={styles.secondary}
@@ -132,28 +151,17 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
       paddingVertical: spacing.lg,
       justifyContent: 'center',
     },
-    brandWrap: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
-      marginBottom: spacing.sm,
-    },
-    brand: {
-      ...typography.largeTitle,
+    title: {
+      ...typography.title,
       color: colors.text,
-    },
-    brandAccent: {
-      ...typography.largeTitle,
-      color: colors.accent,
-      marginLeft: 6,
+      marginBottom: spacing.sm,
     },
     subtitle: {
       ...typography.callout,
       color: colors.textSecondary,
       marginBottom: spacing.xxl,
     },
-    input: {
-      marginBottom: spacing.md,
-    },
+    input: { marginBottom: spacing.md },
     textInput: {
       paddingHorizontal: 16,
       paddingVertical: 14,
@@ -165,11 +173,7 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
       marginBottom: spacing.sm,
       fontSize: 14,
     },
-    submit: {
-      marginTop: spacing.sm,
-    },
-    secondary: {
-      marginTop: spacing.md,
-    },
+    submit: { marginTop: spacing.sm },
+    secondary: { marginTop: spacing.md },
   });
 }

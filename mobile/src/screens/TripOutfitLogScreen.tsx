@@ -20,7 +20,10 @@ import { PostCard } from '../components/PostCard';
 import type { AppStackParamList } from '../navigation/RootNavigator';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import {
+  stackScrollContentPaddingTop,
+  STACK_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   shadow,
@@ -50,7 +53,7 @@ function tripDateLabel(log: TripLog): string {
 
 export function TripOutfitLogScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [logs, setLogs] = useState<TripLog[]>([]);
@@ -99,12 +102,12 @@ export function TripOutfitLogScreen({ navigation }: Props) {
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
+        contentContainerStyle={[styles.container, { paddingTop: scrollTop }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             tintColor={colors.accent}
-            progressViewOffset={headerPad}
+            progressViewOffset={scrollTop}
             onRefresh={() => {
               setRefreshing(true);
               load();
@@ -273,7 +276,7 @@ function makeStyles({
   return StyleSheet.create({
     container: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: 110,
+      paddingBottom: STACK_SCREEN_SCROLL_BOTTOM,
     },
     heading: {
       ...typography.title,

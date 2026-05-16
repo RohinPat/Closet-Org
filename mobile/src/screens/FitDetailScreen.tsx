@@ -30,7 +30,10 @@ import { REACTION_OPTIONS, relativeTime } from '../components/PostCard';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import {
+  stackScrollContentPaddingTop,
+  STACK_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   shadow,
@@ -45,7 +48,7 @@ type Props = NativeStackScreenProps<AppStackParamList, 'FitDetail'>;
 export function FitDetailScreen({ route, navigation }: Props) {
   const { postId } = route.params;
   const insets = useSafeAreaInsets();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { user } = useAuth();
@@ -220,7 +223,7 @@ export function FitDetailScreen({ route, navigation }: Props) {
           ref={listRef}
           data={comments}
           keyExtractor={(c) => String(c.id)}
-          contentContainerStyle={[styles.list, { paddingTop: headerPad }]}
+          contentContainerStyle={[styles.list, { paddingTop: scrollTop }]}
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View>
@@ -442,7 +445,7 @@ function makeStyles({
     },
     list: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: 100,
+      paddingBottom: STACK_SCREEN_SCROLL_BOTTOM,
     },
     header: {
       marginBottom: spacing.md,

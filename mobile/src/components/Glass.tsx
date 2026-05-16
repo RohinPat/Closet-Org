@@ -33,31 +33,52 @@ export function GlassCard({
   padded = true,
   ...rest
 }: GlassCardProps) {
-  const { surface } = useTheme();
+  const { colors, surface, mode } = useTheme();
   const resolvedTint = tint ?? surface.blurTint;
+  /* Light: blur clips show a gray rim; hairlines/shadows read as a dirty frame on white fills. */
+  const lightSurface = mode === 'light';
+  const skipCardBlur = lightSurface;
+  const cardShadow = lightSurface
+    ? Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOpacity: 0,
+          shadowRadius: 0,
+          shadowOffset: { width: 0, height: 0 },
+        },
+        default: { elevation: 0 },
+      })!
+    : shadow.card;
   return (
     <View
       style={[
         sharedStyles.cardShell,
-        Platform.OS === 'android' && { backgroundColor: surface.cardOverlay },
+        Platform.OS === 'android' &&
+          (lightSurface
+            ? { backgroundColor: colors.surfaceSolid }
+            : { backgroundColor: surface.cardOverlay }),
         { borderRadius: radius },
-        shadow.card,
+        cardShadow,
         style,
       ]}
       {...rest}
     >
-      <BlurView
-        intensity={intensity}
-        tint={resolvedTint}
-        style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
-      />
+      {!skipCardBlur ? (
+        <BlurView
+          intensity={intensity}
+          tint={resolvedTint}
+          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+        />
+      ) : null}
       <View
         style={[
           StyleSheet.absoluteFill,
           {
             borderRadius: radius,
-            backgroundColor: surface.cardOverlay,
-            borderWidth: StyleSheet.hairlineWidth,
+            backgroundColor: lightSurface
+              ? colors.surfaceSolid
+              : surface.cardOverlay,
+            borderWidth: lightSurface ? 0 : StyleSheet.hairlineWidth,
             borderColor: surface.cardBorder,
           },
         ]}
@@ -89,9 +110,14 @@ export function GlassButton({
   fullWidth = true,
   ...rest
 }: GlassButtonProps) {
-  const { colors, surface } = useTheme();
+  const { colors, surface, mode } = useTheme();
   const isPrimary = variant === 'primary';
   const isDanger = variant === 'danger';
+  /* Light blur + light overlays reads as a solid white tile; Android blur is often opaque. */
+  const skipButtonBlur = mode === 'light' || Platform.OS === 'android';
+
+  /* Light: skip border on filled secondaries — hairline reads as a dirty gray frame on white fills. */
+  const lightFlatSecondary = mode === 'light' && !isDanger;
 
   return (
     <Pressable
@@ -111,15 +137,17 @@ export function GlassButton({
           colors={colors.accentGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { borderRadius: radii.md }]}
         />
       ) : (
         <>
-          <BlurView
-            intensity={50}
-            tint={surface.blurTint}
-            style={StyleSheet.absoluteFill}
-          />
+          {!skipButtonBlur ? (
+            <BlurView
+              intensity={50}
+              tint={surface.blurTint}
+              style={[StyleSheet.absoluteFill, { borderRadius: radii.md }]}
+            />
+          ) : null}
           <View
             style={[
               StyleSheet.absoluteFill,
@@ -130,7 +158,7 @@ export function GlassButton({
                     : isDanger
                       ? colors.dangerSoft
                       : surface.secondaryOverlay,
-                borderWidth: StyleSheet.hairlineWidth,
+                borderWidth: lightFlatSecondary ? 0 : StyleSheet.hairlineWidth,
                 borderColor: isDanger
                   ? 'rgba(255, 69, 58, 0.32)'
                   : surface.secondaryBorder,
@@ -203,10 +231,9 @@ export function ScreenBackground({
 }: ScreenBackgroundProps) {
   const { colors, surface } = useTheme();
   const resolvedOrbs: Orb[] = orbs ?? [
-    { size: 320, top: -80, right: -100, color: colors.orbPink },
-    { size: 280, top: 180, left: -120, color: colors.orbPurple },
-    { size: 360, bottom: -120, right: -90, color: colors.orbBlue },
-    { size: 220, bottom: 220, left: -60, color: colors.orbPeach },
+    { size: 260, top: -65, right: -85, color: colors.orbPurple },
+    { size: 220, top: 140, left: -95, color: colors.orbPink },
+    { size: 280, bottom: -95, right: -75, color: colors.orbBlue },
   ];
   return (
     <View
@@ -240,7 +267,7 @@ export function ScreenBackground({
         />
       ))}
       <BlurView
-        intensity={Platform.OS === 'ios' ? 60 : 40}
+        intensity={Platform.OS === 'ios' ? 72 : 52}
         tint={surface.blurTint}
         style={StyleSheet.absoluteFill}
       />
@@ -256,7 +283,9 @@ export function GlassInputContainer({
   style,
   ...rest
 }: GlassInputContainerProps) {
-  const { surface } = useTheme();
+  const { colors, surface, mode } = useTheme();
+  const lightSurface = mode === 'light';
+  const skipInputBlur = lightSurface;
   return (
     <View
       style={[
@@ -265,18 +294,22 @@ export function GlassInputContainer({
       ]}
       {...rest}
     >
-      <BlurView
-        intensity={30}
-        tint={surface.blurTint}
-        style={[StyleSheet.absoluteFill, { borderRadius: radii.md }]}
-      />
+      {!skipInputBlur ? (
+        <BlurView
+          intensity={30}
+          tint={surface.blurTint}
+          style={[StyleSheet.absoluteFill, { borderRadius: radii.md }]}
+        />
+      ) : null}
       <View
         style={[
           StyleSheet.absoluteFill,
           {
             borderRadius: radii.md,
-            backgroundColor: surface.inputOverlay,
-            borderWidth: StyleSheet.hairlineWidth,
+            backgroundColor: lightSurface
+              ? colors.surfaceSolid
+              : surface.inputOverlay,
+            borderWidth: lightSurface ? 0 : StyleSheet.hairlineWidth,
             borderColor: surface.inputBorder,
           },
         ]}

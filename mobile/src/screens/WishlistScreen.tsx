@@ -37,7 +37,10 @@ import type { AppStackParamList } from '../navigation/RootNavigator';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { imagePickerAssetToUpload } from '../utils/imageUpload';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import {
+  stackScrollContentPaddingTop,
+  STACK_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   spacing,
@@ -81,7 +84,7 @@ function confirmRemove(message: string): Promise<boolean> {
 
 export function WishlistScreen({ route }: Props) {
   const insets = useSafeAreaInsets();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -178,7 +181,7 @@ export function WishlistScreen({ route }: Props) {
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
+        contentContainerStyle={[styles.container, { paddingTop: scrollTop }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -585,7 +588,7 @@ function makeStyles({
   return StyleSheet.create({
     container: {
       paddingHorizontal: spacing.xl,
-      paddingBottom: 120,
+      paddingBottom: STACK_SCREEN_SCROLL_BOTTOM,
     },
     heading: {
       ...typography.title,

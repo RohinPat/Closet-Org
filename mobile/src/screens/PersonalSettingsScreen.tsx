@@ -16,12 +16,20 @@ import type { ClosetLocation } from '../api/types';
 import { Avatar } from '../components/Avatar';
 import { GlassButton, GlassCard, ScreenBackground } from '../components/Glass';
 import { useAuth } from '../context/AuthContext';
-import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import {
+  useTheme,
+  useThemedStyles,
+  type ThemeContextValue,
+} from '../context/ThemeContext';
 import type { AppStackParamList } from '../navigation/RootNavigator';
 import {
   cycleDensity,
   cycleSort,
+  densityDescription,
   densityLabel,
+  layoutDescription,
+  layoutLabel,
+  sortDescription,
   sortLabel,
   useDensityPref,
   useLayoutPref,
@@ -29,7 +37,10 @@ import {
 } from '../preferences';
 import { imagePickerAssetToUpload } from '../utils/imageUpload';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import {
+  stackScrollContentPaddingTop,
+  STACK_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   spacing,
@@ -57,7 +68,7 @@ const LOCATION_KINDS = ['home', 'school', 'parent', 'work', 'storage', 'other'];
 
 export function PersonalSettingsScreen({}: Props) {
   const insets = useSafeAreaInsets();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { user, refreshUser } = useAuth();
   const { colors, pref, setPref } = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -240,8 +251,11 @@ export function PersonalSettingsScreen({}: Props) {
   return (
     <View style={{ flex: 1 }}>
       <ScreenBackground />
-      <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
+        <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: scrollTop },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.heading}>Personal Settings</Text>
@@ -297,12 +311,36 @@ export function PersonalSettingsScreen({}: Props) {
         </GlassCard>
 
         <GlassCard padded style={styles.card}>
-          <Text style={styles.cardTitle}>App Layout</Text>
-          <Text style={styles.hint}>Tune the closet view for how you browse.</Text>
-          <View style={styles.actionGrid}>
-            <GlassButton title={`Density: ${densityLabel(density)}`} onPress={() => setDensity(cycleDensity(density))} variant="secondary" />
-            <GlassButton title={`Sort: ${sortLabel(sort)}`} onPress={() => setSort(cycleSort(sort))} variant="secondary" />
-            <GlassButton title={`Layout: ${layout === 'grid' ? 'Grid' : 'Rails'}`} onPress={() => setLayout(layout === 'grid' ? 'rails' : 'grid')} variant="secondary" />
+          <Text style={styles.cardTitle}>Closet view</Text>
+          <Text style={styles.hint}>
+            Applies on the Closet tab. Tap a row to cycle through options.
+          </Text>
+          <View style={styles.cycleRowsWrap}>
+            <ClosetPrefCycleRow
+              styles={styles}
+              colors={colors}
+              title="Grid density"
+              currentLabel={densityLabel(density)}
+              description={densityDescription(density)}
+              onPress={() => setDensity(cycleDensity(density))}
+            />
+            <ClosetPrefCycleRow
+              styles={styles}
+              colors={colors}
+              title="Default sort"
+              currentLabel={sortLabel(sort)}
+              description={sortDescription(sort)}
+              onPress={() => setSort(cycleSort(sort))}
+            />
+            <ClosetPrefCycleRow
+              styles={styles}
+              colors={colors}
+              title="Browse layout"
+              currentLabel={layoutLabel(layout)}
+              description={layoutDescription(layout)}
+              onPress={() => setLayout(layout === 'grid' ? 'rails' : 'grid')}
+              isLast
+            />
           </View>
         </GlassCard>
 
@@ -391,31 +429,64 @@ export function PersonalSettingsScreen({}: Props) {
   );
 }
 
-function makeStyles({
+function ClosetPrefCycleRow({
+  styles,
   colors,
-  surface,
+  title,
+  currentLabel,
+  description,
+  onPress,
+  isLast,
 }: {
+  styles: ReturnType<typeof makeStyles>;
   colors: ThemeColors;
-  surface: ThemeSurface;
+  title: string;
+  currentLabel: string;
+  description: string;
+  onPress: () => void;
+  isLast?: boolean;
 }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.cycleRow,
+        isLast && styles.cycleRowLast,
+        { opacity: pressed ? 0.88 : 1 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}: ${currentLabel}`}
+      accessibilityHint="Cycles to the next option"
+    >
+      <View style={styles.cycleRowText}>
+        <Text style={styles.cycleRowKicker}>{title}</Text>
+        <Text style={styles.cycleRowValue}>{currentLabel}</Text>
+        <Text style={styles.cycleRowDesc}>{description}</Text>
+      </View>
+      <Ionicons name="swap-horizontal" size={22} color={colors.accent} />
+    </Pressable>
+  );
+}
+
+function makeStyles({ colors, surface, mode }: ThemeContextValue) {
   return StyleSheet.create({
     container: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: 130,
+      paddingBottom: STACK_SCREEN_SCROLL_BOTTOM,
     },
     heading: {
       ...typography.title,
       color: colors.text,
+      marginBottom: spacing.xs,
     },
     blurb: {
       ...typography.callout,
       color: colors.textSecondary,
-      marginTop: 4,
-      marginBottom: spacing.lg,
-      lineHeight: 21,
+      marginBottom: spacing.xl,
+      lineHeight: 22,
     },
     card: {
-      marginBottom: spacing.md,
+      marginBottom: spacing.lg,
     },
     avatarRow: {
       flexDirection: 'row',
@@ -430,8 +501,8 @@ function makeStyles({
     hint: {
       ...typography.caption,
       color: colors.textSecondary,
-      marginTop: 4,
-      lineHeight: 18,
+      marginTop: spacing.sm,
+      lineHeight: 20,
     },
     input: {
       marginTop: spacing.md,
@@ -448,9 +519,39 @@ function makeStyles({
       minHeight: 82,
       textAlignVertical: 'top',
     },
-    actionGrid: {
-      gap: spacing.sm,
+    cycleRowsWrap: {
       marginTop: spacing.md,
+    },
+    cycleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: surface.cardBorder,
+      gap: spacing.md,
+    },
+    cycleRowLast: {
+      borderBottomWidth: 0,
+    },
+    cycleRowText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    cycleRowKicker: {
+      ...typography.micro,
+      color: colors.textSecondary,
+      marginBottom: 4,
+    },
+    cycleRowValue: {
+      ...typography.bodyMedium,
+      fontSize: 17,
+      color: colors.text,
+    },
+    cycleRowDesc: {
+      ...typography.caption,
+      color: colors.textMuted,
+      marginTop: 6,
+      lineHeight: 19,
     },
     locationRow: {
       flexDirection: 'row',
@@ -489,7 +590,7 @@ function makeStyles({
       paddingVertical: 8,
       borderRadius: radii.pill,
       backgroundColor: surface.chipInactive,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: mode === 'light' ? 0 : StyleSheet.hairlineWidth,
       borderColor: surface.chipInactiveBorder,
     },
     kindText: {

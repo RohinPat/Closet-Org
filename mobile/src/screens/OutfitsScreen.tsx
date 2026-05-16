@@ -62,7 +62,7 @@ import { useTheme, useThemedStyles } from '../context/ThemeContext';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { tabTopPadding } from '../utils/screenSpacing';
+import { tabScrollContentPaddingTop, TAB_SCREEN_SCROLL_BOTTOM } from '../utils/screenSpacing';
 
 import {
 
@@ -77,6 +77,10 @@ import {
   type ThemeSurface,
 
 } from '../theme';
+
+import { useOutfitsAssistantPanels } from '../preferences';
+
+import { Ionicons } from '@expo/vector-icons';
 
 
 
@@ -183,7 +187,9 @@ const OUTFIT_SOURCES: { label: string; value: OutfitSource }[] = [
 
 function Chip({ label, active, onPress }: ChipProps) {
 
-  const { colors, surface } = useTheme();
+  const { colors, surface, mode } = useTheme();
+
+  const lightChip = mode === 'light';
 
   return (
 
@@ -201,15 +207,13 @@ function Chip({ label, active, onPress }: ChipProps) {
 
     >
 
-      <BlurView
-
-        intensity={active ? 0 : 40}
-
-        tint={surface.blurTint}
-
-        style={[StyleSheet.absoluteFill, { borderRadius: radii.pill }]}
-
-      />
+      {!lightChip ? (
+        <BlurView
+          intensity={active ? 0 : 40}
+          tint={surface.blurTint}
+          style={[StyleSheet.absoluteFill, { borderRadius: radii.pill }]}
+        />
+      ) : null}
 
       <View
 
@@ -223,7 +227,7 @@ function Chip({ label, active, onPress }: ChipProps) {
 
             borderRadius: radii.pill,
 
-            borderWidth: StyleSheet.hairlineWidth,
+            borderWidth: lightChip ? 0 : StyleSheet.hairlineWidth,
 
             borderColor: active ? colors.accent : surface.chipInactiveBorder,
 
@@ -261,7 +265,7 @@ export function OutfitsScreen() {
 
   const insets = useSafeAreaInsets();
 
-  const headerPad = tabTopPadding(insets);
+  const scrollTop = tabScrollContentPaddingTop(insets);
 
   const { colors, surface } = useTheme();
 
@@ -308,6 +312,8 @@ export function OutfitsScreen() {
   const [selectedStylistItemId, setSelectedStylistItemId] = useState<number | null>(null);
 
   const [feedbackBySignature, setFeedbackBySignature] = useState<Record<string, string>>({});
+
+  const [assistantPanels, setAssistantPanels] = useOutfitsAssistantPanels();
 
 
 
@@ -697,6 +703,14 @@ export function OutfitsScreen() {
 
 
 
+  const bothWidgets =
+
+    assistantPanels.weather === 'widget' &&
+
+    assistantPanels.stylist === 'widget';
+
+
+
   return (
 
     <View style={{ flex: 1 }}>
@@ -705,7 +719,7 @@ export function OutfitsScreen() {
 
       <ScrollView
 
-        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
+        contentContainerStyle={[styles.container, { paddingTop: scrollTop }]}
 
         showsVerticalScrollIndicator={false}
 
@@ -719,7 +733,7 @@ export function OutfitsScreen() {
 
             tintColor={colors.accent}
 
-            progressViewOffset={headerPad}
+            progressViewOffset={scrollTop}
 
           />
 
@@ -737,7 +751,29 @@ export function OutfitsScreen() {
 
 
 
-        <GlassCard padded style={styles.weatherCard}>
+        <View style={styles.assistantPanelsWrap}>
+
+        <GlassCard
+
+          padded={assistantPanels.weather === 'full'}
+
+          radius={assistantPanels.weather === 'widget' ? radii.md : radii.lg}
+
+          style={[
+
+            styles.weatherCard,
+
+            bothWidgets && assistantPanels.weather === 'widget'
+
+              ? styles.assistantCardTightGap
+
+              : null,
+
+          ]}
+
+        >
+
+          {assistantPanels.weather === 'full' ? (
 
           <View style={styles.weatherHeader}>
 
@@ -757,25 +793,169 @@ export function OutfitsScreen() {
 
             </View>
 
-            <GlassButton
+            <View style={styles.assistantHeaderActions}>
 
-              title={weatherSync ? 'Weather on' : 'Use weather'}
+              <Pressable
 
-              variant={weatherSync ? 'secondary' : 'primary'}
+                onPress={() => setAssistantPanels({ weather: 'widget' })}
+
+                hitSlop={10}
+
+                style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+
+                accessibilityRole="button"
+
+                accessibilityLabel="Minimize weather"
+
+              >
+
+                <Ionicons
+
+                  name="chevron-down"
+
+                  size={22}
+
+                  color={colors.textMuted}
+
+                />
+
+              </Pressable>
+
+              <GlassButton
+
+                title={weatherSync ? 'Weather on' : 'Use weather'}
+
+                variant={weatherSync ? 'secondary' : 'primary'}
+
+                onPress={toggleWeatherSync}
+
+                fullWidth={false}
+
+              />
+
+            </View>
+
+          </View>
+
+          ) : (
+
+          <View style={styles.assistantWidgetInset}>
+
+          <View
+
+            style={[styles.assistantWidgetRowInner, styles.assistantWidgetRowStretch]}
+
+          >
+
+            <Pressable
+
+              onPress={() => setAssistantPanels({ weather: 'full' })}
+
+              style={styles.assistantWidgetTap}
+
+              accessibilityRole="button"
+
+              accessibilityLabel="Expand weather"
+
+            >
+
+              <Ionicons
+
+                name="partly-sunny-outline"
+
+                size={22}
+
+                color={colors.accent}
+
+              />
+
+              <View style={styles.assistantWidgetTextCol}>
+
+                <Text style={styles.widgetHeadline} numberOfLines={1}>
+
+                  {weatherHeadline(weather)}
+
+                </Text>
+
+                <Text style={styles.widgetCaption} numberOfLines={1}>
+
+                  {weatherBusy
+
+                    ? 'Syncing…'
+
+                    : weather
+
+                    ? weatherDetail(weather)
+
+                    : 'Weather off · tap for options'}
+
+                </Text>
+
+              </View>
+
+            </Pressable>
+
+            <Pressable
 
               onPress={toggleWeatherSync}
 
-              fullWidth={false}
+              hitSlop={10}
 
-            />
+              accessibilityRole="button"
+
+              accessibilityLabel={
+
+                weatherSync ? 'Turn off weather sync' : 'Use weather'
+
+              }
+
+            >
+
+              <Ionicons
+
+                name={weatherSync ? 'cloud-done-outline' : 'cloud-outline'}
+
+                size={22}
+
+                color={weatherSync ? colors.accent : colors.textMuted}
+
+              />
+
+            </Pressable>
 
           </View>
+
+          </View>
+
+          )}
 
         </GlassCard>
 
 
 
-        <GlassCard padded style={styles.stylistCard}>
+        <GlassCard
+
+          padded={assistantPanels.stylist === 'full'}
+
+          radius={assistantPanels.stylist === 'widget' ? radii.md : radii.lg}
+
+          style={[
+
+            styles.stylistCard,
+
+            bothWidgets && assistantPanels.stylist === 'widget'
+
+              ? styles.assistantStylistPairLast
+
+              : null,
+
+          ]}
+
+        >
+
+          {assistantPanels.stylist === 'full' ? (
+
+          <>
 
           <View style={styles.stylistHeader}>
 
@@ -791,13 +971,43 @@ export function OutfitsScreen() {
 
             </View>
 
-            <View style={styles.sourceBadge}>
+            <View style={styles.stylistHeaderAside}>
 
-              <Text style={styles.sourceText}>
+              <Pressable
 
-                {stylistResponse?.source === 'claude' ? 'Claude' : 'Local'}
+                onPress={() => setAssistantPanels({ stylist: 'widget' })}
 
-              </Text>
+                hitSlop={10}
+
+                style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+
+                accessibilityRole="button"
+
+                accessibilityLabel="Minimize AI stylist"
+
+              >
+
+                <Ionicons
+
+                  name="chevron-down"
+
+                  size={22}
+
+                  color={colors.textMuted}
+
+                />
+
+              </Pressable>
+
+              <View style={styles.sourceBadge}>
+
+                <Text style={styles.sourceText}>
+
+                  {stylistResponse?.source === 'claude' ? 'Claude' : 'Local'}
+
+                </Text>
+
+              </View>
 
             </View>
 
@@ -1035,9 +1245,81 @@ export function OutfitsScreen() {
 
           ) : null}
 
+          </>
+
+          ) : (
+
+          <View style={styles.assistantWidgetInset}>
+
+          <Pressable
+
+            onPress={() => setAssistantPanels({ stylist: 'full' })}
+
+            style={[styles.assistantWidgetRowInner, styles.assistantWidgetRowStretch]}
+
+            accessibilityRole="button"
+
+            accessibilityLabel="Expand AI stylist"
+
+          >
+
+            <Ionicons
+
+              name="sparkles-outline"
+
+              size={20}
+
+              color={colors.accent}
+
+            />
+
+            <View style={styles.assistantWidgetTextCol}>
+
+              <Text style={styles.widgetHeadline} numberOfLines={1}>
+
+                AI Stylist
+
+              </Text>
+
+              <Text style={styles.widgetCaption} numberOfLines={1}>
+
+                {stylistLoading
+
+                  ? 'Thinking…'
+
+                  : stylistError
+
+                  ? stylistError
+
+                  : stylistResponse
+
+                  ? stylistResponse.message
+
+                  : 'Tap to ask what to wear'}
+
+              </Text>
+
+            </View>
+
+            <Ionicons
+
+              name="chevron-forward"
+
+              size={16}
+
+              color={colors.textMuted}
+
+            />
+
+          </Pressable>
+
+          </View>
+
+          )}
+
         </GlassCard>
 
-
+        </View>
 
         <Text style={styles.sectionLabel}>Suggestion mode</Text>
 
@@ -1379,7 +1661,7 @@ function makeStyles({
 
       paddingHorizontal: spacing.xl,
 
-      paddingBottom: 120,
+      paddingBottom: TAB_SCREEN_SCROLL_BOTTOM,
 
     },
 
@@ -1400,6 +1682,106 @@ function makeStyles({
       color: colors.textSecondary,
 
       marginBottom: spacing.xl,
+
+    },
+
+    assistantPanelsWrap: {
+
+      marginBottom: spacing.lg,
+
+    },
+
+    assistantCardTightGap: {
+
+      marginBottom: spacing.sm,
+
+    },
+
+    assistantStylistPairLast: {
+
+      marginBottom: 0,
+
+    },
+
+    assistantWidgetInset: {
+
+      paddingVertical: spacing.sm,
+
+      paddingHorizontal: spacing.md,
+
+    },
+
+    assistantWidgetRowStretch: {
+
+      alignSelf: 'stretch',
+
+    },
+
+    assistantHeaderActions: {
+
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      gap: spacing.sm,
+
+    },
+
+    assistantWidgetRowInner: {
+
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      gap: spacing.sm,
+
+    },
+
+    assistantWidgetTap: {
+
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      gap: spacing.sm,
+
+      minWidth: 0,
+
+      flex: 1,
+
+    },
+
+    assistantWidgetTextCol: {
+
+      flex: 1,
+
+      minWidth: 0,
+
+    },
+
+    widgetHeadline: {
+
+      ...typography.bodyMedium,
+
+      color: colors.text,
+
+    },
+
+    widgetCaption: {
+
+      ...typography.caption,
+
+      color: colors.textSecondary,
+
+      marginTop: 2,
+
+    },
+
+    stylistHeaderAside: {
+
+      alignItems: 'flex-end',
+
+      gap: spacing.xs,
 
     },
 

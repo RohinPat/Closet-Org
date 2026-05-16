@@ -75,3 +75,65 @@ def test_register_duplicate_username(client, strong_password: str) -> None:
         },
     )
     assert r.status_code == 400
+
+
+def test_forgot_password_unknown_email_returns_success_shape(client) -> None:
+    r = client.post(
+        "/api/auth/forgot-password",
+        json={"email": "nobody-here@example.com"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["success"] is True
+    assert "message" in data
+    assert "dev_reset_token" not in data
+
+
+def test_forgot_and_reset_password(client, strong_password: str) -> None:
+    _register(
+        client,
+        username="resetme",
+        email="resetme@example.com",
+        password=strong_password,
+    )
+    r_f = client.post(
+        "/api/auth/forgot-password",
+        json={"email": "resetme@example.com"},
+    )
+    assert r_f.status_code == 200, r_f.text
+    tok = r_f.json().get("dev_reset_token")
+    assert tok
+
+    new_pw = "Xyzzy9zz!extra"
+    r_r = client.post(
+        "/api/auth/reset-password",
+        json={"token": tok, "new_password": new_pw},
+    )
+    assert r_r.status_code == 200, r_r.text
+
+    r_login = client.post(
+        "/api/auth/login",
+        json={"username": "resetme", "password": new_pw},
+    )
+    assert r_login.status_code == 200, r_login.text
+
+    r_bad_old = client.post(
+        "/api/auth/login",
+        json={"username": "resetme", "password": strong_password},
+    )
+    assert r_bad_old.status_code == 401
+
+
+def test_register_rejects_same_email_different_case(client, strong_password: str) -> None:
+    _register(client, username="user1", email="Same@Example.com", password=strong_password)
+    r = client.post(
+        "/api/auth/register",
+        json={
+            "username": "user2",
+            "email": "same@example.com",
+            "password": strong_password,
+            "full_name": "Y",
+        },
+    )
+    assert r.status_code == 400
+    assert "email" in r.text.lower()

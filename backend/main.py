@@ -4,9 +4,8 @@
 
 Security posture (see SECURITY.md for the long version):
 
-- All /api/ routes outside /api/auth/{register,login} require a valid Bearer
-
-  JWT. Every route that takes an item / queue id as a path parameter checks
+- All /api/ routes outside /api/auth/{register,login,forgot-password,reset-password}
+  require a valid Bearer JWT. Every route that takes an item / queue id as a path parameter checks
 
   ownership against the authenticated user before doing anything.
 
@@ -30,6 +29,8 @@ from __future__ import annotations
 
 import csv
 
+import hashlib
+
 import io
 
 import logging
@@ -40,9 +41,15 @@ import random
 
 import re
 
+import secrets
+
+import time
+
 from datetime import datetime, timezone
 
 from pathlib import Path
+
+from password_reset_email import send_password_reset_email, smtp_configured
 
 from typing import Annotated, Dict, List, Optional, Set
 
@@ -324,6 +331,24 @@ class PasswordChange(BaseModel):
 
 
 
+class PasswordForgot(BaseModel):
+
+    email: EmailStr
+
+
+
+
+
+class PasswordResetConfirm(BaseModel):
+
+    token: str = Field(..., min_length=8, max_length=512)
+
+    new_password: str = Field(..., min_length=1, max_length=512)
+
+
+
+
+
 class ItemStatusUpdate(BaseModel):
 
     worn: Optional[bool] = None
@@ -497,6 +522,24 @@ class BulkItemCreate(BaseModel):
 class CsvImportBody(BaseModel):
 
     csv_text: str = Field(..., min_length=1, max_length=200_000)
+
+
+
+
+
+class ManualClosetImportBody(BaseModel):
+
+    """Single closet row without CSV / photos — same persistence as spreadsheet import."""
+
+    title: str = Field(..., min_length=1, max_length=120)
+
+    subcategory: str = Field(default="Other", min_length=1, max_length=40)
+
+    colors: Optional[List[str]] = Field(default=None, max_length=24)
+
+    description: Optional[str] = Field(default=None, max_length=2000)
+
+    tags: Optional[List[str]] = Field(default=None, max_length=48)
 
 
 
@@ -1449,7 +1492,9 @@ def _public_user(user: dict) -> dict:
 
 async def register(user_data: UserRegister, request: Request):
 
-    """Register a new user."""
+    """Register a new user. Email is normalized to lowercase and must be unique
+    ignoring case (same address cannot exist twice).
+    """
 
     # Tight per-IP cap. Doesn't stop a botnet but stops 1-IP signup floods.
 
@@ -1492,6 +1537,15 @@ async def register(user_data: UserRegister, request: Request):
     )
 
     if user_id is None:
+
+        # Race: two requests can pass the pre-checks but collide on INSERT.
+        if db.get_user_by_email(email):
+
+            raise HTTPException(status_code=400, detail="Email already exists")
+
+        if db.get_user_by_username(username):
+
+            raise HTTPException(status_code=400, detail="Username already exists")
 
         raise HTTPException(status_code=500, detail="Failed to create user")
 
@@ -1628,6 +1682,148 @@ async def login(credentials: UserLogin, request: Request):
         "token_type": "bearer",
 
         "user": _public_user(user),
+
+    }
+
+
+
+
+
+_RESET_TTL_SECONDS = 3600
+
+
+
+
+
+@app.post("/api/auth/forgot-password")
+
+async def forgot_password(body: PasswordForgot, request: Request):
+
+    """Request a password reset email (or dev token when SMTP is not configured).
+
+
+
+    Always returns the same shape so callers cannot enumerate registered emails.
+
+    """
+
+    rate_limit(request, "auth.forgot_password", limit=5, window=3600)
+
+
+
+    email = normalize_email(str(body.email))
+
+    generic_message = (
+
+        "If an account exists for that email, you will receive reset instructions shortly."
+
+    )
+
+    payload: Dict[str, object] = {
+
+        "success": True,
+
+        "message": generic_message,
+
+    }
+
+
+
+    user = db.get_user_by_email(email)
+
+    if not user:
+
+        return payload
+
+
+
+    raw = secrets.token_urlsafe(32)
+
+    token_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    db.issue_password_reset_token(
+
+        int(user["id"]), token_hash, int(time.time()) + _RESET_TTL_SECONDS
+
+    )
+
+
+
+    send_password_reset_email(
+
+        user["email"], username=str(user["username"]), reset_token=raw
+
+    )
+
+
+
+    if not PRODUCTION and not smtp_configured():
+
+        payload["dev_reset_token"] = raw
+
+        payload["message"] = (
+
+            "Development mode: SMTP is not configured. Use dev_reset_token on the "
+
+            "reset screen (also logged on the server)."
+
+        )
+
+
+
+    return payload
+
+
+
+
+
+@app.post("/api/auth/reset-password")
+
+async def reset_password(body: PasswordResetConfirm, request: Request):
+
+    """Consume a one-time reset token from email (forgot-password flow)."""
+
+    rate_limit(request, "auth.reset_password", limit=15, window=600)
+
+
+
+    token_hash = hashlib.sha256(body.token.strip().encode("utf-8")).hexdigest()
+
+    user_id = db.consume_password_reset_token(token_hash)
+
+    if user_id is None:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail="Invalid or expired reset link",
+
+        )
+
+
+
+    user = db.get_user_by_id(user_id)
+
+    if not user:
+
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+
+
+
+    validate_password(body.new_password, username=str(user["username"]))
+
+    db.update_password(int(user["id"]), hash_password(body.new_password))
+
+    db.bump_token_version(int(user["id"]))
+
+
+
+    return {
+
+        "success": True,
+
+        "message": "Password updated. You can sign in now.",
 
     }
 
@@ -2690,6 +2886,104 @@ async def import_closet_csv(
         raise HTTPException(status_code=400, detail={"created": 0, "skipped": skipped[:20]})
 
     return {"success": True, "created": len(created), "item_ids": created, "skipped": skipped[:20]}
+
+
+
+
+@app.post("/api/closet/import-manual")
+
+async def import_closet_manual(
+
+    request: Request,
+
+    body: ManualClosetImportBody,
+
+    current_user: dict = Depends(get_current_user),
+
+):
+
+    """Add one spreadsheet-style row via a form instead of pasted CSV."""
+
+    rate_limit(request, "closet.import_manual", limit=60, window=600)
+
+    def _squeeze_str_list(raw: Optional[List[str]], *, cap: int) -> List[str]:
+
+        if not raw:
+
+            return []
+
+        out: List[str] = []
+
+        seen: Set[str] = set()
+
+        for x in raw:
+
+            s = str(x).strip()
+
+            if not s or len(s) > 120:
+
+                continue
+
+            key = s.lower()
+
+            if key in seen:
+
+                continue
+
+            seen.add(key)
+
+            out.append(s)
+
+            if len(out) >= cap:
+
+                break
+
+        return out
+
+
+
+    cols = _squeeze_str_list(body.colors, cap=24)
+
+    tag_list = _squeeze_str_list(body.tags, cap=48)
+
+    notes = clip_text(body.description, max_len=2000) if body.description else None
+
+    try:
+
+        item_id = db.add_imported_clothing_item(
+
+            current_user["user_id"],
+
+            category=clip_text(body.title, max_len=40) or "Other",
+
+            subcategory=clip_text(body.subcategory, max_len=40) or "Other",
+
+            colors=cols,
+
+            notes=notes,
+
+            user_tags=tag_list,
+
+            quantity=1,
+
+            clean_count=None,
+
+            is_bulk=False,
+
+        )
+
+    except HTTPException:
+
+        raise
+
+    except Exception:
+
+        logger.exception("manual closet import failed")
+
+        raise HTTPException(status_code=500, detail="Could not add item")
+
+    return {"success": True, "created": 1, "item_id": item_id}
+
 
 
 

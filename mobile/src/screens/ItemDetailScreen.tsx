@@ -50,7 +50,7 @@ import {
 import { MAX_USER_TAG_LENGTH, MAX_USER_TAGS } from '../constants/tags';
 import { imagePickerAssetToUpload } from '../utils/imageUpload';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import { stackScrollContentPaddingTop, STACK_SCREEN_SCROLL_BOTTOM } from '../utils/screenSpacing';
 import {
   radii,
   shadow,
@@ -158,7 +158,7 @@ function formatFieldValue(
 
 export function ItemDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { colors, surface } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { item: initial } = route.params;
@@ -434,10 +434,10 @@ export function ItemDetailScreen({ route, navigation }: Props) {
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: STACK_SCREEN_SCROLL_BOTTOM }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.imageWrap, { paddingTop: headerPad }]}>
+        <View style={[styles.imageWrap, { paddingTop: scrollTop }]}>
           {galleryUris.length > 0 ? (
             <FlatList
               ref={carouselRef}
@@ -463,7 +463,7 @@ export function ItemDetailScreen({ route, navigation }: Props) {
           )}
           <Pressable
             onPress={onToggleFavorite}
-            style={[styles.favBtn, { top: headerPad + 12 }]}
+            style={[styles.favBtn, { top: scrollTop + 12 }]}
           >
             <View
               style={[
@@ -547,6 +547,11 @@ export function ItemDetailScreen({ route, navigation }: Props) {
             ) : null}
 
             <View style={styles.tagRow}>
+              {item.subcategory?.trim() ? (
+                <View style={[styles.tag, styles.slotTag]} accessibilityLabel="Group">
+                  <Text style={styles.tagText}>{item.subcategory.trim()}</Text>
+                </View>
+              ) : null}
               {item.style ? (
                 <View style={styles.tag}>
                   <Text style={styles.tagText}>{item.style}</Text>
@@ -578,10 +583,12 @@ export function ItemDetailScreen({ route, navigation }: Props) {
                   <Text style={styles.tagText}>{t}</Text>
                 </View>
               ))}
-              {!item.style &&
+              {!item.subcategory?.trim() &&
+              !item.style &&
               !item.season &&
               (item.colors || []).length === 0 &&
-              (item.user_tags || []).length === 0 ? (
+              (item.user_tags || []).length === 0 &&
+              !item.pattern ? (
                 <Text style={styles.tagsEmptyHint}>
                   Tap to edit tags or add your own
                 </Text>
@@ -1578,9 +1585,7 @@ function makeStyles({
   surface: ThemeSurface;
 }) {
   return StyleSheet.create({
-    content: {
-      paddingBottom: spacing.xxl,
-    },
+    content: {},
     imageWrap: {
       paddingHorizontal: spacing.xl,
     },
@@ -1709,6 +1714,11 @@ function makeStyles({
       backgroundColor: colors.accentSoft,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.accent,
+    },
+    slotTag: {
+      backgroundColor: surface.chipInactive,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surface.chipInactiveBorder,
     },
     tagText: {
       fontSize: 13,

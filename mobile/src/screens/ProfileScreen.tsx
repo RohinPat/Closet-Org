@@ -19,7 +19,11 @@ import * as api from '../api/client';
 import type { FitPost, PublicProfile, ReminderCard } from '../api/types';
 import { API_ORIGIN, absoluteUrl } from '../config';
 import { useAuth } from '../context/AuthContext';
-import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import {
+  useTheme,
+  useThemedStyles,
+  type ThemeContextValue,
+} from '../context/ThemeContext';
 import {
   GlassButton,
   GlassCard,
@@ -36,14 +40,15 @@ import {
   setWeatherSyncEnabled,
 } from '../weather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { tabTopPadding } from '../utils/screenSpacing';
+import {
+  tabScrollContentPaddingTop,
+  TAB_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   shadow,
   spacing,
   typography,
-  type ThemeColors,
-  type ThemeSurface,
   type ThemePref,
 } from '../theme';
 
@@ -64,7 +69,7 @@ const THEME_OPTIONS: ThemeOption[] = [
 export function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
-  const headerPad = tabTopPadding(insets);
+  const scrollTop = tabScrollContentPaddingTop(insets);
   const { user, signOut, refreshUser } = useAuth();
   const { colors, surface, pref, mode, setPref } = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -190,7 +195,10 @@ export function ProfileScreen() {
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: scrollTop },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -231,7 +239,7 @@ export function ProfileScreen() {
                 )}
               </View>
             </Pressable>
-            <View style={{ flex: 1, marginLeft: spacing.md }}>
+            <View style={styles.identityTextCol}>
               <Text style={styles.name}>
                 {user.full_name || user.username}
               </Text>
@@ -692,23 +700,17 @@ function Stat({
   return <View style={{ flex: 1 }}>{inner}</View>;
 }
 
-function makeStyles({
-  colors,
-  surface,
-}: {
-  colors: ThemeColors;
-  surface: ThemeSurface;
-}) {
+function makeStyles({ colors, surface, mode }: ThemeContextValue) {
   return StyleSheet.create({
     container: {
-      paddingHorizontal: spacing.xl,
-      paddingBottom: 120,
+      paddingHorizontal: spacing.lg,
+      paddingBottom: TAB_SCREEN_SCROLL_BOTTOM,
     },
     headerRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      marginBottom: spacing.lg,
+      marginBottom: spacing.xl,
     },
     heading: {
       ...typography.title,
@@ -722,16 +724,21 @@ function makeStyles({
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: surface.chipInactive,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: mode === 'light' ? 0 : StyleSheet.hairlineWidth,
       borderColor: surface.chipInactiveBorder,
     },
     card: {
-      padding: spacing.lg,
-      marginBottom: spacing.md,
+      marginBottom: spacing.lg,
     },
     identityRow: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
+    },
+    identityTextCol: {
+      flex: 1,
+      marginLeft: spacing.md,
+      minWidth: 0,
+      paddingTop: 2,
     },
     avatarWrap: {
       position: 'relative',
@@ -773,8 +780,9 @@ function makeStyles({
     statsRow: {
       flexDirection: 'row',
       justifyContent: 'space-around',
-      marginTop: spacing.lg,
-      paddingVertical: spacing.md,
+      marginTop: spacing.xl,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.sm,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderColor: colors.hairline,
     },
@@ -793,7 +801,7 @@ function makeStyles({
     profileActions: {
       flexDirection: 'row',
       gap: spacing.sm,
-      marginTop: spacing.md,
+      marginTop: spacing.lg,
     },
     editBlock: {
       marginTop: spacing.md,
@@ -822,9 +830,9 @@ function makeStyles({
     sectionLabel: {
       ...typography.micro,
       color: colors.textSecondary,
-      marginTop: spacing.lg,
+      marginTop: spacing.xl,
       marginBottom: spacing.sm,
-      marginLeft: 4,
+      marginLeft: 2,
     },
     emptyHint: {
       color: colors.textMuted,
@@ -855,7 +863,7 @@ function makeStyles({
     rowHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 8,
+      marginBottom: spacing.sm,
     },
     reminderRow: {
       flexDirection: 'row',
@@ -893,7 +901,7 @@ function makeStyles({
       paddingVertical: 10,
       paddingHorizontal: 8,
       borderRadius: radii.md,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: mode === 'light' ? 0 : StyleSheet.hairlineWidth,
     },
     segmentText: {
       fontSize: 14,

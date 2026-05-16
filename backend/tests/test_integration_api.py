@@ -171,6 +171,21 @@ def test_fit_check_visual_embedding_csv(client, h: dict) -> None:
     )
     assert imp.status_code == 200, imp.text
 
+    man = client.post(
+        "/api/closet/import-manual",
+        headers=h,
+        json={
+            "title": "Manual olive chinos",
+            "subcategory": "Bottom",
+            "colors": ["Olive"],
+            "description": "Straight fit.",
+            "tags": ["work", "basics"],
+        },
+    )
+    assert man.status_code == 200, man.text
+    assert man.json().get("created") == 1
+    assert isinstance(man.json().get("item_id"), int)
+
 
 def test_trips_and_locations(client, h: dict) -> None:
     bulk = client.post(

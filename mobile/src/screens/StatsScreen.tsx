@@ -16,7 +16,10 @@ import { GlassButton, GlassCard, ScreenBackground } from '../components/Glass';
 import type { AppStackParamList } from '../navigation/RootNavigator';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { stackTopPadding } from '../utils/screenSpacing';
+import {
+  stackScrollContentPaddingTop,
+  STACK_SCREEN_SCROLL_BOTTOM,
+} from '../utils/screenSpacing';
 import {
   radii,
   spacing,
@@ -69,7 +72,7 @@ function Tile({ value, label, icon, tint }: TileProps) {
 export function StatsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const headerPad = stackTopPadding(insets);
+  const scrollTop = stackScrollContentPaddingTop(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [stats, setStats] = useState<Awaited<
@@ -110,7 +113,7 @@ export function StatsScreen() {
     return (
       <View style={{ flex: 1 }}>
         <ScreenBackground />
-        <View style={[styles.container, { paddingTop: headerPad }]}>
+        <View style={[styles.container, { paddingTop: scrollTop }]}>
           <View style={styles.skeletonTitle} />
           <View style={styles.grid}>
             {[0, 1, 2, 3].map((idx) => (
@@ -144,7 +147,7 @@ export function StatsScreen() {
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
+        contentContainerStyle={[styles.container, { paddingTop: scrollTop }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -446,7 +449,7 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
     error: { color: colors.danger, padding: spacing.xl },
     container: {
       paddingHorizontal: spacing.xl,
-      paddingBottom: 120,
+      paddingBottom: STACK_SCREEN_SCROLL_BOTTOM,
     },
     heading: {
       ...typography.title,
@@ -466,7 +469,6 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
     },
     tile: {
       width: '47.5%',
-      padding: spacing.lg,
     },
     skeletonTitle: {
       width: 160,

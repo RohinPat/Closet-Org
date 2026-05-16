@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -9,8 +10,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as api from '../api/client';
 import type { AuthStackParamList } from '../navigation/RootNavigator';
-import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import {
   GlassButton,
@@ -20,28 +21,47 @@ import {
 } from '../components/Glass';
 import { spacing, typography, type ThemeColors } from '../theme';
 
-type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 
-export function LoginScreen({ navigation }: Props) {
-  const { signIn } = useAuth();
+export function ForgotPasswordScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function onSubmit() {
     setError(null);
-    if (!username.trim() || !password) {
-      setError('Enter username and password.');
+    if (!email.trim()) {
+      setError('Enter the email for your account.');
       return;
     }
     setBusy(true);
     try {
-      await signIn(username.trim(), password);
+      const data = await api.requestPasswordReset(email.trim());
+      const devTok = data.dev_reset_token;
+      if (devTok) {
+        Alert.alert(
+          'Check reset token',
+          `${data.message}\n\nYour dev token was copied into the next screen.`,
+          [
+            {
+              text: 'Continue',
+              onPress: () =>
+                navigation.navigate('ResetPassword', { token: devTok }),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Reset requested', data.message, [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('ResetPassword', {}),
+          },
+        ]);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Sign in failed');
+      setError(e instanceof Error ? e.message : 'Request failed');
     } finally {
       setBusy(false);
     }
@@ -56,60 +76,47 @@ export function LoginScreen({ navigation }: Props) {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.container}>
-            <View style={styles.brandWrap}>
-              <Text style={styles.brand}>Closet</Text>
-              <Text style={styles.brandAccent}>Org</Text>
-            </View>
-            <Text style={styles.subtitle}>Welcome back to your closet</Text>
+            <Text style={styles.title}>Forgot password</Text>
+            <Text style={styles.subtitle}>
+              We will email a reset link when SMTP is configured. In local dev,
+              the server may return a token instead.
+            </Text>
 
             <GlassCard padded>
               <GlassInputContainer style={styles.input}>
                 <TextInput
-                  testID="login-username"
-                  accessibilityLabel="Username"
+                  accessibilityLabel="Email"
                   style={styles.textInput}
-                  placeholder="Username"
+                  placeholder="Email"
                   placeholderTextColor={colors.placeholder}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  value={username}
-                  onChangeText={setUsername}
-                />
-              </GlassInputContainer>
-              <GlassInputContainer style={styles.input}>
-                <TextInput
-                  testID="login-password"
-                  accessibilityLabel="Password"
-                  style={styles.textInput}
-                  placeholder="Password"
-                  placeholderTextColor={colors.placeholder}
-                  secureTextEntry
-                  value={password}
-                  onChangeText={setPassword}
+                  keyboardType="email-address"
+                  value={email}
+                  onChangeText={setEmail}
                 />
               </GlassInputContainer>
 
               {error ? <Text style={styles.error}>{error}</Text> : null}
 
               <GlassButton
-                testID="login-submit"
-                title="Sign in"
+                title="Send reset link"
                 onPress={onSubmit}
                 loading={busy}
                 style={styles.submit}
               />
 
               <GlassButton
-                title="Forgot password?"
-                onPress={() => navigation.navigate('ForgotPassword')}
+                title="Enter reset code"
+                onPress={() => navigation.navigate('ResetPassword', {})}
                 variant="ghost"
                 disabled={busy}
                 style={styles.secondary}
               />
 
               <GlassButton
-                title="Create an account"
-                onPress={() => navigation.navigate('Register')}
+                title="Back to sign in"
+                onPress={() => navigation.goBack()}
                 variant="ghost"
                 disabled={busy}
                 style={styles.secondary}
@@ -132,28 +139,17 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
       paddingVertical: spacing.lg,
       justifyContent: 'center',
     },
-    brandWrap: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
-      marginBottom: spacing.sm,
-    },
-    brand: {
-      ...typography.largeTitle,
+    title: {
+      ...typography.title,
       color: colors.text,
-    },
-    brandAccent: {
-      ...typography.largeTitle,
-      color: colors.accent,
-      marginLeft: 6,
+      marginBottom: spacing.sm,
     },
     subtitle: {
       ...typography.callout,
       color: colors.textSecondary,
       marginBottom: spacing.xxl,
     },
-    input: {
-      marginBottom: spacing.md,
-    },
+    input: { marginBottom: spacing.md },
     textInput: {
       paddingHorizontal: 16,
       paddingVertical: 14,
@@ -165,11 +161,7 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
       marginBottom: spacing.sm,
       fontSize: 14,
     },
-    submit: {
-      marginTop: spacing.sm,
-    },
-    secondary: {
-      marginTop: spacing.md,
-    },
+    submit: { marginTop: spacing.sm },
+    secondary: { marginTop: spacing.md },
   });
 }

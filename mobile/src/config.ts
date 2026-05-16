@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 import { NativeModules, Platform } from 'react-native';
 
 /** Backend HTTP port when URL is inferred (`host` only). */
@@ -74,6 +75,13 @@ function inferDevApiOrigin(): string {
     return normalizeApiOrigin(`http://localhost:${DEFAULT_API_PORT}`);
   }
 
+  // Android emulator shares the host loopback at 10.0.2.2. Metro often reports
+  // the PC's LAN IP in the bundle URL; using that for the API from the
+  // emulator fails with "Network request failed", so prefer 10.0.2.2 first.
+  if (Platform.OS === 'android' && !Device.isDevice) {
+    return normalizeApiOrigin(`http://10.0.2.2:${DEFAULT_API_PORT}`);
+  }
+
   const bundleHost = apiHostFromBundle();
   if (bundleHost) {
     return normalizeApiOrigin(`http://${bundleHost}:${DEFAULT_API_PORT}`);
@@ -93,10 +101,6 @@ function inferDevApiOrigin(): string {
     if (host && !tunnelLikeHost(host)) {
       return normalizeApiOrigin(`http://${host}:${DEFAULT_API_PORT}`);
     }
-  }
-
-  if (Platform.OS === 'android') {
-    return normalizeApiOrigin(`http://10.0.2.2:${DEFAULT_API_PORT}`);
   }
 
   return normalizeApiOrigin(`http://localhost:${DEFAULT_API_PORT}`);

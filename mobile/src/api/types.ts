@@ -456,6 +456,34 @@ export type CsvImportResult = {
 
 
 
+export type ManualClosetImportPayload = {
+
+  title: string;
+
+  subcategory?: string;
+
+  colors?: string[];
+
+  description?: string | null;
+
+  tags?: string[];
+
+};
+
+
+
+export type ManualClosetImportResult = {
+
+  success: boolean;
+
+  created: number;
+
+  item_id: number;
+
+};
+
+
+
 export type VisualSearchMatch = {
 
   score: number;
