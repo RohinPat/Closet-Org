@@ -104,6 +104,15 @@ def _retirement_candidates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             reasons.append("Stale in rotation despite past wear")
         if tw >= 45:
             reasons.append("Very high wear — good time to audit fit and condition")
+        condition = it.get("condition_score")
+        try:
+            if condition is not None and float(condition) <= 0.45:
+                reasons.append("Condition is low")
+        except (TypeError, ValueError):
+            pass
+        price = it.get("purchase_price")
+        if price and tw == 0 and days_owned >= 90:
+            reasons.append("Owned 3+ months with no cost-per-wear progress")
 
         if reasons:
             rows.append(
@@ -190,6 +199,8 @@ def build_closet_insights(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     by_sub = Counter((it.get("subcategory") or "Other") for it in items)
     by_style = Counter(_style(it) for it in items)
     color_buckets = Counter(c for it in items for c in _colors(it))
+    by_season = Counter((it.get("season") or "All-Season") for it in items)
+    by_pattern = Counter((it.get("pattern") or "solid") for it in items)
 
     return {
         "gaps": gaps,
@@ -197,6 +208,8 @@ def build_closet_insights(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         "composition": {
             "by_subcategory": dict(by_sub.most_common()),
             "by_style": dict(by_style.most_common()),
+            "by_season": dict(by_season.most_common()),
+            "by_pattern": dict(by_pattern.most_common()),
             "color_buckets": dict(color_buckets.most_common(24)),
             "item_count": len(items),
         },

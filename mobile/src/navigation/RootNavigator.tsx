@@ -29,6 +29,8 @@ import { CreateFitScreen } from '../screens/CreateFitScreen';
 import { FriendsScreen } from '../screens/FriendsScreen';
 import { PublicProfileScreen } from '../screens/PublicProfileScreen';
 import { PackModeScreen } from '../screens/PackModeScreen';
+import { TripOutfitLogScreen } from '../screens/TripOutfitLogScreen';
+import { PlanningAheadScreen } from '../screens/PlanningAheadScreen';
 import { PersonalSettingsScreen } from '../screens/PersonalSettingsScreen';
 import { shadow, typography } from '../theme';
 
@@ -48,11 +50,30 @@ export type MainTabParamList = {
 export type AppStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   ItemDetail: { item: ClothingItem };
-  Wishlist: undefined;
+  Wishlist:
+    | {
+        openAdd?: boolean;
+        initialName?: string;
+        initialIntent?: 'want' | 'gift' | 'saving' | 'sale_watch';
+        initialCategory?: string;
+        initialSubcategory?: string;
+        initialNotes?: string;
+      }
+    | undefined;
   Stats: undefined;
   Friends: undefined;
   PackMode: undefined;
-  CreateFit: undefined;
+  TripOutfitLog: undefined;
+  PlanningAhead: undefined;
+  CreateFit:
+    | {
+        tripName?: string;
+        tripDestination?: string;
+        tripStart?: string;
+        tripEnd?: string;
+        packedOnly?: boolean;
+      }
+    | undefined;
   FitDetail: { postId: number };
   PublicProfile: { userId: number };
   PersonalSettings: undefined;
@@ -255,6 +276,16 @@ function AppStackNavigator() {
         name="PackMode"
         component={PackModeScreen}
         options={{ title: 'Pack Mode', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="TripOutfitLog"
+        component={TripOutfitLogScreen}
+        options={{ title: 'Trip log', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="PlanningAhead"
+        component={PlanningAheadScreen}
+        options={{ title: 'Planning Ahead', headerBackTitle: 'Back' }}
       />
       <AppStack.Screen
         name="CreateFit"

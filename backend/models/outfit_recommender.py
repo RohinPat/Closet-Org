@@ -50,6 +50,9 @@ class OutfitRecommender:
             "clean_prep": frozenset({"Formal", "Business"}),
             "streetwear": frozenset({"Streetwear", "Athletic"}),
             "cozy": frozenset({"Casual"}),
+            "minimal": frozenset({"Casual", "Business"}),
+            "bold": frozenset({"Streetwear", "Formal"}),
+            "athleisure": frozenset({"Athletic", "Casual"}),
         }
 
     @staticmethod

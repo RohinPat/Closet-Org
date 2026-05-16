@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -16,8 +17,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as api from '../api/client';
+import type { UploadPhoto } from '../api/client';
 import type {
   ClothingItem,
   WishlistCreate,
@@ -29,8 +32,10 @@ import {
   GlassInputContainer,
   ScreenBackground,
 } from '../components/Glass';
+import { itemThumbnailUrl } from '../config';
 import type { AppStackParamList } from '../navigation/RootNavigator';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import { imagePickerAssetToUpload } from '../utils/imageUpload';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { stackTopPadding } from '../utils/screenSpacing';
 import {
@@ -74,7 +79,7 @@ function confirmRemove(message: string): Promise<boolean> {
   });
 }
 
-export function WishlistScreen({ navigation }: Props) {
+export function WishlistScreen({ route }: Props) {
   const insets = useSafeAreaInsets();
   const headerPad = stackTopPadding(insets);
   const { colors } = useTheme();
@@ -103,6 +108,12 @@ export function WishlistScreen({ navigation }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (route.params?.openAdd) {
+      setAddOpen(true);
+    }
+  }, [route.params]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -137,9 +148,17 @@ export function WishlistScreen({ navigation }: Props) {
     }
   }
 
-  async function onCreate(body: WishlistCreate) {
+  async function onCreate(
+    body: WishlistCreate & { notes?: string | null },
+    photos: UploadPhoto[]
+  ) {
     try {
-      await api.createWishlistItem(body);
+      const created = photos.length
+        ? await api.uploadWishlistPhotos(photos, body)
+        : await api.createWishlistItem(body);
+      if (!photos.length && body.notes?.trim()) {
+        await api.updateWishlistItem(created.item_id, { notes: body.notes.trim() });
+      }
       setAddOpen(false);
       await load();
     } catch (e) {
@@ -211,9 +230,30 @@ export function WishlistScreen({ navigation }: Props) {
             const isBusy = busyId === it.id;
             return (
               <GlassCard key={it.id} padded style={styles.itemCard}>
-                <Text style={styles.itemTitle}>
-                  {it.wishlist_name || 'Untitled'}
-                </Text>
+                <View style={styles.itemHeader}>
+                  {itemThumbnailUrl(it) ? (
+                    <Image
+                      source={{ uri: itemThumbnailUrl(it) }}
+                      style={styles.itemThumb}
+                    />
+                  ) : (
+                    <View style={styles.itemThumbPlaceholder}>
+                      <Ionicons
+                        name="image-outline"
+                        size={20}
+                        color={colors.textMuted}
+                      />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemTitle}>
+                      {it.wishlist_name || it.category || 'Untitled'}
+                    </Text>
+                    <Text style={styles.itemSubtitle}>
+                      {it.subcategory || 'Wishlist target'}
+                    </Text>
+                  </View>
+                </View>
                 <View style={styles.itemTagRow}>
                   {label ? (
                     <View style={styles.intentTag}>
@@ -273,6 +313,7 @@ export function WishlistScreen({ navigation }: Props) {
 
       <AddWishlistModal
         visible={addOpen}
+        initial={route.params}
         onCancel={() => setAddOpen(false)}
         onSave={onCreate}
       />
@@ -282,28 +323,73 @@ export function WishlistScreen({ navigation }: Props) {
 
 type AddProps = {
   visible: boolean;
+  initial?: AppStackParamList['Wishlist'];
   onCancel: () => void;
-  onSave: (body: WishlistCreate) => void | Promise<void>;
+  onSave: (
+    body: WishlistCreate & { notes?: string | null },
+    photos: UploadPhoto[]
+  ) => void | Promise<void>;
 };
 
-function AddWishlistModal({ visible, onCancel, onSave }: AddProps) {
+function AddWishlistModal({ visible, initial, onCancel, onSave }: AddProps) {
   const { colors, surface } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [name, setName] = useState('');
   const [intent, setIntent] = useState<WishlistIntent | null>(null);
   const [price, setPrice] = useState('');
   const [url, setUrl] = useState('');
+  const [notes, setNotes] = useState('');
+  const [photos, setPhotos] = useState<UploadPhoto[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (visible) {
+      setName(initial?.initialName ?? '');
+      setIntent(initial?.initialIntent ?? null);
+      setNotes(initial?.initialNotes ?? '');
+      setPrice('');
+      setUrl('');
+      setPhotos([]);
+      setSaving(false);
+      return;
+    }
     if (!visible) {
       setName('');
       setIntent(null);
       setPrice('');
       setUrl('');
+      setNotes('');
+      setPhotos([]);
       setSaving(false);
     }
-  }, [visible]);
+  }, [visible, initial]);
+
+  async function pickPhoto() {
+    const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!lib.granted) {
+      Alert.alert('Permission needed', 'Photo library permission is required.');
+      return;
+    }
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      allowsMultipleSelection: true,
+      selectionLimit: 4,
+    });
+    if (picked.canceled || !picked.assets?.length) return;
+    try {
+      const normalized = await Promise.all(
+        picked.assets.slice(0, 4).map((asset) =>
+          imagePickerAssetToUpload(asset, 'wishlist')
+        )
+      );
+      setPhotos(normalized);
+    } catch {
+      Alert.alert('Could not prepare photo', 'Try another image.');
+    }
+  }
 
   async function handleSave() {
     const trimmed = name.trim();
@@ -324,10 +410,13 @@ function AddWishlistModal({ visible, onCancel, onSave }: AddProps) {
     try {
       await onSave({
         name: trimmed,
+        category: initial?.initialCategory,
+        subcategory: initial?.initialSubcategory,
         intent,
         price: priceNum,
         url: url.trim() || null,
-      });
+        notes: notes.trim() || null,
+      }, photos);
     } finally {
       setSaving(false);
     }
@@ -359,6 +448,33 @@ function AddWishlistModal({ visible, onCancel, onSave }: AddProps) {
         </Pressable>
         <GlassCard padded style={styles.modalCard}>
           <Text style={styles.modalTitle}>Add to wishlist</Text>
+          <Pressable
+            onPress={pickPhoto}
+            style={({ pressed }) => [
+              styles.photoPicker,
+              { opacity: pressed ? 0.85 : 1 },
+            ]}
+          >
+            {photos[0] ? (
+              <Image source={{ uri: photos[0].uri }} style={styles.photoPreview} />
+            ) : (
+              <View style={styles.photoPreviewPlaceholder}>
+                <Ionicons
+                  name="camera-outline"
+                  size={22}
+                  color={colors.textMuted}
+                />
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.photoPickerTitle}>
+                {photos.length ? `${photos.length} photo${photos.length === 1 ? '' : 's'} selected` : 'Add product photo'}
+              </Text>
+              <Text style={styles.photoPickerHint}>
+                Use a retailer screenshot or product image.
+              </Text>
+            </View>
+          </Pressable>
           <GlassInputContainer style={styles.modalInputShell}>
             <TextInput
               value={name}
@@ -427,6 +543,16 @@ function AddWishlistModal({ visible, onCancel, onSave }: AddProps) {
               autoCorrect={false}
               keyboardType="url"
               style={styles.modalInput}
+            />
+          </GlassInputContainer>
+          <GlassInputContainer style={styles.modalInputShell}>
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Buying intent or closet gap (optional)"
+              placeholderTextColor={colors.placeholder}
+              multiline
+              style={[styles.modalInput, styles.modalInputMultiline]}
             />
           </GlassInputContainer>
           <View style={styles.modalActions}>
@@ -501,10 +627,36 @@ function makeStyles({
       padding: spacing.lg,
       marginBottom: spacing.md,
     },
+    itemHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      marginBottom: spacing.sm,
+    },
+    itemThumb: {
+      width: 64,
+      height: 64,
+      borderRadius: radii.md,
+      backgroundColor: surface.thumbBg,
+    },
+    itemThumbPlaceholder: {
+      width: 64,
+      height: 64,
+      borderRadius: radii.md,
+      backgroundColor: surface.thumbBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairline,
+    },
     itemTitle: {
       ...typography.headline,
       color: colors.text,
-      marginBottom: spacing.sm,
+    },
+    itemSubtitle: {
+      fontSize: 13,
+      color: colors.textMuted,
+      marginTop: 2,
     },
     itemTagRow: {
       flexDirection: 'row',
@@ -583,6 +735,40 @@ function makeStyles({
       color: colors.text,
       marginBottom: spacing.md,
     },
+    photoPicker: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.sm,
+      borderRadius: radii.md,
+      backgroundColor: surface.chipInactive,
+      marginBottom: spacing.md,
+    },
+    photoPreview: {
+      width: 56,
+      height: 56,
+      borderRadius: radii.md,
+      backgroundColor: surface.thumbBg,
+    },
+    photoPreviewPlaceholder: {
+      width: 56,
+      height: 56,
+      borderRadius: radii.md,
+      backgroundColor: surface.thumbBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairline,
+    },
+    photoPickerTitle: {
+      ...typography.bodyMedium,
+      color: colors.text,
+    },
+    photoPickerHint: {
+      fontSize: 12,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
     modalInputShell: {
       minHeight: 52,
       marginBottom: spacing.md,
@@ -592,6 +778,10 @@ function makeStyles({
       paddingVertical: 12,
       fontSize: 16,
       color: colors.text,
+    },
+    modalInputMultiline: {
+      minHeight: 84,
+      textAlignVertical: 'top',
     },
     intentRow: {
       flexDirection: 'row',

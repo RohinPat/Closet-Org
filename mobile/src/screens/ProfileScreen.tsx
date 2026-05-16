@@ -16,7 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as api from '../api/client';
-import type { FitPost, PublicProfile } from '../api/types';
+import type { FitPost, PublicProfile, ReminderCard } from '../api/types';
 import { API_ORIGIN, absoluteUrl } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
@@ -71,6 +71,7 @@ export function ProfileScreen() {
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [posts, setPosts] = useState<FitPost[]>([]);
+  const [reminders, setReminders] = useState<ReminderCard[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
 
   const [editing, setEditing] = useState(false);
@@ -84,12 +85,14 @@ export function ProfileScreen() {
   const loadProfileAndPosts = useCallback(async () => {
     if (!user) return;
     try {
-      const [p, postsRes] = await Promise.all([
+      const [p, postsRes, reminderRes] = await Promise.all([
         api.fetchPublicProfile(user.id),
         api.fetchUserPosts(user.id),
+        api.fetchReminders(),
       ]);
       setProfile(p);
       setPosts(postsRes.posts);
+      setReminders(reminderRes.cards);
     } catch {
       // Best-effort — profile counts are decorative.
     } finally {
@@ -328,6 +331,32 @@ export function ProfileScreen() {
           ) : null}
         </GlassCard>
 
+        {reminders.length > 0 ? (
+          <>
+            <Text style={styles.sectionLabel}>Reminders</Text>
+            <GlassCard padded style={styles.card}>
+              {reminders.slice(0, 4).map((card) => (
+                <View key={String(card.id)} style={styles.reminderRow}>
+                  <Ionicons
+                    name={card.kind === 'lending' ? 'paper-plane-outline' : 'sparkles-outline'}
+                    size={18}
+                    color={colors.accent}
+                    style={{ marginRight: 8 }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>{card.title}</Text>
+                    <Text style={styles.hint}>
+                      {[card.detail, card.due_date ? `Due ${card.due_date}` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </GlassCard>
+          </>
+        ) : null}
+
         {socialEnabled ? (
           <>
             <Text style={styles.sectionLabel}>Your fits</Text>
@@ -416,6 +445,57 @@ export function ProfileScreen() {
             <Text style={styles.hint}>
               Build a travel bag, bulk pack or unpack items, and use it for trip
               outfit ideas.
+            </Text>
+          </GlassCard>
+        </Pressable>
+        <Pressable
+          onPress={() => navigation.navigate('TripOutfitLog')}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
+          <GlassCard padded style={styles.card}>
+            <View style={styles.rowHeader}>
+              <Ionicons
+                name="images-outline"
+                size={18}
+                color={colors.accent}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.rowTitle}>Trip outfit log</Text>
+              <View style={{ flex: 1 }} />
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textMuted}
+              />
+            </View>
+            <Text style={styles.hint}>
+              Save fit pics into travel albums and tag the packed items you wore.
+            </Text>
+          </GlassCard>
+        </Pressable>
+        <Pressable
+          onPress={() => navigation.navigate('PlanningAhead')}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
+          <GlassCard padded style={styles.card}>
+            <View style={styles.rowHeader}>
+              <Ionicons
+                name="calendar-outline"
+                size={18}
+                color={colors.accent}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.rowTitle}>Planning Ahead</Text>
+              <View style={{ flex: 1 }} />
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textMuted}
+              />
+            </View>
+            <Text style={styles.hint}>
+              Reserve outfits for future events, catch conflicts, and prep laundry
+              before the day arrives.
             </Text>
           </GlassCard>
         </Pressable>
@@ -776,6 +856,13 @@ function makeStyles({
       flexDirection: 'row',
       alignItems: 'center',
       marginBottom: 8,
+    },
+    reminderRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      paddingVertical: spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.divider,
     },
     rowTitle: {
       fontSize: 15,

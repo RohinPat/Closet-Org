@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -9,9 +8,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as api from '../api/client';
-import type { ClosetInsights } from '../api/types';
-import { GlassCard, ScreenBackground } from '../components/Glass';
+import type { ClosetGap, ClosetInsights } from '../api/types';
+import { GlassButton, GlassCard, ScreenBackground } from '../components/Glass';
+import type { AppStackParamList } from '../navigation/RootNavigator';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { stackTopPadding } from '../utils/screenSpacing';
@@ -28,6 +30,18 @@ type TileProps = {
   icon: keyof typeof Ionicons.glyphMap;
   tint?: string;
 };
+
+function gapWishlistSeed(gap: ClosetGap) {
+  const map: Record<string, { category: string; subcategory: string }> = {
+    outer_layer: { category: 'Jacket', subcategory: 'Top' },
+    neutral_outer: { category: 'Jacket', subcategory: 'Top' },
+    dressy_shoes: { category: 'Shoes', subcategory: 'Footwear' },
+    bottoms_or_dress: { category: 'Bottom', subcategory: 'Bottom' },
+    accessories: { category: 'Accessory', subcategory: 'Accessory' },
+    color_variety: { category: 'Other', subcategory: 'Wishlist' },
+  };
+  return map[gap.id] ?? { category: 'Other', subcategory: 'Wishlist' };
+}
 
 function Tile({ value, label, icon, tint }: TileProps) {
   const { colors } = useTheme();
@@ -54,6 +68,7 @@ function Tile({ value, label, icon, tint }: TileProps) {
 
 export function StatsScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const headerPad = stackTopPadding(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -95,8 +110,13 @@ export function StatsScreen() {
     return (
       <View style={{ flex: 1 }}>
         <ScreenBackground />
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.accent} />
+        <View style={[styles.container, { paddingTop: headerPad }]}>
+          <View style={styles.skeletonTitle} />
+          <View style={styles.grid}>
+            {[0, 1, 2, 3].map((idx) => (
+              <View key={idx} style={styles.skeletonTile} />
+            ))}
+          </View>
         </View>
       </View>
     );
@@ -261,6 +281,33 @@ export function StatsScreen() {
           )}
         </GlassCard>
 
+        <Text style={styles.sectionTitle}>Duplicate watch</Text>
+        <GlassCard padded style={styles.listCard}>
+          {!insights?.duplicate_candidates?.length ? (
+            <Text style={styles.muted}>No near-duplicates found from visual embeddings.</Text>
+          ) : (
+            insights.duplicate_candidates.slice(0, 5).map((dupe, i) => (
+              <View
+                key={`${dupe.items[0]?.id}-${dupe.items[1]?.id}`}
+                style={[
+                  styles.gapRow,
+                  i === Math.min(4, insights.duplicate_candidates!.length - 1) &&
+                    styles.rowLast,
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.gapTitle}>
+                    {Math.round(dupe.score * 100)}% similar
+                  </Text>
+                  <Text style={styles.gapDetail}>
+                    {dupe.items.map((item) => `${item.subcategory} #${item.id}`).join(' · ')}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+        </GlassCard>
+
         <Text style={styles.sectionTitle}>Capsule gaps</Text>
         <GlassCard padded style={styles.listCard}>
           {!insights || insights.gaps.length === 0 ? (
@@ -270,29 +317,50 @@ export function StatsScreen() {
                 : 'Loading…'}
             </Text>
           ) : (
-            insights.gaps.map((g, i) => (
-              <View
-                key={g.id}
-                style={[styles.gapRow, i === insights!.gaps.length - 1 && styles.rowLast]}
-              >
+            insights.gaps.map((g, i) => {
+              const seed = gapWishlistSeed(g);
+              return (
                 <View
+                  key={g.id}
                   style={[
-                    styles.gapDot,
-                    g.priority === 'high' && { backgroundColor: colors.danger },
-                    g.priority === 'medium' && {
-                      backgroundColor: 'rgba(255, 159, 10, 0.9)',
-                    },
-                    g.priority === 'low' && {
-                      backgroundColor: colors.textMuted,
-                    },
+                    styles.gapRow,
+                    i === insights!.gaps.length - 1 && styles.rowLast,
                   ]}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.gapTitle}>{g.title}</Text>
-                  <Text style={styles.gapDetail}>{g.detail}</Text>
+                >
+                  <View
+                    style={[
+                      styles.gapDot,
+                      g.priority === 'high' && { backgroundColor: colors.danger },
+                      g.priority === 'medium' && {
+                        backgroundColor: 'rgba(255, 159, 10, 0.9)',
+                      },
+                      g.priority === 'low' && {
+                        backgroundColor: colors.textMuted,
+                      },
+                    ]}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.gapTitle}>{g.title}</Text>
+                    <Text style={styles.gapDetail}>{g.detail}</Text>
+                    <GlassButton
+                      title="Add wishlist target"
+                      variant="ghost"
+                      onPress={() =>
+                        navigation.navigate('Wishlist', {
+                          openAdd: true,
+                          initialName: g.title,
+                          initialIntent: 'want',
+                          initialNotes: g.detail,
+                          initialCategory: seed.category,
+                          initialSubcategory: seed.subcategory,
+                        })
+                      }
+                      style={styles.gapButton}
+                    />
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </GlassCard>
 
@@ -321,6 +389,36 @@ export function StatsScreen() {
                   </Text>
                   {Object.entries(insights.composition.color_buckets)
                     .slice(0, 8)
+                    .map(([name, count]) => (
+                      <Text key={name} style={styles.mixLine}>
+                        <Text style={styles.mixName}>{name}</Text>
+                        <Text style={styles.mixCount}> {count}</Text>
+                      </Text>
+                    ))}
+                </>
+              ) : null}
+              {insights.composition.by_season ? (
+                <>
+                  <Text style={[styles.mixCaption, { marginTop: spacing.md }]}>
+                    Season balance
+                  </Text>
+                  {Object.entries(insights.composition.by_season)
+                    .slice(0, 6)
+                    .map(([name, count]) => (
+                      <Text key={name} style={styles.mixLine}>
+                        <Text style={styles.mixName}>{name}</Text>
+                        <Text style={styles.mixCount}> {count}</Text>
+                      </Text>
+                    ))}
+                </>
+              ) : null}
+              {insights.composition.by_pattern ? (
+                <>
+                  <Text style={[styles.mixCaption, { marginTop: spacing.md }]}>
+                    Patterns
+                  </Text>
+                  {Object.entries(insights.composition.by_pattern)
+                    .slice(0, 6)
                     .map(([name, count]) => (
                       <Text key={name} style={styles.mixLine}>
                         <Text style={styles.mixName}>{name}</Text>
@@ -369,6 +467,19 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
     tile: {
       width: '47.5%',
       padding: spacing.lg,
+    },
+    skeletonTitle: {
+      width: 160,
+      height: 30,
+      borderRadius: radii.md,
+      backgroundColor: colors.surfaceSolid,
+      marginBottom: spacing.xl,
+    },
+    skeletonTile: {
+      width: '47.5%',
+      height: 112,
+      borderRadius: radii.lg,
+      backgroundColor: colors.surfaceSolid,
     },
     iconWrap: {
       width: 36,
@@ -445,6 +556,11 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
       fontSize: 14,
       color: colors.textSecondary,
       lineHeight: 20,
+    },
+    gapButton: {
+      marginTop: spacing.sm,
+      alignSelf: 'flex-start',
+      minWidth: 180,
     },
     mixCaption: {
       fontSize: 13,

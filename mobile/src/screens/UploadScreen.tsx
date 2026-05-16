@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import type { FitCheckPairing } from '../api/types';
+import type { FitCheckPairing, WishlistIntent } from '../api/types';
 import * as api from '../api/client';
 import type { UploadPhoto } from '../api/client';
 import { imagePickerAssetToUpload } from '../utils/imageUpload';
@@ -36,12 +36,15 @@ type Classification = {
   style?: string;
   season?: string;
   colors?: string[];
+  color_hexes?: string[];
+  pattern?: string;
 };
 
 type ResultState = {
   itemId: number;
   classification: Classification;
   previewUri: string;
+  duplicateMessage?: string;
 };
 
 type BulkResultState = {
@@ -50,9 +53,38 @@ type BulkResultState = {
   quantity: number;
 };
 
-type AddMode = 'individual' | 'bulk';
+type AddMode = 'individual' | 'bulk' | 'import';
+type BulkSuggestion = {
+  name: string;
+  subcategory: string;
+  quantity: string;
+  reason: string;
+};
 
 const MAX_PHOTOS = 4;
+const WISHLIST_INTENTS: { value: WishlistIntent; label: string }[] = [
+  { value: 'want', label: 'Want' },
+  { value: 'saving', label: 'Saving' },
+  { value: 'sale_watch', label: 'Sale watch' },
+  { value: 'gift', label: 'Gift' },
+];
+
+function smartBulkSuggestion(classification: Classification): BulkSuggestion | null {
+  const text = `${classification.category ?? ''} ${classification.subcategory ?? ''}`.toLowerCase();
+  if (text.includes('sock')) {
+    return { name: 'Crew socks', subcategory: 'Footwear', quantity: '6', reason: 'socks are easiest to track as a count' };
+  }
+  if (text.includes('underwear') || text.includes('boxer') || text.includes('brief')) {
+    return { name: 'Underwear', subcategory: 'Other', quantity: '5', reason: 'underwear is usually interchangeable' };
+  }
+  if (text.includes('undershirt')) {
+    return { name: 'Undershirts', subcategory: 'Top', quantity: '4', reason: 'undershirts are usually interchangeable' };
+  }
+  if (classification.category === 'T-Shirt' && classification.subcategory === 'Top') {
+    return { name: 'Basic tees', subcategory: 'Top', quantity: '4', reason: 'plain tees often work better as bulk basics' };
+  }
+  return null;
+}
 
 export function UploadScreen() {
   const insets = useSafeAreaInsets();
@@ -76,12 +108,22 @@ export function UploadScreen() {
   const [bulkSubcategory, setBulkSubcategory] = useState<string>('Footwear');
   const [bulkResult, setBulkResult] = useState<BulkResultState | null>(null);
   const [bulkRefPhoto, setBulkRefPhoto] = useState<UploadPhoto | null>(null);
+  const [wishlistOpen, setWishlistOpen] = useState(false);
+  const [wishlistName, setWishlistName] = useState('');
+  const [wishlistIntent, setWishlistIntent] = useState<WishlistIntent>('want');
+  const [wishlistPrice, setWishlistPrice] = useState('');
+  const [wishlistUrl, setWishlistUrl] = useState('');
+  const [wishlistNotes, setWishlistNotes] = useState('');
+  const [csvText, setCsvText] = useState('');
+  const [csvResult, setCsvResult] = useState<{ created: number; skipped: number } | null>(null);
+  const [bulkSuggestion, setBulkSuggestion] = useState<BulkSuggestion | null>(null);
 
   function presetBulkSocks() {
     setMode('bulk');
     setBulkSubcategory('Footwear');
     setBulkName('Crew socks');
     setBulkQty('6');
+    setBulkSuggestion(null);
   }
 
   function presetBulkUnderwear() {
@@ -89,6 +131,7 @@ export function UploadScreen() {
     setBulkSubcategory('Other');
     setBulkName('Underwear');
     setBulkQty('5');
+    setBulkSuggestion(null);
   }
 
   function reset() {
@@ -99,6 +142,9 @@ export function UploadScreen() {
     setFitPreview(null);
     setFitError(null);
     setBulkRefPhoto(null);
+    setWishlistOpen(false);
+    setCsvResult(null);
+    setBulkSuggestion(null);
   }
 
   async function previewPairings() {
@@ -248,6 +294,18 @@ export function UploadScreen() {
     setFitPreview(null);
     setFitError(null);
     try {
+      const preview = await api.postClosetFitCheck(photos[0]);
+      const suggestedBulk = smartBulkSuggestion(preview.classification as Classification);
+      if (suggestedBulk) {
+        setMode('bulk');
+        setBulkName(suggestedBulk.name);
+        setBulkSubcategory(suggestedBulk.subcategory);
+        setBulkQty(suggestedBulk.quantity);
+        setBulkRefPhoto(photos[0]);
+        setBulkSuggestion(suggestedBulk);
+        setPhotos([]);
+        return;
+      }
       const data = await api.uploadClothing(photos);
       const previewUri = data.thumbnail_url
         ? `${API_ORIGIN}${data.thumbnail_url}`
@@ -256,17 +314,28 @@ export function UploadScreen() {
         itemId: data.item_id,
         classification: data.classification as Classification,
         previewUri,
+        duplicateMessage:
+          data.duplicate_hint?.visual_candidates?.length
+            ? `${data.duplicate_hint.visual_candidates.length} visual duplicate candidate(s) found.`
+            : data.duplicate_hint?.existing_similar_count
+              ? `${data.duplicate_hint.existing_similar_count} same-color category match(es) already exist.`
+              : undefined,
       });
       setBulkResult(null);
       setPhotos([]);
-      if (
+      if (data.duplicate_hint?.visual_candidates?.length) {
+        Alert.alert(
+          'Possible duplicate',
+          'This upload looks visually close to something already in your closet. Review the saved item before keeping both.'
+        );
+      } else if (
         data.duplicate_hint &&
-        data.duplicate_hint.existing_similar_count > 0
+        (data.duplicate_hint.existing_similar_count ?? 0) > 0
       ) {
         const h = data.duplicate_hint;
         Alert.alert(
           'Similar items',
-          `You already have ${h.existing_similar_count} item(s) in category “${h.category}” with ${h.color}. This new one will be #${h.existing_similar_count + 1}.`
+          `You already have ${h.existing_similar_count} item(s) in category “${h.category}” with ${h.color}. This new one will be #${(h.existing_similar_count ?? 0) + 1}.`
         );
       }
     } catch (e) {
@@ -276,6 +345,70 @@ export function UploadScreen() {
           ? 'Upload could not reach the API. Make sure your phone is still on the same Wi-Fi, then try a smaller/clearer photo.'
           : msg
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function savePhotosToWishlist() {
+    if (photos.length === 0) return;
+    const trimmed = wishlistName.trim();
+    if (!trimmed) {
+      setError('Add a wishlist name first.');
+      return;
+    }
+    let priceNum: number | null = null;
+    if (wishlistPrice.trim()) {
+      const n = parseFloat(wishlistPrice.trim());
+      if (Number.isNaN(n)) {
+        setError('Wishlist price should be a number, e.g. 49.99.');
+        return;
+      }
+      priceNum = n;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.uploadWishlistPhotos(photos, {
+        name: trimmed,
+        intent: wishlistIntent,
+        price: priceNum,
+        url: wishlistUrl.trim() || null,
+        notes: wishlistNotes.trim() || null,
+      });
+      setPhotos([]);
+      setFitPreview(null);
+      setWishlistOpen(false);
+      setWishlistName('');
+      setWishlistPrice('');
+      setWishlistUrl('');
+      setWishlistNotes('');
+      setResult(null);
+      setBulkResult(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save wishlist item');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importCsv() {
+    if (!csvText.trim()) {
+      setError('Paste a CSV with a header row first.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setCsvResult(null);
+    try {
+      const imported = await api.importClosetCsv(csvText);
+      setCsvResult({
+        created: imported.created,
+        skipped: imported.skipped?.length ?? 0,
+      });
+      setCsvText('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not import CSV');
     } finally {
       setBusy(false);
     }
@@ -334,12 +467,34 @@ export function UploadScreen() {
               Bulk basics
             </Text>
           </Pressable>
+          <Pressable
+            onPress={() => {
+              setMode('import');
+              setError(null);
+            }}
+            style={({ pressed }) => [
+              styles.modeChip,
+              mode === 'import' && styles.modeChipOn,
+              { opacity: pressed ? 0.85 : 1 },
+            ]}
+          >
+            <Text
+              style={[
+                styles.modeChipText,
+                mode === 'import' && styles.modeChipTextOn,
+              ]}
+            >
+              Import
+            </Text>
+          </Pressable>
         </View>
 
         <Text style={styles.blurb}>
           {mode === 'individual'
             ? "Snap a photo of the front, then add a back shot for items with prints, logos, or rear details. We'll classify the front and merge the colors."
-            : 'Socks, underwear, and plain tees can live as one card with a total count and how many are clean. Add an optional reference photo for the grid and similarity search.'}
+            : mode === 'bulk'
+              ? 'Socks, underwear, and plain tees can live as one card with a total count and how many are clean. Add an optional reference photo for the grid and similarity search.'
+              : 'Paste rows from a spreadsheet. Supported headers include name/category, subcategory, colors, brand, size, quantity, tags, notes, price, and care.'}
         </Text>
 
         {mode === 'individual' && photos.length > 0 ? (
@@ -373,6 +528,15 @@ export function UploadScreen() {
 
         {mode === 'bulk' ? (
           <GlassCard padded style={styles.bulkCard}>
+            {bulkSuggestion ? (
+              <View style={styles.suggestionBox}>
+                <Ionicons name="sparkles-outline" size={18} color={colors.accent} />
+                <Text style={styles.suggestionText}>
+                  Classified as a basic: {bulkSuggestion.reason}. Review the count,
+                  then save as bulk.
+                </Text>
+              </View>
+            ) : null}
             <Text style={styles.bulkHint}>Quick presets</Text>
             <View style={styles.presetRow}>
               <Pressable
@@ -467,6 +631,40 @@ export function UploadScreen() {
           </GlassCard>
         ) : null}
 
+        {mode === 'import' ? (
+          <GlassCard padded style={styles.bulkCard}>
+            <Text style={styles.bulkHint}>CSV / spreadsheet import</Text>
+            <Text style={styles.resultSub}>
+              Copy rows from Sheets or Excel and paste them here. Keep the first row
+              as headers.
+            </Text>
+            <GlassInputContainer>
+              <TextInput
+                value={csvText}
+                onChangeText={setCsvText}
+                multiline
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder={'name,category,subcategory,colors,brand,size\nWhite tee,T-Shirt,Top,White,Hanes,M'}
+                placeholderTextColor={colors.textMuted}
+                style={[styles.textField, styles.csvField]}
+              />
+            </GlassInputContainer>
+            <GlassButton
+              title="Import rows"
+              onPress={importCsv}
+              loading={busy}
+              style={{ marginTop: spacing.md }}
+            />
+            {csvResult ? (
+              <Text style={styles.resultSub}>
+                Imported {csvResult.created} item{csvResult.created === 1 ? '' : 's'}
+                {csvResult.skipped ? ` · ${csvResult.skipped} skipped` : ''}.
+              </Text>
+            ) : null}
+          </GlassCard>
+        ) : null}
+
         {mode === 'individual' ? (
         <GlassCard padded={false} style={styles.actionCard}>
           <View style={styles.actionRow}>
@@ -501,6 +699,23 @@ export function UploadScreen() {
           {photos.length > 0 ? (
             <View style={[styles.actionRow, { paddingTop: 0 }]}>
               <GlassButton
+                title="Save photos to wishlist"
+                onPress={() => {
+                  const fallback =
+                    (fitPreview?.classification.category as string | undefined) ||
+                    'Wishlist item';
+                  setWishlistName((prev) => prev || fallback);
+                  setWishlistOpen((prev) => !prev);
+                }}
+                variant="ghost"
+                disabled={busy}
+                style={styles.flexBtn}
+              />
+            </View>
+          ) : null}
+          {photos.length > 0 ? (
+            <View style={[styles.actionRow, { paddingTop: 0 }]}>
+              <GlassButton
                 title={`Add ${photos.length} photo${photos.length === 1 ? '' : 's'} to closet`}
                 onPress={upload}
                 loading={busy}
@@ -509,6 +724,93 @@ export function UploadScreen() {
             </View>
           ) : null}
         </GlassCard>
+        ) : null}
+
+        {mode === 'individual' && wishlistOpen && photos.length > 0 ? (
+          <GlassCard padded style={styles.wishlistCard}>
+            <Text style={styles.resultTitle}>Wishlist target</Text>
+            <Text style={styles.resultSub}>
+              Save this photo as shopping research. It stays out of closet stats
+              and outfits until you promote it.
+            </Text>
+            <Text style={styles.fieldLabel}>Name</Text>
+            <GlassInputContainer>
+              <TextInput
+                value={wishlistName}
+                onChangeText={setWishlistName}
+                placeholder="e.g. neutral chore jacket"
+                placeholderTextColor={colors.textMuted}
+                style={styles.textField}
+              />
+            </GlassInputContainer>
+            <Text style={styles.fieldLabel}>Buying intent</Text>
+            <View style={styles.presetRow}>
+              {WISHLIST_INTENTS.map((opt) => {
+                const active = wishlistIntent === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setWishlistIntent(opt.value)}
+                    style={[
+                      styles.presetChip,
+                      active && styles.intentChipOn,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.presetChipText,
+                        active && styles.intentChipTextOn,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.fieldLabel}>Price and link (optional)</Text>
+            <View style={styles.inlineFields}>
+              <GlassInputContainer style={{ flex: 1 }}>
+                <TextInput
+                  value={wishlistPrice}
+                  onChangeText={setWishlistPrice}
+                  keyboardType="decimal-pad"
+                  placeholder="49.99"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.textField}
+                />
+              </GlassInputContainer>
+              <GlassInputContainer style={{ flex: 1 }}>
+                <TextInput
+                  value={wishlistUrl}
+                  onChangeText={setWishlistUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  placeholder="Store URL"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.textField}
+                />
+              </GlassInputContainer>
+            </View>
+            <Text style={styles.fieldLabel}>What would this unlock?</Text>
+            <GlassInputContainer>
+              <TextInput
+                value={wishlistNotes}
+                onChangeText={setWishlistNotes}
+                multiline
+                placeholder="e.g. fills outerwear gap; works with black jeans"
+                placeholderTextColor={colors.textMuted}
+                style={[styles.textField, styles.notesField]}
+              />
+            </GlassInputContainer>
+            <GlassButton
+              title="Save to wishlist"
+              onPress={savePhotosToWishlist}
+              loading={busy}
+              style={{ marginTop: spacing.md }}
+            />
+          </GlassCard>
         ) : null}
 
         {error ? (
@@ -531,11 +833,33 @@ export function UploadScreen() {
 
         {fitPreview ? (
           <GlassCard padded style={styles.resultCard}>
-            <Text style={styles.resultTitle}>Closet pairings</Text>
+            <Text style={styles.resultTitle}>What this would unlock</Text>
             <Text style={styles.resultSub}>
               {(fitPreview.classification.category as string) ?? 'Item'} · uses
               front photo only. Nothing is saved until you tap Add to closet.
             </Text>
+            {fitPreview.pairings.length > 0 ? (
+              <View style={styles.unlockBox}>
+                <Text style={styles.unlockTitle}>
+                  Works with {fitPreview.pairings.length} clean closet pieces
+                </Text>
+                <Text style={styles.unlockCopy}>
+                  Best early matches: {fitPreview.pairings
+                    .slice(0, 3)
+                    .map((p) => p.item.subcategory)
+                    .join(', ')}
+                  .
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.unlockBox}>
+                <Text style={styles.unlockTitle}>Potential gap item</Text>
+                <Text style={styles.unlockCopy}>
+                  No strong pairings yet. Save it to your wishlist if this is a
+                  buying target, or add complementary basics first.
+                </Text>
+              </View>
+            )}
             {fitPreview.pairings.length === 0 ? (
               <Text style={styles.resultSub}>
                 Add more clean pieces or try a clearer front shot.
@@ -603,7 +927,21 @@ export function UploadScreen() {
                   <Text style={styles.tagText}>{c}</Text>
                 </View>
               ))}
+              {(result.classification.color_hexes ?? []).map((hex) => (
+                <View key={hex} style={[styles.hexDot, { backgroundColor: hex }]} />
+              ))}
+              {result.classification.pattern ? (
+                <View style={styles.tag}>
+                  <Text style={styles.tagText}>{result.classification.pattern}</Text>
+                </View>
+              ) : null}
             </View>
+            {result.duplicateMessage ? (
+              <View style={styles.warningBox}>
+                <Ionicons name="copy-outline" size={16} color={colors.warning} />
+                <Text style={styles.warningText}>{result.duplicateMessage}</Text>
+              </View>
+            ) : null}
 
             <View style={[styles.actionRow, { paddingTop: spacing.md, paddingHorizontal: 0 }]}>
               <GlassButton
@@ -673,6 +1011,11 @@ function makeStyles({
       marginBottom: spacing.lg,
       gap: spacing.sm,
     },
+    wishlistCard: {
+      marginTop: spacing.lg,
+      marginBottom: spacing.lg,
+      gap: spacing.sm,
+    },
     bulkHint: {
       ...typography.micro,
       color: colors.textMuted,
@@ -695,6 +1038,14 @@ function makeStyles({
       color: colors.text,
       fontWeight: '600',
     },
+    intentChipOn: {
+      backgroundColor: colors.accentSoft,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.accent,
+    },
+    intentChipTextOn: {
+      color: colors.accent,
+    },
     fieldLabel: {
       ...typography.micro,
       color: colors.textMuted,
@@ -707,6 +1058,35 @@ function makeStyles({
       paddingVertical: 10,
       paddingHorizontal: spacing.sm,
       minHeight: 44,
+    },
+    notesField: {
+      minHeight: 84,
+      textAlignVertical: 'top',
+    },
+    csvField: {
+      minHeight: 160,
+      textAlignVertical: 'top',
+    },
+    suggestionBox: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      alignItems: 'flex-start',
+      borderRadius: radii.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.accent,
+      backgroundColor: colors.accentSoft,
+      padding: spacing.md,
+      marginBottom: spacing.md,
+    },
+    suggestionText: {
+      ...typography.callout,
+      color: colors.text,
+      flex: 1,
+      lineHeight: 20,
+    },
+    inlineFields: {
+      flexDirection: 'row',
+      gap: spacing.sm,
     },
     subScroll: {
       marginTop: spacing.xs,
@@ -856,6 +1236,23 @@ function makeStyles({
       color: colors.textSecondary,
       marginTop: 2,
     },
+    unlockBox: {
+      padding: spacing.md,
+      borderRadius: radii.md,
+      backgroundColor: colors.accentSoft,
+      marginTop: spacing.md,
+      marginBottom: spacing.sm,
+    },
+    unlockTitle: {
+      ...typography.bodyMedium,
+      color: colors.text,
+      marginBottom: 4,
+    },
+    unlockCopy: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      lineHeight: 18,
+    },
     tagRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -876,6 +1273,28 @@ function makeStyles({
       fontSize: 13,
       color: colors.text,
       fontWeight: '600',
+    },
+    hexDot: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairline,
+    },
+    warningBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+      padding: spacing.md,
+      borderRadius: radii.md,
+      backgroundColor: colors.accentSoft,
+    },
+    warningText: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 13,
+      lineHeight: 18,
     },
     pairingLine: {
       fontSize: 13,

@@ -18,6 +18,7 @@ import type {
   ClothingItem,
   ForecastDay,
   OutfitRecommendation,
+  Trip,
   WeatherContext,
   WeatherLocation,
 } from '../api/types';
@@ -40,6 +41,33 @@ import {
 
 type Props = NativeStackScreenProps<AppStackParamList, 'PackMode'>;
 type ViewMode = 'all' | 'packed' | 'unpacked';
+type TripActivityKey =
+  | 'casual'
+  | 'work'
+  | 'dinner'
+  | 'active'
+  | 'night'
+  | 'cozy';
+
+type TripActivity = {
+  key: TripActivityKey;
+  label: string;
+  occasion: string;
+  vibe?: 'clean_prep' | 'streetwear' | 'cozy';
+};
+
+type PackPlanOutfit = {
+  outfit: OutfitRecommendation;
+  activityLabel: string;
+};
+
+type PackPlanSummary = {
+  outfits: PackPlanOutfit[];
+  uniqueItemIds: number[];
+  totalSlots: number;
+  overlapCount: number;
+  targetOutfits: number;
+};
 
 const MODES: { key: ViewMode; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -47,7 +75,96 @@ const MODES: { key: ViewMode; label: string }[] = [
   { key: 'unpacked', label: 'Not packed' },
 ];
 
+const ACTIVITY_OPTIONS: TripActivity[] = [
+  { key: 'casual', label: 'Casual days', occasion: 'casual', vibe: 'clean_prep' },
+  { key: 'work', label: 'Work', occasion: 'work', vibe: 'clean_prep' },
+  { key: 'dinner', label: 'Dinner', occasion: 'dinner', vibe: 'clean_prep' },
+  { key: 'active', label: 'Active', occasion: 'active' },
+  { key: 'night', label: 'Night out', occasion: 'night out', vibe: 'streetwear' },
+  { key: 'cozy', label: 'Cozy', occasion: 'cozy', vibe: 'cozy' },
+];
+
 const PACK_COUNT_ORDER = [...CLOTHING_SUBCATEGORIES];
+
+function parseTripDate(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return null;
+  const date = new Date(`${value.trim()}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getTripDayCount(start: string, end: string): number | null {
+  const startDate = parseTripDate(start);
+  const endDate = parseTripDate(end);
+  if (!startDate || !endDate || endDate < startDate) return null;
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.floor((endDate.getTime() - startDate.getTime()) / dayMs) + 1;
+}
+
+function defaultOutfitTarget(days: number | null): number {
+  if (!days) return 3;
+  if (days <= 3) return days;
+  return Math.min(10, Math.max(1, Math.ceil(days * 0.75)));
+}
+
+function outfitSignature(outfit: OutfitRecommendation): string {
+  return outfit.items
+    .map((item) => item.id)
+    .sort((a, b) => a - b)
+    .join(',');
+}
+
+function selectCoveragePlan(
+  candidates: PackPlanOutfit[],
+  targetOutfits: number
+): PackPlanSummary | null {
+  const unique = new Map<string, PackPlanOutfit>();
+  for (const candidate of candidates) {
+    const signature = outfitSignature(candidate.outfit);
+    if (!signature) continue;
+    const existing = unique.get(signature);
+    if (!existing || candidate.outfit.score > existing.outfit.score) {
+      unique.set(signature, candidate);
+    }
+  }
+
+  const pool = [...unique.values()];
+  const selected: PackPlanOutfit[] = [];
+  const usedItemIds = new Set<number>();
+
+  while (pool.length > 0 && selected.length < targetOutfits) {
+    let bestIndex = 0;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < pool.length; i += 1) {
+      const itemIds = pool[i].outfit.items.map((item) => item.id);
+      const shared = itemIds.filter((id) => usedItemIds.has(id)).length;
+      const newItems = itemIds.length - shared;
+      const score =
+        pool[i].outfit.score + shared * 0.6 - Math.max(0, newItems - 1) * 0.12;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = i;
+      }
+    }
+
+    const [next] = pool.splice(bestIndex, 1);
+    selected.push(next);
+    next.outfit.items.forEach((item) => usedItemIds.add(item.id));
+  }
+
+  if (selected.length === 0) return null;
+  const totalSlots = selected.reduce(
+    (sum, entry) => sum + entry.outfit.items.length,
+    0
+  );
+  const uniqueItemIds = [...usedItemIds];
+  return {
+    outfits: selected,
+    uniqueItemIds,
+    totalSlots,
+    overlapCount: Math.max(0, totalSlots - uniqueItemIds.length),
+    targetOutfits,
+  };
+}
 
 export function PackModeScreen({}: Props) {
   const insets = useSafeAreaInsets();
@@ -61,31 +178,48 @@ export function PackModeScreen({}: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const [suggestions, setSuggestions] = useState<OutfitRecommendation[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(
     null
   );
+  const [packPlan, setPackPlan] = useState<PackPlanSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [destination, setDestination] = useState('');
   const [tripStart, setTripStart] = useState('');
   const [tripEnd, setTripEnd] = useState('');
+  const [desiredOutfits, setDesiredOutfits] = useState('');
+  const [plannedActivities, setPlannedActivities] = useState<
+    Set<TripActivityKey>
+  >(() => new Set(['casual']));
   const [tripLocation, setTripLocation] = useState<WeatherLocation | null>(null);
   const [tripWeather, setTripWeather] = useState<WeatherContext | null>(null);
   const [forecastDays, setForecastDays] = useState<ForecastDay[]>([]);
   const [forecastBusy, setForecastBusy] = useState(false);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [activeTripId, setActiveTripId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const data = await api.fetchCloset();
+      const tripData = await api.fetchTrips();
       setItems(data.items);
+      setTrips(tripData.trips);
+      if (!activeTripId && tripData.trips[0]) {
+        const trip = tripData.trips[0];
+        setActiveTripId(trip.id);
+        setDestination(trip.destination ?? '');
+        setTripStart(trip.start_date ?? '');
+        setTripEnd(trip.end_date ?? '');
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load closet');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activeTripId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -123,9 +257,30 @@ export function PackModeScreen({}: Props) {
   }, [items, mode]);
 
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
+  const activeTrip = useMemo(
+    () => trips.find((trip) => trip.id === activeTripId) ?? null,
+    [activeTripId, trips]
+  );
+  const tripDayCount = useMemo(
+    () => getTripDayCount(tripStart, tripEnd),
+    [tripStart, tripEnd]
+  );
+  const coverageTarget = useMemo(() => {
+    const parsed = Number.parseInt(desiredOutfits, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.min(14, parsed);
+    return defaultOutfitTarget(tripDayCount);
+  }, [desiredOutfits, tripDayCount]);
+
+  const selectedActivities = useMemo(() => {
+    const chosen = ACTIVITY_OPTIONS.filter((activity) =>
+      plannedActivities.has(activity.key)
+    );
+    return chosen.length > 0 ? chosen : [ACTIVITY_OPTIONS[0]];
+  }, [plannedActivities]);
 
   function toggleSelection(itemId: number) {
     setSelectedSuggestion(null);
+    setPackPlan(null);
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(itemId)) next.delete(itemId);
@@ -138,6 +293,13 @@ export function PackModeScreen({}: Props) {
     setBusy(true);
     try {
       await api.bulkUpdatePacked(itemIds, packedForTrip);
+      if (activeTrip && itemIds) {
+        for (const itemId of itemIds) {
+          await api.setTripPacked(activeTrip.id, itemId, packedForTrip);
+        }
+        const tripData = await api.fetchTrips();
+        setTrips(tripData.trips);
+      }
       setItems((prev) =>
         prev.map((item) => {
           const shouldUpdate =
@@ -149,6 +311,7 @@ export function PackModeScreen({}: Props) {
       );
       setSelectedIds(new Set());
       setSelectedSuggestion(null);
+      setPackPlan(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update packed items');
     } finally {
@@ -174,6 +337,7 @@ export function PackModeScreen({}: Props) {
       setSuggestions(data.outfits);
       if (data.weather) setTripWeather(data.weather);
       setSelectedSuggestion(null);
+      setPackPlan(null);
       if (data.outfits.length === 0) {
         setError('No outfit bundles yet. Try packing manually or add more clean items.');
       }
@@ -183,6 +347,93 @@ export function PackModeScreen({}: Props) {
       setSelectedSuggestion(null);
     } finally {
       setSuggesting(false);
+    }
+  }
+
+  async function buildPackList() {
+    setError(null);
+    setPlanning(true);
+    try {
+      const packedIds = items
+        .filter((item) => item.packed_for_trip)
+        .map((item) => item.id);
+      const requestCount = Math.min(
+        8,
+        Math.max(coverageTarget, selectedActivities.length)
+      );
+      const seedBase = Date.now();
+      const responses = await Promise.all(
+        Array.from({ length: requestCount }, (_, index) => {
+          const activity = selectedActivities[index % selectedActivities.length];
+          return api
+            .fetchOutfitRecommendations({
+              occasion: activity.occasion,
+              vibe: activity.vibe,
+              seed: seedBase + index,
+              excludeItemIds: packedIds,
+              lat: tripLocation?.latitude,
+              lon: tripLocation?.longitude,
+              weatherDate: tripWeather?.date,
+              locationName: tripLocation?.label,
+              season: tripWeather?.derived_season,
+            })
+            .then((data) => ({ data, activity }));
+        })
+      );
+
+      const candidates = responses.flatMap(({ data, activity }) =>
+        data.outfits.map((outfit) => ({
+          outfit,
+          activityLabel: activity.label,
+        }))
+      );
+      const plan = selectCoveragePlan(candidates, coverageTarget);
+      const weather = responses.find(({ data }) => data.weather)?.data.weather;
+      if (weather) setTripWeather(weather);
+
+      if (!plan) {
+        setPackPlan(null);
+        setSuggestions([]);
+        setSelectedIds(new Set());
+        setSelectedSuggestion(null);
+        setError('No pack list yet. Try fewer outfits or different activities.');
+        return;
+      }
+
+      setPackPlan(plan);
+      setSuggestions(plan.outfits.map((entry) => entry.outfit));
+      setSelectedIds(new Set(plan.uniqueItemIds));
+      setSelectedSuggestion(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not build pack list');
+      setPackPlan(null);
+    } finally {
+      setPlanning(false);
+    }
+  }
+
+  async function saveTripPlan() {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = {
+        name: destination.trim() || 'Upcoming trip',
+        destination: destination.trim() || null,
+        start_date: tripStart.trim() || null,
+        end_date: tripEnd.trim() || null,
+        activities: selectedActivities.map((activity) => activity.label),
+        item_ids: selectedList,
+      };
+      const result = activeTrip
+        ? await api.updateTrip(activeTrip.id, body)
+        : await api.createTrip(body);
+      setActiveTripId(result.trip.id);
+      const tripData = await api.fetchTrips();
+      setTrips(tripData.trips);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save trip');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -220,7 +471,17 @@ export function PackModeScreen({}: Props) {
 
   function selectSuggestion(index: number, outfit: OutfitRecommendation) {
     setSelectedSuggestion(index);
+    setPackPlan(null);
     setSelectedIds(new Set(outfit.items.map((item) => item.id)));
+  }
+
+  function toggleActivity(activity: TripActivityKey) {
+    setPlannedActivities((prev) => {
+      const next = new Set(prev);
+      if (next.has(activity) && next.size > 1) next.delete(activity);
+      else next.add(activity);
+      return next;
+    });
   }
 
   if (loading && items.length === 0) {
@@ -263,6 +524,21 @@ export function PackModeScreen({}: Props) {
             ))
           )}
         </View>
+        {activeTrip ? (
+          <View style={styles.progressWrap}>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min(100, Math.round(activeTrip.progress * 100))}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.tripDetail}>
+              {activeTrip.name}: {activeTrip.packed_count}/{activeTrip.item_count} checklist items packed
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.summaryActions}>
           <GlassButton
             title="Suggest fits"
@@ -320,19 +596,113 @@ export function PackModeScreen({}: Props) {
             style={[styles.tripInput, styles.dateInput]}
           />
         </View>
+        <View style={styles.coverageRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.fieldLabel}>Coverage goal</Text>
+            <Text style={styles.tripDetail}>
+              {tripDayCount
+                ? `${tripDayCount} trip days; suggested target is ${defaultOutfitTarget(
+                    tripDayCount
+                  )} outfits with rewear.`
+                : 'Add dates to estimate outfit coverage.'}
+            </Text>
+          </View>
+          <TextInput
+            value={desiredOutfits}
+            onChangeText={setDesiredOutfits}
+            placeholder={String(coverageTarget)}
+            placeholderTextColor={colors.placeholder}
+            keyboardType="number-pad"
+            style={[styles.tripInput, styles.coverageInput]}
+          />
+        </View>
+        <Text style={styles.fieldLabel}>Planned activities</Text>
+        <View style={styles.activityGrid}>
+          {ACTIVITY_OPTIONS.map((activity) => {
+            const active = plannedActivities.has(activity.key);
+            return (
+              <Pressable
+                key={activity.key}
+                onPress={() => toggleActivity(activity.key)}
+                style={({ pressed }) => [
+                  styles.activityChip,
+                  active && styles.activityChipActive,
+                  { opacity: pressed ? 0.75 : 1 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.activityText,
+                    active && styles.activityTextActive,
+                  ]}
+                >
+                  {activity.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <Text style={styles.tripDetail}>
           {tripWeather ? weatherDetail(tripWeather) : forecastSummary(forecastDays)}
         </Text>
         {forecastDays.length > 0 ? (
           <Text style={styles.tripDetail}>{forecastSummary(forecastDays)}</Text>
         ) : null}
-        <GlassButton
-          title="Sync trip weather"
-          onPress={loadTripForecast}
-          loading={forecastBusy}
-          style={{ marginTop: spacing.md }}
-        />
+        <View style={styles.summaryActions}>
+          <GlassButton
+            title="Sync weather"
+            onPress={loadTripForecast}
+            loading={forecastBusy}
+            fullWidth={false}
+            style={{ flex: 1 }}
+          />
+          <GlassButton
+            title="Build list"
+            onPress={buildPackList}
+            loading={planning}
+            disabled={items.length === 0}
+            fullWidth={false}
+            style={{ flex: 1 }}
+          />
+          <GlassButton
+            title={activeTrip ? 'Save trip' : 'Create trip'}
+            variant="secondary"
+            onPress={saveTripPlan}
+            loading={busy}
+            fullWidth={false}
+            style={{ flex: 1 }}
+          />
+        </View>
       </GlassCard>
+
+      {packPlan ? (
+        <GlassCard padded style={styles.planCard}>
+          <View style={styles.summaryRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.summaryTitle}>Pack list ready</Text>
+              <Text style={styles.summaryText}>
+                {packPlan.outfits.length} outfits, {packPlan.uniqueItemIds.length}{' '}
+                pieces selected
+              </Text>
+            </View>
+            <Ionicons name="checkbox-outline" size={24} color={colors.accent} />
+          </View>
+          <Text style={styles.planDetail}>
+            Reusing {packPlan.overlapCount} pieces across {packPlan.totalSlots}{' '}
+            outfit slots keeps the bag lighter. Press Pack below to mark the full
+            capsule.
+          </Text>
+          <View style={styles.activityGrid}>
+            {packPlan.outfits.map((entry, index) => (
+              <View key={`${entry.activityLabel}-${index}`} style={styles.planPill}>
+                <Text style={styles.planPillText}>
+                  Fit {index + 1}: {entry.activityLabel}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </GlassCard>
+      ) : null}
 
       {suggestions.length > 0 ? (
         <View style={styles.suggestions}>
@@ -340,7 +710,9 @@ export function PackModeScreen({}: Props) {
             <View style={{ flex: 1 }}>
               <Text style={styles.suggestionTitle}>Suggested fit bundles</Text>
               <Text style={styles.suggestionSub}>
-                Pick one, then press Pack to add the whole fit.
+                {packPlan
+                  ? 'These are the outfits behind the pack list.'
+                  : 'Pick one, then press Pack to add the whole fit.'}
               </Text>
             </View>
           </View>
@@ -563,6 +935,9 @@ function makeStyles({
     tripCard: {
       marginBottom: spacing.md,
     },
+    planCard: {
+      marginBottom: spacing.md,
+    },
     summaryRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -585,6 +960,20 @@ function makeStyles({
     noCounts: {
       ...typography.caption,
       color: colors.textSecondary,
+    },
+    progressWrap: {
+      marginTop: spacing.md,
+    },
+    progressTrack: {
+      height: 8,
+      borderRadius: radii.pill,
+      overflow: 'hidden',
+      backgroundColor: surface.chipInactive,
+    },
+    progressFill: {
+      height: '100%',
+      borderRadius: radii.pill,
+      backgroundColor: colors.accent,
     },
     countPill: {
       minWidth: 82,
@@ -631,11 +1020,75 @@ function makeStyles({
     dateInput: {
       flex: 1,
     },
+    coverageRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.md,
+      marginTop: spacing.md,
+    },
+    coverageInput: {
+      width: 88,
+      marginTop: 0,
+      textAlign: 'center',
+      fontWeight: '800',
+    },
+    fieldLabel: {
+      ...typography.caption,
+      color: colors.text,
+      fontWeight: '800',
+      marginTop: spacing.md,
+      marginBottom: 2,
+    },
+    activityGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+    activityChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: radii.pill,
+      backgroundColor: surface.chipInactive,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surface.chipInactiveBorder,
+    },
+    activityChipActive: {
+      backgroundColor: colors.accentSoft,
+      borderColor: colors.accent,
+    },
+    activityText: {
+      ...typography.caption,
+      color: colors.text,
+      fontWeight: '700',
+    },
+    activityTextActive: {
+      color: colors.accent,
+    },
     tripDetail: {
       ...typography.caption,
       color: colors.textSecondary,
       marginTop: spacing.sm,
       lineHeight: 18,
+    },
+    planDetail: {
+      ...typography.callout,
+      color: colors.textSecondary,
+      marginTop: spacing.sm,
+      lineHeight: 20,
+    },
+    planPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: radii.pill,
+      backgroundColor: surface.chipInactive,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surface.chipInactiveBorder,
+    },
+    planPillText: {
+      ...typography.caption,
+      color: colors.text,
+      fontWeight: '700',
     },
     suggestions: {
       marginBottom: spacing.md,

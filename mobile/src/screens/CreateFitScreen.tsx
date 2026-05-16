@@ -40,11 +40,12 @@ import {
 
 type Props = NativeStackScreenProps<AppStackParamList, 'CreateFit'>;
 
-export function CreateFitScreen({ navigation }: Props) {
+export function CreateFitScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const headerPad = stackTopPadding(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const tripParams = route.params;
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [mime, setMime] = useState<string>('image/jpeg');
   const [caption, setCaption] = useState('');
@@ -59,13 +60,20 @@ export function CreateFitScreen({ navigation }: Props) {
     setClosetLoading(true);
     try {
       const data = await api.fetchCloset();
-      setClosetItems(data.items.filter((i) => i.status !== 'wishlist'));
+      const owned = data.items.filter((i) => i.status !== 'wishlist');
+      const sorted = tripParams?.packedOnly
+        ? [
+            ...owned.filter((i) => i.packed_for_trip),
+            ...owned.filter((i) => !i.packed_for_trip),
+          ]
+        : owned;
+      setClosetItems(sorted);
     } catch {
       // Tagging is optional — skip if we can't load.
     } finally {
       setClosetLoading(false);
     }
-  }, []);
+  }, [tripParams?.packedOnly]);
 
   useEffect(() => {
     loadCloset();
@@ -135,6 +143,10 @@ export function CreateFitScreen({ navigation }: Props) {
         mimeType: mime,
         caption: caption.trim() || null,
         itemIds: [...tagged],
+        tripName: tripParams?.tripName,
+        tripDestination: tripParams?.tripDestination,
+        tripStart: tripParams?.tripStart,
+        tripEnd: tripParams?.tripEnd,
       });
       navigation.replace('FitDetail', { postId: res.post.id });
     } catch (e) {
@@ -158,9 +170,26 @@ export function CreateFitScreen({ navigation }: Props) {
         >
           <Text style={styles.heading}>Daily fit check</Text>
           <Text style={styles.blurb}>
-            Snap or pick today's fit. Tag items from your closet and your
-            friends will see it in their feed.
+            {tripParams?.tripName
+              ? `Snap a fit for ${tripParams.tripName}. Packed items appear first.`
+              : "Snap or pick today's fit. Tag items from your closet and your friends will see it in their feed."}
           </Text>
+
+          {tripParams?.tripName ? (
+            <GlassCard padded style={styles.tripCard}>
+              <View style={styles.tripHeader}>
+                <Ionicons name="airplane-outline" size={18} color={colors.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.tripTitle}>{tripParams.tripName}</Text>
+                  <Text style={styles.tripMeta}>
+                    {[tripParams.tripDestination, tripParams.tripStart, tripParams.tripEnd]
+                      .filter(Boolean)
+                      .join(' · ') || 'Trip outfit log'}
+                  </Text>
+                </View>
+              </View>
+            </GlassCard>
+          ) : null}
 
           {imageUri ? (
             <Pressable onPress={pickFromLibrary} style={styles.previewWrap}>
@@ -360,6 +389,23 @@ function makeStyles({
       paddingVertical: 4,
     },
     flexBtn: { flex: 1 },
+    tripCard: {
+      marginBottom: spacing.lg,
+    },
+    tripHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    tripTitle: {
+      ...typography.bodyMedium,
+      color: colors.text,
+    },
+    tripMeta: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
     sectionLabel: {
       ...typography.micro,
       color: colors.textSecondary,

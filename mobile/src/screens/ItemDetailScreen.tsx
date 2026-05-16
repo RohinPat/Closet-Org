@@ -14,19 +14,23 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  Vibration,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../navigation/RootNavigator';
 import * as api from '../api/client';
 import type {
   ClothingItem,
   ClosetLocation,
+  FitPost,
   ItemDetailsPatch,
   OutfitRecommendation,
+  WearHistoryEntry,
 } from '../api/types';
 import { itemImageUrl } from '../config';
 import {
@@ -44,6 +48,7 @@ import {
   CLOTHING_SUBCATEGORIES,
 } from '../constants/classification';
 import { MAX_USER_TAG_LENGTH, MAX_USER_TAGS } from '../constants/tags';
+import { imagePickerAssetToUpload } from '../utils/imageUpload';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { stackTopPadding } from '../utils/screenSpacing';
 import {
@@ -64,6 +69,7 @@ type EditableField =
   | 'purchase_date'
   | 'purchase_location'
   | 'storage_location'
+  | 'care_summary'
   | 'notes';
 
 type FieldConfig = {
@@ -97,6 +103,12 @@ const FIELDS: FieldConfig[] = [
     key: 'storage_location',
     label: 'Location',
     placeholder: 'e.g. front rack, left',
+  },
+  {
+    key: 'care_summary',
+    label: 'Care',
+    placeholder: 'Scan a care tag or add washing notes',
+    multiline: true,
   },
   {
     key: 'notes',
@@ -155,16 +167,22 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   const [closetLocations, setClosetLocations] = useState<ClosetLocation[]>([]);
   const [editing, setEditing] = useState<FieldConfig | null>(null);
   const [tagsModalOpen, setTagsModalOpen] = useState(false);
+  const [wearHistory, setWearHistory] = useState<WearHistoryEntry[]>([]);
+  const [wornPosts, setWornPosts] = useState<FitPost[]>([]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [full, locs] = await Promise.all([
+      const [full, locs, history, posts] = await Promise.all([
         api.fetchItem(initial.id),
         api.fetchClosetLocations(),
+        api.fetchItemWearHistory(initial.id),
+        api.fetchItemWornOutfits(initial.id),
       ]);
       setItem(full);
       setClosetLocations(locs.locations);
+      setWearHistory(history.history);
+      setWornPosts(posts.posts);
     } catch {
       /* keep existing */
     } finally {
@@ -219,6 +237,7 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   const cpwDisplay = hasCpw ? `$${(cpw as number).toFixed(2)}` : '';
 
   async function onToggleFavorite() {
+    Vibration.vibrate(10);
     try {
       await api.toggleFavorite(item.id);
       await refresh();
@@ -252,6 +271,7 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   }
 
   async function onDelete() {
+    Vibration.vibrate(10);
     const ok = await confirmDelete('Remove this from your closet?');
     if (!ok) return;
     try {
@@ -263,8 +283,21 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   }
 
   async function setWashed(clean: boolean) {
+    Vibration.vibrate(10);
     try {
       await api.updateItemStatus(item.id, { washed: clean });
+      await refresh();
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
+  }
+
+  async function setLaundryState(laundryState: string) {
+    try {
+      if (laundryState === 'clean' || laundryState === 'in_hamper') {
+        await api.updateItemStatus(item.id, { washed: laundryState === 'clean' });
+      }
+      await api.updateItemDetails(item.id, { laundry_state: laundryState });
       await refresh();
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
@@ -334,6 +367,7 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   async function saveTags(patch: ItemDetailsPatch) {
     try {
       await api.updateItemDetails(item.id, patch);
+      await api.saveClassificationCorrection(item.id, patch as Record<string, unknown>);
       setTagsModalOpen(false);
       await refresh();
     } catch (e) {
@@ -365,6 +399,34 @@ export function ItemDetailScreen({ route, navigation }: Props) {
       await refresh();
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
+  }
+
+  async function scanCareLabel() {
+    const cam = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cam.granted) {
+      Alert.alert('Camera needed', 'Camera permission is required to scan a care tag.');
+      return;
+    }
+    const picked = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.9,
+    });
+    if (picked.canceled || !picked.assets?.[0]) return;
+    setLoading(true);
+    try {
+      const photo = await imagePickerAssetToUpload(picked.assets[0], 'carelabel');
+      const scanned = await api.scanCareLabel(item.id, photo);
+      setItem((prev) => ({
+        ...prev,
+        care_label_text: scanned.care_label_text,
+        care_summary: scanned.care_summary,
+      }));
+      Alert.alert('Care label saved', scanned.care_summary || 'Care text was saved.');
+    } catch (e) {
+      Alert.alert('Could not scan label', e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -500,6 +562,17 @@ export function ItemDetailScreen({ route, navigation }: Props) {
                   <Text style={styles.tagText}>{c}</Text>
                 </View>
               ))}
+              {(item.color_hexes || []).map((hex) => (
+                <View
+                  key={hex}
+                  style={[styles.hexDot, { backgroundColor: hex }]}
+                />
+              ))}
+              {item.pattern ? (
+                <View style={styles.tag}>
+                  <Text style={styles.tagText}>{item.pattern}</Text>
+                </View>
+              ) : null}
               {(item.user_tags || []).map((t) => (
                 <View key={t} style={[styles.tag, styles.userTag]}>
                   <Text style={styles.tagText}>{t}</Text>
@@ -605,7 +678,56 @@ export function ItemDetailScreen({ route, navigation }: Props) {
           </GlassCard>
 
           <GlassCard padded style={styles.detailsCard}>
-            <Text style={styles.detailsHeader}>Details</Text>
+            <Text style={styles.detailsHeader}>Lifecycle</Text>
+            <Text style={styles.detailValue}>
+              Laundry state: {item.laundry_state || (item.washed ? 'clean' : 'worn')}
+            </Text>
+            <View style={styles.quickStateRow}>
+              {['clean', 'worn', 'in_hamper', 'washing', 'drying'].map((state) => (
+                <Pressable
+                  key={state}
+                  onPress={() => setLaundryState(state)}
+                  style={[
+                    styles.stateChip,
+                    (item.laundry_state || (item.washed ? 'clean' : 'worn')) === state &&
+                      styles.stateChipActive,
+                  ]}
+                >
+                  <Text style={styles.stateChipText}>{state.replace('_', ' ')}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.detailLabel}>Wear history</Text>
+            <View style={styles.heatmapRow}>
+              {wearHistory.slice(0, 28).map((entry) => (
+                <View key={entry.id} style={styles.heatmapDot} />
+              ))}
+              {wearHistory.length === 0 ? (
+                <Text style={styles.detailValueEmpty}>No wears logged yet.</Text>
+              ) : null}
+            </View>
+            <Text style={styles.detailLabel}>
+              Worn outfits containing this item: {wornPosts.length}
+            </Text>
+          </GlassCard>
+
+          <GlassCard padded style={styles.detailsCard}>
+            <View style={styles.detailsHeaderRow}>
+              <Text style={styles.detailsHeader}>Details</Text>
+              <Pressable
+                onPress={scanCareLabel}
+                disabled={loading}
+                style={({ pressed }) => [
+                  styles.scanCareBtn,
+                  { opacity: pressed || loading ? 0.65 : 1 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Scan care label"
+              >
+                <Ionicons name="scan-outline" size={15} color={colors.accent} />
+                <Text style={styles.scanCareText}>Scan care</Text>
+              </Pressable>
+            </View>
             {closetLocations.length > 0 ? (
               <View style={styles.closetPicker}>
                 <Text style={styles.detailLabel}>Closet</Text>
@@ -1593,6 +1715,13 @@ function makeStyles({
       color: colors.text,
       fontWeight: '600',
     },
+    hexDot: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairline,
+    },
     statsCard: {
       padding: spacing.lg,
       marginBottom: spacing.lg,
@@ -1647,10 +1776,30 @@ function makeStyles({
       padding: spacing.lg,
       marginBottom: spacing.lg,
     },
+    detailsHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: spacing.sm,
+      gap: spacing.sm,
+    },
     detailsHeader: {
       ...typography.micro,
       color: colors.textMuted,
-      marginBottom: spacing.sm,
+    },
+    scanCareBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      borderRadius: radii.pill,
+      backgroundColor: colors.accentSoft,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    scanCareText: {
+      ...typography.caption,
+      color: colors.accent,
+      fontWeight: '700',
     },
     closetPicker: {
       paddingVertical: spacing.sm,
@@ -1712,6 +1861,44 @@ function makeStyles({
     detailValueEmpty: {
       color: colors.placeholder,
       fontWeight: '400',
+    },
+    quickStateRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+      marginBottom: spacing.md,
+    },
+    stateChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: radii.pill,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairline,
+      backgroundColor: surface.chipInactive,
+    },
+    stateChipActive: {
+      borderColor: colors.accent,
+      backgroundColor: colors.accentSoft,
+    },
+    stateChipText: {
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: '700',
+      textTransform: 'capitalize',
+    },
+    heatmapRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 5,
+      marginTop: spacing.xs,
+      marginBottom: spacing.md,
+    },
+    heatmapDot: {
+      width: 12,
+      height: 12,
+      borderRadius: 3,
+      backgroundColor: colors.accent,
     },
     actions: {
       gap: spacing.md,

@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  Vibration,
   View,
   type LayoutChangeEvent,
 } from 'react-native';
@@ -517,6 +518,24 @@ export function ClosetScreen() {
   const isList = numColumns === 1;
   const isDense = numColumns >= 3;
 
+  const quickMarkClean = useCallback(async (item: ClothingItem) => {
+    Vibration.vibrate(10);
+    await api.updateItemStatus(item.id, { washed: true });
+    await load();
+  }, [load]);
+
+  const quickFavorite = useCallback(async (item: ClothingItem) => {
+    Vibration.vibrate(10);
+    await api.toggleFavorite(item.id);
+    await load();
+  }, [load]);
+
+  const quickDelete = useCallback(async (item: ClothingItem) => {
+    Vibration.vibrate(10);
+    await api.deleteItem(item.id);
+    await load();
+  }, [load]);
+
   const renderItem = useCallback(
     ({ item }: { item: ClothingItem }) => {
       const uri = itemThumbnailUrl(item);
@@ -635,6 +654,19 @@ export function ClosetScreen() {
                 ×{item.quantity ?? 1} · {item.clean_count ?? 0} clean
               </Text>
             ) : null}
+            {isList ? (
+              <View style={styles.quickActions}>
+                <Pressable onPress={() => quickMarkClean(item)} style={styles.quickAction}>
+                  <Ionicons name="water-outline" size={14} color={colors.text} />
+                </Pressable>
+                <Pressable onPress={() => quickFavorite(item)} style={styles.quickAction}>
+                  <Ionicons name="heart-outline" size={14} color={colors.text} />
+                </Pressable>
+                <Pressable onPress={() => quickDelete(item)} style={styles.quickActionDanger}>
+                  <Ionicons name="trash-outline" size={14} color="#fff" />
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         </Pressable>
       );
@@ -644,6 +676,9 @@ export function ClosetScreen() {
       isDense,
       isList,
       navigation,
+      quickDelete,
+      quickFavorite,
+      quickMarkClean,
       styles,
       surface,
     ]
@@ -1152,6 +1187,11 @@ export function ClosetScreen() {
                         <Text style={styles.visualRowSub} numberOfLines={1}>
                           {m.item.subcategory} · {sim}% match
                         </Text>
+                        {m.explanation ? (
+                          <Text style={styles.visualWhy} numberOfLines={2}>
+                            {m.explanation}
+                          </Text>
+                        ) : null}
                       </View>
                       <Ionicons
                         name="chevron-forward"
@@ -1331,6 +1371,12 @@ function makeStyles({
       color: colors.textMuted,
       marginTop: 2,
     },
+    visualWhy: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 3,
+      lineHeight: 16,
+    },
     chips: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -1456,6 +1502,29 @@ function makeStyles({
     neglectTextModerate: { color: colors.warning },
     neglectTextSevere: { color: colors.danger },
     cardBody: { padding: spacing.md },
+    quickActions: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+    quickAction: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: surface.chipInactive,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surface.chipInactiveBorder,
+    },
+    quickActionDanger: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.danger,
+    },
     cardTitle: {
       ...typography.bodyMedium,
       color: colors.text,
