@@ -2,17 +2,9 @@
 
 Remaining work only. Keep this practical: features that fit the current FastAPI + SQLite + Expo + CLIP app and are worth building soon.
 
-## Recently shipped (near-term MVP pass)
-
-Trips (`trips` + `trip_packed_items`), packing checklist progress, destination weather sync in Pack Mode, post-trip auto-unpack for ended trips. Visual search per-result explanations; embedding backfill endpoint; worn-fit lookup and wear-history data on item detail; laundry state chips + wear dots; duplicate hints on upload plus embedding-distance pairs in insights; richer composition (season/pattern); classification corrections persisted; heuristic pattern labels + hex swatches from dominant colors; expanded outfit vibes (`minimal`, `bold`, `athleisure`); recommendation filtering against historically worn fit combos; in-app lending/prep reminder cards (Profile). Stats skeleton loading; closet list quick actions + short vibration feedback on key actions.
-
 ## Travel & packing
 
 - **Capsule optimizer** — stronger “pick N items that maximize outfit combinations” beyond the current coverage-style pack list.
-
-## Search within your closet
-
-_No open bullets — swatch filters, visual explanations, backfill, and worn-outfit lookup are in place._
 
 ## Notifications & reminders
 
