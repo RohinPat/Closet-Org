@@ -310,3 +310,61 @@ export function cycleDensity(current: Density): Density {
   const idx = DENSITY_VALUES.indexOf(current);
   return DENSITY_VALUES[(idx + 1) % DENSITY_VALUES.length];
 }
+
+const ONBOARDING_CAROUSEL_KEY = 'onboarding_carousel_v1';
+const ONBOARDING_CHECKLIST_DISMISSED_KEY = 'onboarding_checklist_dismissed_v1';
+const ONBOARDING_ITEM_DETAIL_VISITED_KEY = 'onboarding_item_detail_visited_v1';
+
+export type OnboardingCarouselStatus = 'pending' | 'completed' | 'skipped';
+
+export function readOnboardingCarouselStatusSync(): OnboardingCarouselStatus {
+  try {
+    const v = SecureStore.getItem(ONBOARDING_CAROUSEL_KEY);
+    if (v === 'completed' || v === 'skipped') return v;
+  } catch {
+    // fall through
+  }
+  return 'pending';
+}
+
+export async function setOnboardingCarouselStatus(
+  status: 'completed' | 'skipped'
+): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(ONBOARDING_CAROUSEL_KEY, status);
+  } catch {
+    // best-effort
+  }
+}
+
+export function readOnboardingChecklistDismissedSync(): boolean {
+  try {
+    return SecureStore.getItem(ONBOARDING_CHECKLIST_DISMISSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export async function setOnboardingChecklistDismissed(): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(ONBOARDING_CHECKLIST_DISMISSED_KEY, '1');
+  } catch {
+    // best-effort
+  }
+}
+
+export function readOnboardingItemDetailVisitedSync(): boolean {
+  try {
+    return SecureStore.getItem(ONBOARDING_ITEM_DETAIL_VISITED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export async function markOnboardingItemDetailVisited(): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(ONBOARDING_ITEM_DETAIL_VISITED_KEY, '1');
+  } catch {
+    // best-effort
+  }
+}

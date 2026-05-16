@@ -12,13 +12,13 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  Vibration,
   View,
   type LayoutChangeEvent,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { Swipeable } from 'react-native-gesture-handler';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -28,6 +28,7 @@ import * as api from '../api/client';
 import type { ClothingItem, ClosetLocation, VisualSearchMatch } from '../api/types';
 import { itemThumbnailUrl } from '../config';
 import { imagePickerAssetToUpload } from '../utils/imageUpload';
+import { hapticLight } from '../utils/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   tabTopPadding,
@@ -39,6 +40,8 @@ import {
   GlassInputContainer,
   ScreenBackground,
 } from '../components/Glass';
+import { OnboardingChecklistBanner } from '../components/OnboardingChecklistBanner';
+import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import {
   cycleDensity,
@@ -652,23 +655,35 @@ export function ClosetScreen() {
     sort,
   ]);
 
+  const { user } = useAuth();
+  const onboardingChecklistHeader =
+    user != null ? (
+      <OnboardingChecklistBanner
+        navigation={navigation}
+        userId={user.id}
+        firstItem={items[0] ?? null}
+      />
+    ) : null;
+
   const isList = numColumns === 1;
   const isDense = numColumns >= 3;
+  const listSwipeActions = isList && Platform.OS !== 'web';
+  const listInlineButtons = isList && Platform.OS === 'web';
 
   const quickMarkClean = useCallback(async (item: ClothingItem) => {
-    Vibration.vibrate(10);
+    await hapticLight();
     await api.updateItemStatus(item.id, { washed: true });
     await load();
   }, [load]);
 
   const quickFavorite = useCallback(async (item: ClothingItem) => {
-    Vibration.vibrate(10);
+    await hapticLight();
     await api.toggleFavorite(item.id);
     await load();
   }, [load]);
 
   const quickDelete = useCallback(async (item: ClothingItem) => {
-    Vibration.vibrate(10);
+    await hapticLight();
     await api.deleteItem(item.id);
     await load();
   }, [load]);
@@ -678,7 +693,7 @@ export function ClosetScreen() {
       const uri = itemThumbnailUrl(item);
       const days = daysSinceWorn(item);
       const tier = neglectTier(days);
-      return (
+      const card = (
         <Pressable
           style={({ pressed }) => [
             styles.card,
@@ -752,8 +767,8 @@ export function ClosetScreen() {
                   tier === 'severe'
                     ? styles.neglectSevere
                     : tier === 'moderate'
-                    ? styles.neglectModerate
-                    : styles.neglectMild,
+                      ? styles.neglectModerate
+                      : styles.neglectMild,
                 ]}
               >
                 <Text
@@ -762,8 +777,8 @@ export function ClosetScreen() {
                     tier === 'severe'
                       ? styles.neglectTextSevere
                       : tier === 'moderate'
-                      ? styles.neglectTextModerate
-                      : styles.neglectTextMild,
+                        ? styles.neglectTextModerate
+                        : styles.neglectTextMild,
                   ]}
                 >
                   {neglectLabel(item, days!)}
@@ -791,15 +806,15 @@ export function ClosetScreen() {
                 ×{item.quantity ?? 1} · {item.clean_count ?? 0} clean
               </Text>
             ) : null}
-            {isList ? (
+            {listInlineButtons ? (
               <View style={styles.quickActions}>
-                <Pressable onPress={() => quickMarkClean(item)} style={styles.quickAction}>
+                <Pressable onPress={() => void quickMarkClean(item)} style={styles.quickAction}>
                   <Ionicons name="water-outline" size={14} color={colors.text} />
                 </Pressable>
-                <Pressable onPress={() => quickFavorite(item)} style={styles.quickAction}>
+                <Pressable onPress={() => void quickFavorite(item)} style={styles.quickAction}>
                   <Ionicons name="heart-outline" size={14} color={colors.text} />
                 </Pressable>
-                <Pressable onPress={() => quickDelete(item)} style={styles.quickActionDanger}>
+                <Pressable onPress={() => void quickDelete(item)} style={styles.quickActionDanger}>
                   <Ionicons name="trash-outline" size={14} color="#fff" />
                 </Pressable>
               </View>
@@ -807,11 +822,63 @@ export function ClosetScreen() {
           </View>
         </Pressable>
       );
+
+      if (listSwipeActions) {
+        return (
+          <Swipeable
+            overshootRight={false}
+            friction={2}
+            containerStyle={{ marginBottom: spacing.sm }}
+            renderRightActions={() => (
+              <View style={styles.swipeRail}>
+                <Pressable
+                  accessibilityLabel="Mark clean"
+                  accessibilityRole="button"
+                  onPress={() => void quickMarkClean(item)}
+                  style={[styles.swipeAction, styles.swipeClean]}
+                >
+                  <Ionicons name="water-outline" size={20} color={colors.success} />
+                </Pressable>
+                <Pressable
+                  accessibilityLabel={item.is_favorite ? 'Remove favorite' : 'Favorite'}
+                  accessibilityRole="button"
+                  onPress={() => void quickFavorite(item)}
+                  style={[styles.swipeAction, styles.swipeMuted]}
+                >
+                  <Ionicons
+                    name={item.is_favorite ? 'heart' : 'heart-outline'}
+                    size={20}
+                    color={colors.accent}
+                  />
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Delete item"
+                  accessibilityRole="button"
+                  onPress={() => void quickDelete(item)}
+                  style={[styles.swipeAction, styles.swipeDanger]}
+                >
+                  <Ionicons name="trash-outline" size={20} color={colors.danger} />
+                </Pressable>
+              </View>
+            )}
+          >
+            {card}
+          </Swipeable>
+        );
+      }
+
+      return card;
     },
     [
       cardMaxWidth,
+      colors.accent,
+      colors.danger,
+      colors.success,
+      colors.text,
       isDense,
       isList,
+      listInlineButtons,
+      listSwipeActions,
       navigation,
       quickDelete,
       quickFavorite,
@@ -903,7 +970,10 @@ export function ClosetScreen() {
   }
 
   if (loading && items.length === 0) {
-    const skeletonKeys = [0, 1, 2, 3, 4, 5];
+    const skeletonCount = Math.max(6, numColumns * 3);
+    const skeletonWidth =
+      numColumns === 1 ? '100%' : numColumns === 2 ? '47%' : numColumns === 3 ? '31%' : '23%';
+    const skeletonKeys = Array.from({ length: skeletonCount }, (_, k) => k);
     return (
       <View style={{ flex: 1 }}>
         <ScreenBackground />
@@ -943,8 +1013,8 @@ export function ClosetScreen() {
               <View
                 key={k}
                 style={{
-                  width: '47%',
-                  maxWidth: 200,
+                  width: skeletonWidth,
+                  maxWidth: numColumns === 1 ? undefined : 200,
                   aspectRatio: 0.72,
                   borderRadius: radii.md,
                   backgroundColor: surface.cardOverlay,
@@ -1057,6 +1127,7 @@ export function ClosetScreen() {
         }
         keyboardShouldPersistTaps="handled"
       >
+        {onboardingChecklistHeader}
         {railSections.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyTitle}>
@@ -1110,6 +1181,7 @@ export function ClosetScreen() {
             progressViewOffset={scrollTop + stickyHeight}
           />
         }
+        ListHeaderComponent={onboardingChecklistHeader ?? undefined}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyTitle}>
@@ -1802,6 +1874,33 @@ function makeStyles({
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.danger,
+    },
+    swipeRail: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      paddingLeft: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    swipeAction: {
+      width: 72,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderRadius: radii.md,
+      marginRight: spacing.xs,
+      borderWidth: StyleSheet.hairlineWidth,
+    },
+    swipeClean: {
+      backgroundColor: surface.chipInactive,
+      borderColor: colors.success,
+      borderLeftWidth: 3,
+    },
+    swipeMuted: {
+      backgroundColor: surface.chipInactive,
+      borderColor: surface.chipInactiveBorder,
+    },
+    swipeDanger: {
+      backgroundColor: colors.dangerSoft,
+      borderColor: surface.secondaryBorder,
     },
     cardTitle: {
       ...typography.bodyMedium,

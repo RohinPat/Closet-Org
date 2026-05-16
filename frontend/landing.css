@@ -42,7 +42,7 @@ body {
     padding: 0 2rem;
 }
 
-/* Optional custom cursor — disabled sitewide for accessibility (DESIGN_REBIRTH §4.3) */
+/* Optional custom cursor — disabled sitewide for accessibility */
 .cursor-dot,
 .cursor-outline {
     display: none !important;

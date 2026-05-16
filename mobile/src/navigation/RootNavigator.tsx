@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import {
   NavigationContainer,
@@ -34,6 +34,8 @@ import { PackModeScreen } from '../screens/PackModeScreen';
 import { TripOutfitLogScreen } from '../screens/TripOutfitLogScreen';
 import { PlanningAheadScreen } from '../screens/PlanningAheadScreen';
 import { PersonalSettingsScreen } from '../screens/PersonalSettingsScreen';
+import { OnboardingCarouselScreen } from '../screens/OnboardingCarouselScreen';
+import { readOnboardingCarouselStatusSync } from '../preferences';
 import { shadow, typography } from '../theme';
 
 export type AuthStackParamList = {
@@ -372,6 +374,14 @@ export function RootNavigator() {
 
   const navTheme = useMemo(() => buildNavTheme(mode, colors), [mode, colors]);
 
+  const [carouselDone, setCarouselDone] = useState(
+    () => readOnboardingCarouselStatusSync() !== 'pending'
+  );
+
+  const onCarouselFinished = useCallback(() => {
+    setCarouselDone(true);
+  }, []);
+
   if (loading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.bg }]}>
@@ -382,7 +392,13 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      {user ? <AppStackNavigator /> : <AuthNavigator />}
+      {!carouselDone ? (
+        <OnboardingCarouselScreen onFinished={onCarouselFinished} />
+      ) : user ? (
+        <AppStackNavigator />
+      ) : (
+        <AuthNavigator />
+      )}
     </NavigationContainer>
   );
 }

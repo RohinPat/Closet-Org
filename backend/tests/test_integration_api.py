@@ -103,6 +103,54 @@ def test_closet_reads_and_bulk(client, h: dict) -> None:
     )
 
 
+def test_laundry_state_keeps_queue_in_sync(client, h: dict) -> None:
+    up = client.post(
+        "/api/upload-clothing",
+        headers=h,
+        files=[("files", ("a.png", BytesIO(MIN_PNG), "image/png"))],
+    )
+    assert up.status_code == 200, up.text
+    item_id = up.json()["item_id"]
+
+    empty = client.get("/api/laundry", headers=h)
+    assert empty.status_code == 200
+    assert empty.json()["total"] == 0
+
+    ham = client.put(
+        f"/api/item/{item_id}",
+        headers=h,
+        json={"laundry_state": "in_hamper"},
+    )
+    assert ham.status_code == 200, ham.text
+    queued = client.get("/api/laundry", headers=h)
+    assert queued.status_code == 200
+    bucket = queued.json()["queued"]
+    ids = [int(it["item_id"]) for it in bucket]
+    assert item_id in ids
+
+    dry = client.put(
+        f"/api/item/{item_id}",
+        headers=h,
+        json={"laundry_state": "washing"},
+    )
+    assert dry.status_code == 200, dry.text
+    washers = client.get("/api/laundry", headers=h)
+    assert washers.status_code == 200
+    ws = washers.json()["washing"]
+    wids = [int(it["item_id"]) for it in ws]
+    assert item_id in wids
+
+    fresh = client.put(
+        f"/api/item/{item_id}",
+        headers=h,
+        json={"laundry_state": "clean"},
+    )
+    assert fresh.status_code == 200, fresh.text
+    done = client.get("/api/laundry", headers=h)
+    assert done.status_code == 200
+    assert done.json()["total"] == 0
+
+
 def test_upload_and_item_family(client, h: dict) -> None:
     up = client.post(
         "/api/upload-clothing",

@@ -30,3 +30,20 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(async () => {}),
   deleteItemAsync: jest.fn(async () => {}),
 }));
+
+jest.mock('react-native-reanimated', () =>
+  require('react-native-reanimated/mock')
+);
+
+jest.mock('react-native-gesture-handler', () => {
+  const { View } = require('react-native');
+  return {
+    GestureHandlerRootView: View,
+    Swipeable: ({ children }) => children ?? null,
+  };
+});
+
+jest.mock('expo-haptics', () => ({
+  ImpactFeedbackStyle: { Light: 'light' },
+  impactAsync: jest.fn(async () => {}),
+}));

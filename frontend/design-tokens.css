@@ -1,7 +1,6 @@
 /**
  * Closet-Org design tokens (web)
- * Names align with mobile/src/theme.ts: accent, accentSoft, accentGradient, danger, success, warning.
- * See DESIGN_REBIRTH.md §5–7.
+ * Names mirror mobile/src/theme.ts: accent, accentSoft, accentGradient, danger, success, warning.
  */
 
 :root {

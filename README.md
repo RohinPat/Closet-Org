@@ -3,9 +3,12 @@
 A personal closet manager: upload photos of clothes, the backend classifies them with CLIP + a hue-based color extractor, and you get an outfit recommender and stats on top.
 
 Three surfaces share one FastAPI backend:
+
 - a Python FastAPI + SQLite **backend**
 - a static **web frontend** (vanilla JS, served by FastAPI)
 - a React Native **mobile app** (Expo, iOS/Android)
+
+---
 
 ## Running the backend
 
@@ -15,16 +18,13 @@ cd backend
 python main.py
 ```
 
-The API and the web frontend are both served at `http://localhost:8000`.
-In development the backend auto-reloads on file changes; flip
-`CLOSET_ENV=production` (or `UVICORN_RELOAD=0`) to turn that off.
+The API and the web frontend are both served at `http://localhost:8000`. In development the backend auto-reloads on file changes; set `CLOSET_ENV=production` (or `UVICORN_RELOAD=0`) to turn that off.
 
-First run will download CLIP weights (~150 MB) and, on first classification, the rembg U²-Net model for background removal (~5 MB).
+First run downloads CLIP weights (~150 MB) and, on first classification, the rembg U²-Net model for background removal (~5 MB).
 
 ### Configuration
 
-Copy [`.env.example`](.env.example) to `.env`, fill in the values, and
-export them in your shell before launching uvicorn. Key variables:
+Copy [`.env.example`](.env.example) to `.env`, fill in the values, and export them before launching uvicorn:
 
 | Variable | Purpose |
 |----------|---------|
@@ -34,79 +34,189 @@ export them in your shell before launching uvicorn. Key variables:
 | `MAX_UPLOAD_BYTES` / `MAX_REQUEST_BYTES` | Upload + body size caps. |
 | `ACCESS_TOKEN_TTL_MINUTES` | JWT lifetime. Default 7 days. |
 
-See [SECURITY.md](SECURITY.md) for the full threat model and the
-deployment checklist.
+Threat model, headers, uploads, deployment checklist → **[PROJECT.md § Security](PROJECT.md#security)**.
 
 ### Web frontend
-Open `http://localhost:8000` in a browser. Register an account, then upload items, view the closet, get outfit recommendations, and check stats.
 
-### Mobile app
+Open `http://localhost:8000`, register, then upload items, outfits, stats.
+
+<a id="mobile-app"></a>
+
+### Mobile app (Expo)
+
+Prerequisites: Node.js 18+, npm, backend running. This repo’s `mobile/app.json` targets API port **8001** (backend defaults to **8000** for web — use `uvicorn` on `8001` for mobile-only dev or set `EXPO_PUBLIC_API_URL` as below).
+
 ```bash
 cd mobile
 npm install
 npx expo start
 ```
 
-Scan the QR code with Expo Go (or run on an iOS/Android simulator). If your phone can't reach `localhost`, start Expo with `EXPO_PUBLIC_API_URL=http://192.168.x.x:8001` pointed at your computer's LAN IP, matching `mobile/app.json`.
+| Client | Typical `EXPO_PUBLIC_API_URL` |
+|--------|------------------------------|
+| Same machine, iOS Simulator | `http://localhost:8001` |
+| Android Emulator | `http://10.0.2.2:8001` |
+| Physical phone on Wi‑Fi | `http://<your-pc-lan-ip>:8001` |
 
-## What's in here
+No trailing slash. Restart Expo after changing the variable.
+
+<details>
+<summary>Shell examples</summary>
+
+**PowerShell (session)**
+
+```powershell
+$env:EXPO_PUBLIC_API_URL = "http://10.0.2.2:8001"
+npx expo start
+```
+
+**macOS / Linux**
+
+```bash
+EXPO_PUBLIC_API_URL=http://192.168.1.50:8001 npx expo start
+```
+
+</details>
+
+**Production:** point `EXPO_PUBLIC_API_URL` at HTTPS API; tighten Android cleartext and signing per your release pipeline ([PROJECT.md § Security](PROJECT.md#security)).
+
+Main entry points:
+
+- `mobile/src/config.ts` — API origin and image URLs  
+- `mobile/src/api/` — HTTP client  
+- `mobile/src/context/AuthContext.tsx` — session  
+- `mobile/src/navigation/RootNavigator.tsx` — stacks and tabs  
+
+---
+
+## What’s in the repo
 
 ```
-backend/                FastAPI app, models, SQLite DB
-  main.py               app + routes
-  auth.py               JWT auth, bcrypt password hashing
-  database/             SQLite manager + migrations
+backend/                FastAPI app, SQLite
+  main.py               routes
+  auth.py               JWT + bcrypt
+  database/             manager + migrations
   models/
-    clothing_classifier.py    CLIP zero-shot category/style + HSV color extraction
-    outfit_recommender.py     rule-based outfit picker
+    clothing_classifier.py   CLIP + HSV color
+    outfit_recommender.py    rule-based picker
 
-frontend/               vanilla HTML/CSS/JS web client
+frontend/               vanilla HTML/CSS/JS
 
-mobile/                 Expo React Native app
-  src/screens/          one file per screen
-  src/components/Glass.tsx    shared liquid-glass UI primitives
-  src/theme.ts          colors, radii, spacing tokens
+mobile/                 Expo React Native
+  src/screens/
+  src/components/Glass.tsx
+  src/theme.ts
   src/navigation/RootNavigator.tsx
 ```
 
+---
+
 ## API surface
 
-All routes under `/api` require a Bearer JWT (from `POST /api/auth/login`) except register/login.
+All `/api/*` routes need a Bearer JWT (`POST /api/auth/login`) except register/login.
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/api/auth/register` | create account |
-| POST | `/api/auth/login` | exchange username/password for token |
+| POST | `/api/auth/login` | token |
 | GET | `/api/auth/me` | current user |
 | PUT | `/api/auth/profile` | update profile |
-| POST | `/api/upload-clothing` | upload image, classify, save; may include `duplicate_hint` if similar items exist |
-| GET | `/api/closet` | list items; optional filters `category`, `status`, substring search `q` |
-| GET | `/api/closet/insights` | gaps, wardrobe mix, retirement heuristics |
-| POST | `/api/closet/fit-check` | one photo → classification + ranked closet pairings (temp file, not saved) |
-| GET | `/api/item/{id}` | item detail |
-| GET | `/api/item/{id}/outfits` | suggestions that always include this item |
-| PUT | `/api/item/{id}` | patch metadata (brand, colors, **`packed_for_trip`**, tags, …) |
-| PUT | `/api/item/{id}/status` | mark washed / worn / favorite |
-| DELETE | `/api/item/{id}` | remove item |
-| GET | `/api/outfits/recommend` | outfit suggestions (`occasion`, `season`, **`vibe`** ∈ clean_prep/streetwear/cozy, `seed`, `exclude_item_ids`, `pin_item_ids`; skips recent duplicate combos ~14d) |
-| GET | `/api/stats` | counts, by subcategory, **`best_cpw`** top 5 |
-| GET | `/api/wishlist` | list wishlist items |
-| POST | `/api/wishlist` | add a wishlist entry |
-| PUT | `/api/wishlist/{id}` | edit a wishlist entry |
-| PUT | `/api/item/{id}/promote` | promote wishlist item to owned |
+| POST | `/api/upload-clothing` | upload + classify; may include `duplicate_hint` |
+| GET | `/api/closet` | list; filters `category`, `status`, `q` |
+| GET | `/api/closet/insights` | gaps, mix, retirement heuristics |
+| POST | `/api/closet/fit-check` | temp photo → pairings |
+| GET | `/api/item/{id}` | detail |
+| GET | `/api/item/{id}/outfits` | suggestions including item |
+| PUT | `/api/item/{id}` | metadata (`packed_for_trip`, brand, tags, …) |
+| PUT | `/api/item/{id}/status` | washed / worn / favorite |
+| DELETE | `/api/item/{id}` | remove |
+| GET | `/api/outfits/recommend` | outfits (`occasion`, `season`, `vibe`, …) |
+| GET | `/api/stats` | counts, `best_cpw` top 5 |
+| GET/POST/PUT | `/api/wishlist` | wishlist CRUD |
+| PUT | `/api/item/{id}/promote` | wishlist → owned |
 
-## Notes
+---
 
-- Database: `backend/closet.db` (SQLite). To reset, stop the server and delete the file — schema is re-created on next start.
-- Uploaded images live in `uploads/` and are served at `/uploads/<filename>`.
-- The classifier is CLIP ViT-B/32, zero-shot. Color extraction uses rembg to mask the background, then a per-pixel HSV voting scheme. See [clothing_classifier.py](backend/models/clothing_classifier.py).
-- Items can carry multiple photos (front + back + extras). The upload endpoint accepts a `files` list; the first photo drives category/style/season classification and colors are merged across all photos so graphic backs don't get lost. Singular `image_path`/`thumbnail_path` stay populated with the front photo for backwards compatibility; full arrays live in `image_paths`/`thumbnail_paths`.
-- Closet screen has persisted density (list/comfy/compact/dense), persisted sort (recent / most worn / neglected / best CPW), and a grid ↔ rails layout toggle (rails group by subcategory). Filters AND together: status chips (Clean / Wash / Favorites) + category chip row + color swatch row + storage-location chip row + free-text search over category, subcategory, style, season, brand, notes, colors. Prefs live in [preferences.ts](mobile/src/preferences.ts).
-- `clothing_items.physical_location` is the laundry state machine's marker (`'closet'` / `'needs_wash'` / `'laundry'`) — it gets clobbered on every wear/wash cycle. The user-facing physical place (e.g. "front rack, left") lives in a separate `storage_location` column edited from the item detail screen.
-- Lending tracker: `clothing_items.lent_to` / `lent_at` / `lent_until`. Item detail has a Lend out / Mark returned button (modal asks name + optional `YYYY-MM-DD` return date); overdue items get a red banner. Lent items are skipped by the outfit recommender and tagged with a Lent badge on the closet card; the closet has a `Lent` filter chip. Endpoints: `PUT /api/item/{id}/lend`, `PUT /api/item/{id}/return`. Reminder push notifications aren't wired yet — the overdue indicator is in-app only.
-- **Planning (roadmap v0):** `GET /api/closet/insights` returns gaps, composition, and **`retirement_candidates`**. **`POST /api/closet/fit-check`** classifies one candidate image and ranks pairing closet items (temp upload deleted after). **`GET /api/item/{id}/outfits`** pins that item in the rule-based recommender. **`GET /api/stats`** includes **`best_cpw`**. **`vibe`** (`clean_prep` / `streetwear` / `cozy`) biases `/api/outfits/recommend`; returned sets are logged to **`outfit_suggestion_history`** so identical item bundles are de-emphasized for about 14 days. **`packed_for_trip`** on `clothing_items` excludes from outfit suggestions while away. **`POST /api/upload-clothing`** may return **`duplicate_hint`**. **`GET /api/closet?q=`** substring filter for server-side search.
-- Wishlist lives in the same `clothing_items` table — entries have `status='wishlist'` (default `'owned'`) plus `wishlist_name`, `wishlist_intent` (`want` / `gift` / `saving` / `sale_watch`), `wishlist_url`. Wishlist rows are excluded from `/api/closet`, `/api/stats`, `/api/outfits/recommend`, `/api/neglected-items`, and `/api/laundry`. The Profile tab → Wishlist screen lists, adds, promotes, and removes them; promotion flips `status` to `'owned'` and resets `date_added` so the item enters the closet fresh. Photo-less entries are allowed (image_path stores `''`); the metadata-only `POST /api/wishlist` is the current path — a "save with photo" flow can reuse `/api/upload-clothing` with a status patch later.
+## Product notes (today’s behavior)
 
-## Future work
+- **Database:** `backend/closet.db`. Delete while server stopped to reset; schema is recreated on next start.
+- **Files:** uploads in `uploads/`, served at `/uploads/<filename>`.
+- **Classifier:** CLIP ViT-B/32 zero-shot; color uses rembg + HSV voting. See `backend/models/clothing_classifier.py`.
+- **Photos:** Multiple images per item; first drives category/style/season; colors merge across photos. `image_paths` / `thumbnail_paths` hold arrays; singular paths keep backwards compatibility (front photo).
+- **Mobile closet UX:** Persisted density, sort (recent / worn / neglected / CPW), grid ↔ rails; filters combine (status, category, color swatches, `storage_location`, search). Prefs → `mobile/src/preferences.ts`.
+- **`physical_location` vs `storage_location`:** Laundry state (`closet` / `needs_wash` / `laundry`) cycles on wear/wash. User-visible place label is `storage_location` on detail.
+- **Lending:** `lent_to`, `lent_at`, `lent_until`; lend/return endpoints; in-app overdue state; reminder push → still **todo** ([PROJECT.md](PROJECT.md#still-to-build)).
+- **Signals already in backend:** insights + `retirement_candidates`, fit-check pairing, pinned item outfits, vibe + `outfit_suggestion_history` (~14d de-dupe), `packed_for_trip`, duplicate hint on upload, wishlist flows.
 
-See [ROADMAP.md](ROADMAP.md). Security posture is in [SECURITY.md](SECURITY.md).
+<a id="testing"></a>
+
+## Testing
+
+| Layer | Runner | CI | Gate |
+|-------|--------|-----|------|
+| Backend unit | pytest (`backend/tests`) | Yes | **≥63%** lines (`.coveragerc`) |
+| Web E2E | Playwright (`e2e/`) | Yes | — |
+| Mobile | Jest (`mobile/`) | Yes | snapshots pass; **no** coverage gate |
+
+Branch coverage is **off** for Python. Do not commit `coverage.json` / `htmlcov/`.
+
+### Backend (pytest)
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+```
+
+Set `CLOSET_SECRET_KEY` (≥32 chars): `your-local-secret-at-least-32-chars-long!!`
+
+```bash
+python -m pytest
+```
+
+`pytest.ini` scopes `backend/tests` and uses temp SQLite — not your dev `closet.db`.
+
+Coverage (matches CI):
+
+```bash
+python -m pytest backend/tests --cov=backend --cov-config=.coveragerc --cov-report=term-missing --cov-fail-under=63
+```
+
+### End-to-end (Playwright)
+
+```bash
+pip install -r requirements-dev.txt
+python -m playwright install chromium
+```
+
+Terminal A: `cd backend` → `python -m uvicorn main:app --host 127.0.0.1 --port 8000` with `CLOSET_SECRET_KEY` set.
+
+Terminal B: `E2E_BASE_URL=http://127.0.0.1:8000 python -m pytest e2e -v` (PowerShell: `$env:E2E_BASE_URL=...`).
+
+### Mobile (Jest)
+
+```bash
+cd mobile
+npm install
+npm test
+```
+
+Local coverage (`npm run test:coverage`): line coverage for `src/` is still low — use it to find gaps, not as a release metric until thresholds are set.
+
+Update snapshots after intentional UI change: `npm test -- -u`
+
+### Device flows (Maestro)
+
+Flows under `mobile/e2e/maestro/` — not in CI. [Maestro](https://maestro.mobile.dev/), then e.g. `maestro test mobile/e2e/maestro/login_screen.yaml -e APP_ID=com.your.bundle.id`. TestIDs: `login-username`, `login-password`, `login-submit`.
+
+### Store release QA
+
+Automated suites do **not** replace: production HTTPS URL, signing/bundle IDs, privacy policy / store questionnaires, disabling dev networking flags, screenshots, review credentials.
+
+---
+
+<a id="roadmap-and-backlog"></a>
+
+## Roadmap — still to build
+
+Single living checklist (**open items only**): **[PROJECT.md § Still to build](PROJECT.md#still-to-build)** — includes security tooling and infra gaps that belong to the backlog.
+
+Further security tooling (pytest, bandit, pip-audit, mobile Jest, Playwright headers) → **[PROJECT.md § Automated scanning (CI)](PROJECT.md#automated-scanning-ci)**.

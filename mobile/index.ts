@@ -1,3 +1,6 @@
+// Must load before React mounts (RNGH expects this first — avoids blank emulator screens).
+import 'react-native-gesture-handler';
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';

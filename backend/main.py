@@ -2,7 +2,7 @@
 
 
 
-Security posture (see SECURITY.md for the long version):
+Security posture (see PROJECT.md for the long version):
 
 - All /api/ routes outside /api/auth/{register,login,forgot-password,reset-password}
   require a valid Bearer JWT. Every route that takes an item / queue id as a path parameter checks

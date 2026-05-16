@@ -1,8 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
-
-  ActivityIndicator,
 
   Image,
 
@@ -183,6 +181,117 @@ const OUTFIT_SOURCES: { label: string; value: OutfitSource }[] = [
 
 ];
 
+/** Mirrors backend/models/outfit_recommender.py occasion_styles */
+const OCCASION_STYLES: Record<string, readonly string[]> = {
+  work: ['Formal', 'Business'],
+  casual: ['Casual', 'Streetwear'],
+  gym: ['Athletic'],
+  date: ['Formal', 'Casual'],
+  party: ['Formal', 'Streetwear'],
+};
+
+/** Mirrors backend/models/outfit_recommender.py vibe_styles */
+const VIBE_STYLES: Record<string, readonly string[]> = {
+  clean_prep: ['Formal', 'Business'],
+  streetwear: ['Streetwear', 'Athletic'],
+  cozy: ['Casual'],
+  minimal: ['Casual', 'Business'],
+  bold: ['Streetwear', 'Formal'],
+  athleisure: ['Athletic', 'Casual'],
+};
+
+function normItemStyle(style: string | null | undefined): string {
+
+  return (style || 'Casual').trim();
+
+}
+
+/** Same eligibility as outfit_recommender.generate_outfits (clean, not lent, packed split). */
+function itemsEligibleForOutfits(
+
+  items: ClothingItem[],
+
+  outfitSource: OutfitSource,
+
+  activeClosetLocationId: number | null,
+
+): ClothingItem[] {
+
+  return items.filter((item) => {
+
+    if (item.lent_to) return false;
+
+    if (
+
+      activeClosetLocationId != null &&
+
+      item.closet_location_id !== activeClosetLocationId
+
+    )
+
+      return false;
+
+    if (item.washed === false) return false;
+
+    if (item.is_bulk && (item.clean_count ?? 0) <= 0) return false;
+
+    if (outfitSource === 'packed') {
+
+      if (!item.packed_for_trip) return false;
+
+    } else if (item.packed_for_trip) {
+
+      return false;
+
+    }
+
+    return true;
+
+  });
+
+}
+
+function poolSupportsSeason(pool: ClothingItem[], seasonValue: string): boolean {
+
+  return pool.some((item) => {
+
+    const s = item.season?.trim();
+
+    return s === seasonValue || s === 'All-Season';
+
+  });
+
+}
+
+function poolSupportsOccasion(pool: ClothingItem[], occasionValue: string): boolean {
+
+  const preferred = OCCASION_STYLES[occasionValue];
+
+  if (!preferred) return true;
+
+  return pool.some((item) => preferred.includes(normItemStyle(item.style)));
+
+}
+
+function poolSupportsVibe(pool: ClothingItem[], vibeValue: string): boolean {
+
+  const preferred = VIBE_STYLES[vibeValue];
+
+  if (!preferred) return true;
+
+  return pool.some((item) => preferred.includes(normItemStyle(item.style)));
+
+}
+
+function locationHasAnyItems(
+  items: ClothingItem[],
+  locationId: number,
+): boolean {
+  return items.some(
+    (item) => !item.lent_to && item.closet_location_id === locationId,
+  );
+}
+
 
 
 function Chip({ label, active, onPress }: ChipProps) {
@@ -317,6 +426,176 @@ export function OutfitsScreen() {
 
 
 
+  const planPinIdsRef = useRef<number[]>([]);
+
+  const [plannedDayDraft, setPlannedDayDraft] = useState('');
+
+  const [pinnedPlanCount, setPinnedPlanCount] = useState(0);
+
+
+
+  const outfitPoolItems = useMemo(
+
+    () =>
+
+      itemsEligibleForOutfits(
+
+        closetItems,
+
+        outfitSource,
+
+        activeClosetLocationId,
+
+      ),
+
+    [closetItems, outfitSource, activeClosetLocationId],
+
+  );
+
+
+
+  const filterChipsReady = closetItems.length > 0;
+
+
+
+  const visibleOccasions = useMemo(() => {
+
+    if (!filterChipsReady) return OCCASIONS;
+
+    return OCCASIONS.filter(
+
+      (o) =>
+
+        !o.value || poolSupportsOccasion(outfitPoolItems, o.value),
+
+    );
+
+  }, [filterChipsReady, outfitPoolItems]);
+
+
+
+  const visibleSeasons = useMemo(() => {
+
+    if (!filterChipsReady) return SEASONS;
+
+    return SEASONS.filter(
+
+      (s) => !s.value || poolSupportsSeason(outfitPoolItems, s.value),
+
+    );
+
+  }, [filterChipsReady, outfitPoolItems]);
+
+
+
+  const visibleVibes = useMemo(() => {
+
+    if (!filterChipsReady) return VIBES;
+
+    return VIBES.filter(
+
+      (v) => !v.value || poolSupportsVibe(outfitPoolItems, v.value),
+
+    );
+
+  }, [filterChipsReady, outfitPoolItems]);
+
+
+
+  const visibleClosetLocations = useMemo(() => {
+
+    return closetLocations.filter((loc) =>
+
+      locationHasAnyItems(closetItems, loc.id),
+
+    );
+
+  }, [closetLocations, closetItems]);
+
+
+
+  const showClosetLocationPicker = visibleClosetLocations.length > 1;
+
+
+
+  const visibleOutfitSources = useMemo(() => {
+
+    if (!filterChipsReady) return OUTFIT_SOURCES;
+
+    if (packCounts.packed > 0) return OUTFIT_SOURCES;
+
+    return OUTFIT_SOURCES.filter((s) => s.value === 'home');
+
+  }, [filterChipsReady, packCounts.packed]);
+
+
+
+  useEffect(() => {
+
+    if (occasion && !visibleOccasions.some((o) => o.value === occasion)) {
+
+      setOccasion('');
+
+    }
+
+  }, [occasion, visibleOccasions]);
+
+
+
+  useEffect(() => {
+
+    if (season && !visibleSeasons.some((s) => s.value === season)) {
+
+      setSeason('');
+
+    }
+
+  }, [season, visibleSeasons]);
+
+
+
+  useEffect(() => {
+
+    if (vibe && !visibleVibes.some((v) => v.value === vibe)) {
+
+      setVibe('');
+
+    }
+
+  }, [vibe, visibleVibes]);
+
+
+
+  useEffect(() => {
+
+    if (
+
+      activeClosetLocationId != null &&
+
+      !visibleClosetLocations.some((l) => l.id === activeClosetLocationId)
+
+    ) {
+
+      setActiveClosetLocationId(null);
+
+    }
+
+  }, [activeClosetLocationId, visibleClosetLocations]);
+
+
+
+  useEffect(() => {
+
+    if (outfitSource === 'packed' && packCounts.packed === 0) {
+
+      setOutfitSource('home');
+
+    }
+
+  }, [outfitSource, packCounts.packed]);
+
+
+
   const generate = useCallback(async () => {
 
     setError(null);
@@ -337,19 +616,44 @@ export function OutfitsScreen() {
 
       setClosetLocations(locs.locations);
 
-      setActiveClosetLocationId((prev) =>
+      const defaultLoc = settings.default_closet_location_id ?? null;
 
-        prev === null ? settings.default_closet_location_id ?? null : prev
+      /** Resolve in-flight (state updates are async; avoids stale closure + empty-closet loops). */
+      const effectiveClosetLocationId =
 
-      );
+        activeClosetLocationId != null
+
+          ? activeClosetLocationId
+
+          : defaultLoc != null && locationHasAnyItems(closet.items, defaultLoc)
+
+            ? defaultLoc
+
+            : null;
+
+      setActiveClosetLocationId((prev) => {
+
+        if (prev != null) return prev;
+
+        if (defaultLoc != null && locationHasAnyItems(closet.items, defaultLoc))
+
+          return defaultLoc;
+
+        return null;
+
+      });
 
       const locationScoped =
 
-        activeClosetLocationId == null
+        effectiveClosetLocationId == null
 
           ? closet.items
 
-          : closet.items.filter((item) => item.closet_location_id === activeClosetLocationId);
+          : closet.items.filter(
+
+              (item) => item.closet_location_id === effectiveClosetLocationId,
+
+            );
 
       setClosetItems(locationScoped.filter((item) => !item.lent_to));
 
@@ -439,7 +743,11 @@ export function OutfitsScreen() {
 
         excludeItemIds: outfitSource === 'packed' ? homeIds : packedIds,
 
-        closetLocationId: activeClosetLocationId,
+        closetLocationId: effectiveClosetLocationId,
+
+        pinItemIds:
+
+          planPinIdsRef.current.length > 0 ? planPinIdsRef.current : undefined,
 
         ...weatherParams,
 
@@ -466,6 +774,66 @@ export function OutfitsScreen() {
     }
 
   }, [activeClosetLocationId, occasion, outfitSource, season, vibe, weatherSync]);
+
+
+
+  const applyPlannedPinsForDay = useCallback(async () => {
+
+    const iso = plannedDayDraft.trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+
+      setError('Use YYYY-MM-DD for the planned date (e.g. 2026-06-01).');
+
+      return;
+
+    }
+
+    setError(null);
+
+    try {
+
+      const { plans } = await api.fetchPlannedOutfits(true);
+
+      const match = plans.find((p) => p.planned_for === iso && p.status !== 'skipped');
+
+      const pins = [...(match?.item_ids ?? [])];
+
+      planPinIdsRef.current = pins;
+
+      setPinnedPlanCount(pins.length);
+
+      if (!match) {
+
+        setError('No outfit plan on that date — add one in Planning ahead.');
+
+      }
+
+    } catch (e) {
+
+      setError(e instanceof Error ? e.message : 'Could not load planned outfits.');
+
+    }
+
+    await generate();
+
+  }, [plannedDayDraft, generate]);
+
+
+
+  const clearPlannedPinsForDay = useCallback(async () => {
+
+    planPinIdsRef.current = [];
+
+    setPinnedPlanCount(0);
+
+    setPlannedDayDraft('');
+
+    setError(null);
+
+    await generate();
+
+  }, [generate]);
 
 
 
@@ -543,13 +911,19 @@ export function OutfitsScreen() {
 
       setClosetLocations(locs.locations);
 
+      const defaultLoc = settings.default_closet_location_id ?? null;
+
       const resolvedLocationId =
 
-        activeClosetLocationId === null
+        activeClosetLocationId != null
 
-          ? settings.default_closet_location_id ?? null
+          ? activeClosetLocationId
 
-          : activeClosetLocationId;
+          : defaultLoc != null && locationHasAnyItems(closet.items, defaultLoc)
+
+            ? defaultLoc
+
+            : null;
 
       if (activeClosetLocationId === null && resolvedLocationId !== null) {
 
@@ -1325,7 +1699,7 @@ export function OutfitsScreen() {
 
         <View style={styles.chips}>
 
-          {OUTFIT_SOURCES.map((source) => (
+          {visibleOutfitSources.map((source) => (
 
             <Chip
 
@@ -1353,7 +1727,7 @@ export function OutfitsScreen() {
 
 
 
-        {closetLocations.length > 0 ? (
+        {showClosetLocationPicker ? (
 
           <>
 
@@ -1371,7 +1745,7 @@ export function OutfitsScreen() {
 
               />
 
-              {closetLocations.map((loc) => (
+              {visibleClosetLocations.map((loc) => (
 
                 <Chip
 
@@ -1399,7 +1773,7 @@ export function OutfitsScreen() {
 
         <View style={styles.chips}>
 
-          {OCCASIONS.map((o) => (
+          {visibleOccasions.map((o) => (
 
             <Chip
 
@@ -1423,7 +1797,7 @@ export function OutfitsScreen() {
 
         <View style={styles.chips}>
 
-          {SEASONS.map((s) => (
+          {visibleSeasons.map((s) => (
 
             <Chip
 
@@ -1447,7 +1821,7 @@ export function OutfitsScreen() {
 
         <View style={styles.chips}>
 
-          {VIBES.map((v) => (
+          {visibleVibes.map((v) => (
 
             <Chip
 
@@ -1464,6 +1838,84 @@ export function OutfitsScreen() {
           ))}
 
         </View>
+
+
+
+        <Text style={styles.sectionLabel}>Planned day pins</Text>
+
+        <Text style={styles.plannedHint}>
+
+          Enter a date (YYYY-MM-DD) to pin items from that outfit plan and refresh suggestions.
+
+        </Text>
+
+        <GlassInputContainer style={styles.plannedShell}>
+
+          <TextInput
+
+            value={plannedDayDraft}
+
+            onChangeText={setPlannedDayDraft}
+
+            placeholder="2026-06-01"
+
+            placeholderTextColor={colors.placeholder}
+
+            autoCapitalize="none"
+
+            autoCorrect={false}
+
+            keyboardType="numbers-and-punctuation"
+
+            style={[styles.plannedInput, { color: colors.text }]}
+
+          />
+
+        </GlassInputContainer>
+
+        <View style={styles.plannedBtns}>
+
+          <GlassButton
+
+            title="Use plan"
+
+            onPress={applyPlannedPinsForDay}
+
+            loading={loading}
+
+            style={styles.plannedBtnHalf}
+
+            fullWidth={false}
+
+          />
+
+          <GlassButton
+
+            title="Clear pins"
+
+            variant="ghost"
+
+            onPress={clearPlannedPinsForDay}
+
+            loading={loading}
+
+            style={styles.plannedBtnHalf}
+
+            fullWidth={false}
+
+          />
+
+        </View>
+
+        {pinnedPlanCount > 0 ? (
+
+          <Text style={styles.plannedStatus}>
+
+            Pinning {pinnedPlanCount} item(s) from your plan.
+
+          </Text>
+
+        ) : null}
 
 
 
@@ -1505,13 +1957,51 @@ export function OutfitsScreen() {
 
         {loading && outfits.length === 0 ? (
 
-          <ActivityIndicator
+          <View style={styles.outfitSkeletonStack}>
 
-            color={colors.accent}
+            {[0, 1, 2].map((i) => (
 
-            style={{ marginTop: 32 }}
+              <View key={i} style={[styles.outfitSkeletonCard, { borderColor: surface.cardBorder }]}>
 
-          />
+                <View
+
+                  style={[
+
+                    styles.outfitSkeletonHeading,
+
+                    { backgroundColor: surface.secondaryOverlay },
+
+                  ]}
+
+                />
+
+                <View style={styles.outfitSkeletonRow}>
+
+                  {[0, 1, 2, 3].map((j) => (
+
+                    <View
+
+                      key={j}
+
+                      style={[
+
+                        styles.outfitSkeletonThumb,
+
+                        { backgroundColor: surface.thumbBg },
+
+                      ]}
+
+                    />
+
+                  ))}
+
+                </View>
+
+              </View>
+
+            ))}
+
+          </View>
 
         ) : null}
 
@@ -1998,6 +2488,112 @@ function makeStyles({
     },
 
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+
+    plannedHint: {
+
+      ...typography.caption,
+
+      color: colors.textSecondary,
+
+      marginBottom: spacing.sm,
+
+    },
+
+    plannedShell: { marginBottom: spacing.sm },
+
+    plannedInput: {
+
+      ...typography.body,
+
+      paddingVertical: spacing.sm,
+
+      paddingHorizontal: spacing.sm,
+
+      minHeight: 44,
+
+    },
+
+    plannedBtns: {
+
+      flexDirection: 'row',
+
+      gap: spacing.md,
+
+      marginBottom: spacing.sm,
+
+      flexWrap: 'wrap',
+
+    },
+
+    plannedBtnHalf: {
+
+      flex: 1,
+
+      minWidth: 120,
+
+      marginBottom: spacing.xs,
+
+    },
+
+    plannedStatus: {
+
+      ...typography.caption,
+
+      color: colors.accent,
+
+      marginBottom: spacing.md,
+
+    },
+
+    outfitSkeletonStack: {
+
+      marginTop: spacing.xl,
+
+      gap: spacing.lg,
+
+    },
+
+    outfitSkeletonCard: {
+
+      borderRadius: radii.md,
+
+      borderWidth: StyleSheet.hairlineWidth,
+
+      padding: spacing.md,
+
+      backgroundColor: surface.cardOverlay,
+
+    },
+
+    outfitSkeletonHeading: {
+
+      height: 18,
+
+      width: '40%',
+
+      borderRadius: radii.sm,
+
+      marginBottom: spacing.md,
+
+    },
+
+    outfitSkeletonRow: {
+
+      flexDirection: 'row',
+
+      gap: spacing.sm,
+
+    },
+
+    outfitSkeletonThumb: {
+
+      width: 64,
+
+      height: 76,
+
+      borderRadius: radii.sm,
+
+    },
 
     refresh: {
 

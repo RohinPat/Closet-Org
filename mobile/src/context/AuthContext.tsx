@@ -27,6 +27,27 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Avoid hanging forever on unreachable API (wrong host/port, captive Wi‑Fi, etc.). */
+const AUTH_BOOTSTRAP_MS = 12_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const tid = setTimeout(
+      () => reject(new Error('auth-bootstrap-timeout')),
+      ms
+    );
+    promise
+      .then((v) => {
+        clearTimeout(tid);
+        resolve(v);
+      })
+      .catch((e) => {
+        clearTimeout(tid);
+        reject(e);
+      });
+  });
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       return;
     }
-    const me = await api.fetchMe(token);
+    const me = await withTimeout(api.fetchMe(token), AUTH_BOOTSTRAP_MS);
     setUser(me);
   }, []);
 

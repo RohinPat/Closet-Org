@@ -3248,6 +3248,10 @@ class DatabaseManager:
 
         success = cursor.rowcount > 0
 
+        if success:
+
+            self._sync_laundry_queue_from_item_snapshot(cursor, item_id)
+
         conn.commit()
 
         conn.close()
@@ -4754,6 +4758,10 @@ class DatabaseManager:
 
             success = cursor.rowcount > 0
 
+            if success:
+
+                self._sync_laundry_queue_from_item_snapshot(cursor, item_id)
+
             conn.commit()
 
             conn.close()
@@ -4874,7 +4882,9 @@ class DatabaseManager:
 
         success = cursor.rowcount > 0
 
+        if success:
 
+            self._sync_laundry_queue_from_item_snapshot(cursor, item_id)
 
         conn.commit()
 
@@ -6121,6 +6131,98 @@ class DatabaseManager:
         conn.close()
 
         return queue_id
+
+    
+
+    def _sync_laundry_queue_from_item_snapshot(self, cursor: sqlite3.Cursor, item_id: int) -> None:
+
+        """Keep ``laundry_queue`` aligned with ``laundry_state`` for non-bulk owned items.
+
+
+
+        Bulk SKUs intentionally skip queue rows (inventory-style laundry).
+
+        """
+
+        cursor.execute(
+
+            """
+
+            SELECT COALESCE(is_bulk, 0) AS is_bulk,
+
+                   COALESCE(TRIM(laundry_state), '') AS ls,
+
+                   washed
+
+            FROM clothing_items WHERE id = ?
+
+            """,
+
+            (item_id,),
+
+        )
+
+        snap = cursor.fetchone()
+
+        if not snap:
+
+            return
+
+        if int(snap["is_bulk"]) != 0:
+
+            return
+
+        raw_ls = str(snap["ls"] or "").strip().lower()
+
+        washed = snap["washed"]
+
+        if washed is None:
+
+            washed = 1
+
+        inferred = raw_ls if raw_ls else ("clean" if washed else "worn")
+
+        if inferred == "clean":
+
+            cursor.execute("DELETE FROM laundry_queue WHERE item_id = ?", (item_id,))
+
+            return
+
+        queue_row_status = {"in_hamper": "queued", "washing": "washing", "drying": "drying", "worn": "queued"}.get(inferred)
+
+        if queue_row_status is None:
+
+            return
+
+        cursor.execute(
+
+            "SELECT id FROM laundry_queue WHERE item_id = ? AND status != 'ready'",
+
+            (item_id,),
+
+        )
+
+        existing = cursor.fetchone()
+
+        if existing:
+
+            cursor.execute(
+
+                "UPDATE laundry_queue SET status = ? WHERE id = ?",
+
+                (queue_row_status, int(existing["id"])),
+
+            )
+
+            return
+
+        cursor.execute(
+
+            "INSERT INTO laundry_queue (item_id, priority, status) VALUES (?, 'normal', ?)",
+
+            (item_id, queue_row_status),
+
+        )
 
     
 
@@ -8080,7 +8182,9 @@ class DatabaseManager:
 
                 SET washed = 1, physical_location = 'closet', 
 
-                    wear_again_count = 0, freshness_score = 1.0
+                    wear_again_count = 0, freshness_score = 1.0,
+
+                    laundry_state = 'clean'
 
                 WHERE id = (SELECT item_id FROM laundry_queue WHERE id = ?)
 

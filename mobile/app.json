@@ -55,7 +55,8 @@
     },
     "extra": {
       "closetApiOrigin": "",
-      "closetApiPort": "8001"
+      "closetApiPort": "8001",
+      "privacyPolicyUrl": ""
     }
   }
 }

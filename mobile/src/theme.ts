@@ -1,10 +1,11 @@
 /**
  * Theme tokens — consumer mobile shell.
  *
- * Palette (see DESIGN_REBIRTH.md):
+ * Palette:
  * - `accent` / `accentSoft`: solid hit target and selected wash (chips, links).
  * - `accentGradient`: primary CTAs (GlassButton) — three stops, indigo→violet→blue.
  * - `surface.*` overlay tints: glass cards, inputs, thumbnails (not photo content).
+ * - Light `bg*` is a warm paper/cream shell; solids stay white so garment tiles stay color-true.
  * - Orbs: ambient only; keep garment photography as the hero.
  */
 
@@ -100,18 +101,18 @@ type SurfacePalette = {
 };
 
 const LIGHT_COLORS: Palette = {
-  bg: '#F8FAFC',
-  /* Slate-neutral stops; matches web shell — brand only via soft orbs below */
-  bgGradient: ['#F8FAFC', '#F6F7FB', '#F1F5F9'] as const,
+  bg: '#FAF8F5',
+  /* Warm paper stops; accent + gradient unchanged — brand reads via purple/blue CTAs & orbs */
+  bgGradient: ['#FAF8F5', '#F7F5F2', '#F3F1ED'] as const,
   surface: 'rgba(255, 255, 255, 0.62)',
   surfaceSolid: '#FFFFFF',
-  hairline: 'rgba(60, 60, 67, 0.12)',
-  divider: 'rgba(60, 60, 67, 0.08)',
+  hairline: 'rgba(40, 38, 35, 0.12)',
+  divider: 'rgba(40, 38, 35, 0.08)',
 
-  text: '#0A0A0F',
-  textSecondary: 'rgba(60, 60, 67, 0.72)',
-  textMuted: 'rgba(60, 60, 67, 0.5)',
-  placeholder: 'rgba(60, 60, 67, 0.36)',
+  text: '#1C1917',
+  textSecondary: 'rgba(40, 38, 35, 0.72)',
+  textMuted: 'rgba(40, 38, 35, 0.5)',
+  placeholder: 'rgba(40, 38, 35, 0.36)',
 
   accent: '#7C4DFF',
   accentSoft: 'rgba(124, 77, 255, 0.14)',
@@ -163,13 +164,13 @@ const LIGHT_SURFACE: SurfacePalette = {
   cardBorder: 'rgba(255, 255, 255, 0.6)',
   inputOverlay: 'rgba(255, 255, 255, 0.55)',
   inputBorder: 'rgba(255, 255, 255, 0.65)',
-  ghostOverlay: 'rgba(241, 245, 249, 0.65)',
+  ghostOverlay: 'rgba(247, 245, 242, 0.72)',
   secondaryOverlay: 'rgba(255, 255, 255, 0.78)',
-  secondaryBorder: 'rgba(15, 23, 42, 0.1)',
+  secondaryBorder: 'rgba(28, 25, 23, 0.1)',
   tabBarOverlay: 'rgba(255, 255, 255, 0.6)',
   tabBarTopLine: 'rgba(255, 255, 255, 0.85)',
   headerOverlay: 'rgba(255, 255, 255, 0.6)',
-  thumbBg: '#E8EDF4',
+  thumbBg: '#EDE9E4',
   chipInactive: 'rgba(255, 255, 255, 0.55)',
   chipInactiveBorder: 'rgba(255, 255, 255, 0.7)',
   favBadgeBg: 'rgba(255, 255, 255, 0.85)',
@@ -225,8 +226,8 @@ export const spacing = {
 export const shadow = {
   card: Platform.select({
     ios: {
-      shadowColor: '#0A0A0F',
-      shadowOpacity: 0.08,
+      shadowColor: '#1C1917',
+      shadowOpacity: 0.07,
       shadowRadius: 18,
       shadowOffset: { width: 0, height: 8 },
     },
@@ -243,8 +244,8 @@ export const shadow = {
   })!,
   tabBar: Platform.select({
     ios: {
-      shadowColor: '#0A0A0F',
-      shadowOpacity: 0.1,
+      shadowColor: '#1C1917',
+      shadowOpacity: 0.09,
       shadowRadius: 24,
       shadowOffset: { width: 0, height: -2 },
     },

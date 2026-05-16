@@ -14,7 +14,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  Vibration,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -33,6 +32,7 @@ import type {
   WearHistoryEntry,
 } from '../api/types';
 import { itemImageUrl } from '../config';
+import { WearMonthCalendar } from '../components/WearMonthCalendar';
 import {
   GlassButton,
   GlassCard,
@@ -51,6 +51,8 @@ import { MAX_USER_TAG_LENGTH, MAX_USER_TAGS } from '../constants/tags';
 import { imagePickerAssetToUpload } from '../utils/imageUpload';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { stackScrollContentPaddingTop, STACK_SCREEN_SCROLL_BOTTOM } from '../utils/screenSpacing';
+import { hapticLight } from '../utils/haptics';
+import { markOnboardingItemDetailVisited } from '../preferences';
 import {
   radii,
   shadow,
@@ -207,6 +209,10 @@ export function ItemDetailScreen({ route, navigation }: Props) {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    void markOnboardingItemDetailVisited();
+  }, [item.id]);
+
   const galleryUris = useGalleryUris(item);
   const { width: winWidth } = useWindowDimensions();
   const pageWidth = winWidth - spacing.xl * 2;
@@ -237,7 +243,7 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   const cpwDisplay = hasCpw ? `$${(cpw as number).toFixed(2)}` : '';
 
   async function onToggleFavorite() {
-    Vibration.vibrate(10);
+    await hapticLight();
     try {
       await api.toggleFavorite(item.id);
       await refresh();
@@ -271,7 +277,7 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   }
 
   async function onDelete() {
-    Vibration.vibrate(10);
+    await hapticLight();
     const ok = await confirmDelete('Remove this from your closet?');
     if (!ok) return;
     try {
@@ -283,7 +289,7 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   }
 
   async function setWashed(clean: boolean) {
-    Vibration.vibrate(10);
+    await hapticLight();
     try {
       await api.updateItemStatus(item.id, { washed: clean });
       await refresh();
@@ -704,15 +710,17 @@ export function ItemDetailScreen({ route, navigation }: Props) {
                 </Pressable>
               ))}
             </View>
-            <Text style={styles.detailLabel}>Wear history</Text>
-            <View style={styles.heatmapRow}>
-              {wearHistory.slice(0, 28).map((entry) => (
-                <View key={entry.id} style={styles.heatmapDot} />
-              ))}
-              {wearHistory.length === 0 ? (
-                <Text style={styles.detailValueEmpty}>No wears logged yet.</Text>
-              ) : null}
-            </View>
+            <Text style={styles.detailLabel}>Wear calendar</Text>
+            {wearHistory.length === 0 ? (
+              <Text style={styles.detailValueEmpty}>No wears logged yet.</Text>
+            ) : (
+              <WearMonthCalendar
+                key={item.id}
+                entries={wearHistory}
+                colors={colors}
+                surface={surface}
+              />
+            )}
             <Text style={styles.detailLabel}>
               Worn outfits containing this item: {wornPosts.length}
             </Text>
@@ -1896,19 +1904,6 @@ function makeStyles({
       fontSize: 12,
       fontWeight: '700',
       textTransform: 'capitalize',
-    },
-    heatmapRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 5,
-      marginTop: spacing.xs,
-      marginBottom: spacing.md,
-    },
-    heatmapDot: {
-      width: 12,
-      height: 12,
-      borderRadius: 3,
-      backgroundColor: colors.accent,
     },
     actions: {
       gap: spacing.md,
