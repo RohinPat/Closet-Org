@@ -1,0 +1,217 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`GlassButton snapshots primary + secondary variants (mocked blur / gradient) 1`] = `
+<View
+  accessibilityState={
+    {
+      "busy": undefined,
+      "checked": undefined,
+      "disabled": undefined,
+      "expanded": undefined,
+      "selected": undefined,
+    }
+  }
+  accessibilityValue={
+    {
+      "max": undefined,
+      "min": undefined,
+      "now": undefined,
+      "text": undefined,
+    }
+  }
+  accessible={true}
+  collapsable={false}
+  focusable={true}
+  onBlur={[Function]}
+  onClick={[Function]}
+  onFocus={[Function]}
+  onResponderGrant={[Function]}
+  onResponderMove={[Function]}
+  onResponderRelease={[Function]}
+  onResponderTerminate={[Function]}
+  onResponderTerminationRequest={[Function]}
+  onStartShouldSetResponder={[Function]}
+  style={
+    [
+      {
+        "alignItems": "center",
+        "borderRadius": 16,
+        "justifyContent": "center",
+        "minHeight": 52,
+        "overflow": "hidden",
+        "paddingHorizontal": 18,
+      },
+      {
+        "alignSelf": "stretch",
+      },
+      {
+        "shadowColor": "#5B6CFF",
+        "shadowOffset": {
+          "height": 6,
+          "width": 0,
+        },
+        "shadowOpacity": 0.22,
+        "shadowRadius": 16,
+      },
+      {
+        "opacity": 1,
+      },
+      undefined,
+    ]
+  }
+  testID="btn-primary"
+>
+  <View
+    colors={
+      [
+        "#C4B5FD",
+        "#A78BFA",
+        "#7C3AED",
+      ]
+    }
+    end={
+      {
+        "x": 1,
+        "y": 1,
+      }
+    }
+    start={
+      {
+        "x": 0,
+        "y": 0,
+      }
+    }
+    style={
+      {
+        "bottom": 0,
+        "left": 0,
+        "position": "absolute",
+        "right": 0,
+        "top": 0,
+      }
+    }
+    testID="mock-expo-linear-gradient"
+  />
+  <Text
+    style={
+      [
+        {
+          "fontSize": 16,
+          "fontWeight": "600",
+        },
+        {
+          "color": "#fff",
+        },
+        undefined,
+      ]
+    }
+  >
+    Sign in
+  </Text>
+</View>
+`;
+
+exports[`GlassButton snapshots primary + secondary variants (mocked blur / gradient) 2`] = `
+<View
+  accessibilityState={
+    {
+      "busy": undefined,
+      "checked": undefined,
+      "disabled": undefined,
+      "expanded": undefined,
+      "selected": undefined,
+    }
+  }
+  accessibilityValue={
+    {
+      "max": undefined,
+      "min": undefined,
+      "now": undefined,
+      "text": undefined,
+    }
+  }
+  accessible={true}
+  collapsable={false}
+  focusable={true}
+  onBlur={[Function]}
+  onClick={[Function]}
+  onFocus={[Function]}
+  onResponderGrant={[Function]}
+  onResponderMove={[Function]}
+  onResponderRelease={[Function]}
+  onResponderTerminate={[Function]}
+  onResponderTerminationRequest={[Function]}
+  onStartShouldSetResponder={[Function]}
+  style={
+    [
+      {
+        "alignItems": "center",
+        "borderRadius": 16,
+        "justifyContent": "center",
+        "minHeight": 52,
+        "overflow": "hidden",
+        "paddingHorizontal": 18,
+      },
+      {
+        "alignSelf": "stretch",
+      },
+      false,
+      {
+        "opacity": 1,
+      },
+      undefined,
+    ]
+  }
+  testID="btn-secondary"
+>
+  <View
+    intensity={50}
+    style={
+      {
+        "bottom": 0,
+        "left": 0,
+        "position": "absolute",
+        "right": 0,
+        "top": 0,
+      }
+    }
+    testID="mock-expo-blur"
+    tint="dark"
+  />
+  <View
+    style={
+      [
+        {
+          "bottom": 0,
+          "left": 0,
+          "position": "absolute",
+          "right": 0,
+          "top": 0,
+        },
+        {
+          "backgroundColor": "rgba(20, 20, 30, 0.45)",
+          "borderColor": "rgba(255, 255, 255, 0.12)",
+          "borderRadius": 16,
+          "borderWidth": 0.5,
+        },
+      ]
+    }
+  />
+  <Text
+    style={
+      [
+        {
+          "fontSize": 16,
+          "fontWeight": "600",
+        },
+        {
+          "color": "#FFFFFF",
+        },
+        undefined,
+      ]
+    }
+  >
+    Cancel
+  </Text>
+</View>
+`;

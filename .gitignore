@@ -53,7 +53,12 @@ Thumbs.db
 # pytest / coverage
 .pytest_cache/
 .coverage
+coverage.json
 htmlcov/
+coverage/
+
+# Jest (mobile)
+mobile/coverage/
 
 # Environment / secrets
 .env
