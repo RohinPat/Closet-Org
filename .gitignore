@@ -50,6 +50,11 @@ Thumbs.db
 # Logs
 *.log
 
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
 # Environment / secrets
 .env
 .env.local

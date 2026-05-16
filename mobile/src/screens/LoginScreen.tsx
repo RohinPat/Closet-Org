@@ -65,6 +65,8 @@ export function LoginScreen({ navigation }: Props) {
             <GlassCard padded style={styles.card}>
               <GlassInputContainer style={styles.input}>
                 <TextInput
+                  testID="login-username"
+                  accessibilityLabel="Username"
                   style={styles.textInput}
                   placeholder="Username"
                   placeholderTextColor={colors.placeholder}
@@ -76,6 +78,8 @@ export function LoginScreen({ navigation }: Props) {
               </GlassInputContainer>
               <GlassInputContainer style={styles.input}>
                 <TextInput
+                  testID="login-password"
+                  accessibilityLabel="Password"
                   style={styles.textInput}
                   placeholder="Password"
                   placeholderTextColor={colors.placeholder}
@@ -88,6 +92,7 @@ export function LoginScreen({ navigation }: Props) {
               {error ? <Text style={styles.error}>{error}</Text> : null}
 
               <GlassButton
+                testID="login-submit"
                 title="Sign in"
                 onPress={onSubmit}
                 loading={busy}

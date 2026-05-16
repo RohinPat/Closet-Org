@@ -1,0 +1,16 @@
+[run]
+source = backend
+omit =
+    backend/tests/*
+    backend/models/clothing_classifier.py
+    backend/closet_org_pytest_helpers.py
+branch = false
+
+[report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    if __name__ == "__main__":

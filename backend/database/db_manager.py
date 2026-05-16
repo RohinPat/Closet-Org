@@ -1,12 +1,9 @@
-import sqlite3
-
-from datetime import datetime
-
-from typing import List, Dict, Optional, Tuple
-
 import json
-
+import os
+import sqlite3
+from datetime import datetime
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 
 
@@ -15,6 +12,14 @@ from pathlib import Path
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 _DEFAULT_DB = str(_BACKEND_DIR / "closet.db")
+
+
+def _resolve_db_path() -> str:
+    """Prefer CLOSET_DB_PATH for tests and multi-instance deploys."""
+    env = os.environ.get("CLOSET_DB_PATH")
+    if env and env.strip():
+        return env.strip()
+    return _DEFAULT_DB
 
 
 
@@ -58,7 +63,7 @@ class DatabaseManager:
 
     def __init__(self, db_path: Optional[str] = None):
 
-        self.db_path = db_path or _DEFAULT_DB
+        self.db_path = db_path or _resolve_db_path()
 
         self.init_database()
 

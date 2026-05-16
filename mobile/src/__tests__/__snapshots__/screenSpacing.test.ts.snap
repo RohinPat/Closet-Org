@@ -1,0 +1,8 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`screenSpacing computes stable paddings 1`] = `
+{
+  "stackTop": 100,
+  "tabTop": 60,
+}
+`;

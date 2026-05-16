@@ -44,7 +44,7 @@ from datetime import datetime, timezone
 
 from pathlib import Path
 
-from typing import Dict, List, Optional, Set
+from typing import Annotated, Dict, List, Optional, Set
 
 
 
@@ -364,8 +364,8 @@ class ItemDetailsUpdate(BaseModel):
 
     subcategory: Optional[str] = Field(default=None, max_length=40)
 
-    colors: Optional[List[str]] = Field(default=None, max_length=8)
-    color_hexes: Optional[List[str]] = Field(default=None, max_length=8)
+    colors: Optional[Annotated[List[str], Field(max_length=8)]] = None
+    color_hexes: Optional[Annotated[List[str], Field(max_length=8)]] = None
 
     season: Optional[str] = Field(default=None, max_length=20)
 
@@ -373,7 +373,7 @@ class ItemDetailsUpdate(BaseModel):
     pattern: Optional[str] = Field(default=None, max_length=40)
     laundry_state: Optional[str] = Field(default=None, max_length=40)
 
-    user_tags: Optional[List[str]] = Field(default=None, max_length=20)
+    user_tags: Optional[Annotated[List[str], Field(max_length=20)]] = None
 
     packed_for_trip: Optional[bool] = None
 
@@ -407,8 +407,8 @@ class TripCreate(BaseModel):
     destination: Optional[str] = Field(default=None, max_length=120)
     start_date: Optional[str] = Field(default=None, max_length=20)
     end_date: Optional[str] = Field(default=None, max_length=20)
-    activities: Optional[List[str]] = Field(default=None, max_length=20)
-    item_ids: Optional[List[int]] = Field(default=None, max_length=100)
+    activities: Optional[Annotated[List[str], Field(max_length=20)]] = None
+    item_ids: Optional[Annotated[List[int], Field(max_length=100)]] = None
 
 
 class TripUpdate(BaseModel):
@@ -416,8 +416,8 @@ class TripUpdate(BaseModel):
     destination: Optional[str] = Field(default=None, max_length=120)
     start_date: Optional[str] = Field(default=None, max_length=20)
     end_date: Optional[str] = Field(default=None, max_length=20)
-    activities: Optional[List[str]] = Field(default=None, max_length=20)
-    item_ids: Optional[List[int]] = Field(default=None, max_length=100)
+    activities: Optional[Annotated[List[str], Field(max_length=20)]] = None
+    item_ids: Optional[Annotated[List[int], Field(max_length=100)]] = None
 
 
 class TripPackedUpdate(BaseModel):
@@ -444,9 +444,7 @@ class PlannedOutfitCreate(BaseModel):
 
     status: Optional[str] = Field(default="draft", max_length=20)
 
-    item_ids: Optional[List[int]] = Field(default=None, max_length=50)
-
-
+    item_ids: Optional[Annotated[List[int], Field(max_length=50)]] = None
 
 
 
@@ -462,7 +460,7 @@ class PlannedOutfitUpdate(BaseModel):
 
     status: Optional[str] = Field(default=None, max_length=20)
 
-    item_ids: Optional[List[int]] = Field(default=None, max_length=50)
+    item_ids: Optional[Annotated[List[int], Field(max_length=50)]] = None
 
     prep_clean: Optional[bool] = None
 
@@ -486,7 +484,7 @@ class BulkItemCreate(BaseModel):
 
     clean_count: Optional[int] = Field(default=None, ge=0, le=999)
 
-    colors: Optional[List[str]] = Field(default=None, max_length=8)
+    colors: Optional[Annotated[List[str], Field(max_length=8)]] = None
 
     style: Optional[str] = Field(default="Casual", max_length=40)
 
@@ -572,7 +570,7 @@ class AiStylistRequest(BaseModel):
 
     exclude_item_ids: Optional[List[int]] = None
 
-    pin_item_ids: Optional[List[int]] = Field(default=None, max_length=8)
+    pin_item_ids: Optional[Annotated[List[int], Field(max_length=8)]] = None
 
     lat: Optional[float] = None
 

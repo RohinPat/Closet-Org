@@ -1,0 +1,13 @@
+# Maestro — run against a dev build / Expo Go when you know the app id.
+# Example: maestro test mobile/e2e/maestro/login_screen.yaml -e APP_ID=com.your.app
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible: "Closet"
+- assertVisible: "Welcome back to your closet"
+- tapOn:
+    id: "login-username"
+- inputText: "demo_user"
+- tapOn:
+    id: "login-password"
+- inputText: "Abcd5678efgh"

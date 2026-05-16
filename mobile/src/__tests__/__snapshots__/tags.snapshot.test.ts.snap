@@ -1,0 +1,8 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`tags constants matches snapshot (backend sync) 1`] = `
+{
+  "MAX_USER_TAGS": 20,
+  "MAX_USER_TAG_LENGTH": 40,
+}
+`;

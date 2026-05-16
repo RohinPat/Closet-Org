@@ -140,6 +140,20 @@ oversights:
 - Per-route MFA / TOTP enrolment.
 - S3/R2 object storage for uploads with short-lived signed URLs.
 
+## Automated scanning (CI)
+
+GitHub Actions runs:
+
+- **`pytest`** on `backend/tests` (API, auth, security helpers).
+- **`bandit`** on `backend/` (configuration in `pyproject.toml`).
+- **`pip-audit`** on `requirements.txt` (informational; does not fail the job).
+- **Jest** in `mobile/` (unit + snapshot tests).
+- **Playwright** in `e2e/` against a live `uvicorn` server (`/healthz`, `/login`, security headers).
+
+Local E2E: install dev deps (`requirements-dev.txt`), `python -m playwright install chromium`, start the API, then  
+`E2E_BASE_URL=http://127.0.0.1:8000 python -m pytest e2e -v`.  
+A bare `pytest` run uses `pytest.ini` and only executes `backend/tests`.
+
 ## Deployment checklist
 
 Before pointing real users at a deployment:
