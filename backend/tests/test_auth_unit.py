@@ -51,3 +51,20 @@ def test_get_optional_user_invalid_returns_none(monkeypatch: pytest.MonkeyPatch)
     creds = MagicMock()
     creds.credentials = "garbage"
     assert auth.get_optional_user(credentials=creds) is None
+
+
+def test_get_optional_user_no_credentials() -> None:
+    assert auth.get_optional_user(credentials=None) is None
+
+
+def test_get_current_user_rejects_nonint_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        auth,
+        "decode_access_token",
+        lambda token: {"user_id": "not-an-int", "tv": 0, "username": "u"},
+    )
+    creds = MagicMock()
+    creds.credentials = "fake"
+    with pytest.raises(HTTPException) as ei:
+        auth.get_current_user(credentials=creds)
+    assert ei.value.status_code == 401
