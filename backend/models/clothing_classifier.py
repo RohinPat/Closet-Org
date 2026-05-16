@@ -295,3 +295,16 @@ class ClothingClassifier:
         if category in warm: return "Winter"
         if category in cool: return "Summer"
         return "All-Season"
+
+    def encode_image_embedding(self, image_path: str) -> Optional[List[float]]:
+        """L2-normalized CLIP image vector for visual similarity search."""
+        try:
+            image = Image.open(image_path).convert("RGB")
+            img_tensor = self.preprocess(image).unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                feats = self.model.encode_image(img_tensor)
+                feats = feats / feats.norm(dim=-1, keepdim=True)
+            return [float(x) for x in feats.cpu().numpy().flatten()]
+        except Exception as e:
+            print(f"CLIP embedding error: {e}")
+            return None

@@ -29,6 +29,8 @@ import { Avatar } from '../components/Avatar';
 import { REACTION_OPTIONS, relativeTime } from '../components/PostCard';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { stackTopPadding } from '../utils/screenSpacing';
 import {
   radii,
   shadow,
@@ -42,6 +44,8 @@ type Props = NativeStackScreenProps<AppStackParamList, 'FitDetail'>;
 
 export function FitDetailScreen({ route, navigation }: Props) {
   const { postId } = route.params;
+  const insets = useSafeAreaInsets();
+  const headerPad = stackTopPadding(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { user } = useAuth();
@@ -216,7 +220,7 @@ export function FitDetailScreen({ route, navigation }: Props) {
           ref={listRef}
           data={comments}
           keyExtractor={(c) => String(c.id)}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingTop: headerPad }]}
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View>
@@ -417,8 +421,6 @@ export function FitDetailScreen({ route, navigation }: Props) {
   );
 }
 
-const HEADER_PAD = Platform.OS === 'ios' ? 96 : 60;
-
 function makeStyles({
   colors,
   surface,
@@ -439,7 +441,6 @@ function makeStyles({
       fontSize: 15,
     },
     list: {
-      paddingTop: HEADER_PAD,
       paddingHorizontal: spacing.lg,
       paddingBottom: 100,
     },

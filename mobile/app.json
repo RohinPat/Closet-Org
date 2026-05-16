@@ -14,7 +14,14 @@
           "photosPermission": "Allow Closet Org to access your photos to add clothing items.",
           "cameraPermission": "Allow Closet Org to use the camera to photograph clothing."
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Closet Org to use your location to sync local weather for outfit suggestions."
+        }
+      ],
+      "expo-secure-store"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -26,10 +33,15 @@
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
-        }
+        },
+        "NSLocationWhenInUseUsageDescription": "Allow Closet Org to use your location to sync local weather for outfit suggestions."
       }
     },
     "android": {
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -41,8 +53,9 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-secure-store"
-    ]
+    "extra": {
+      "closetApiOrigin": "",
+      "closetApiPort": "8001"
+    }
   }
 }

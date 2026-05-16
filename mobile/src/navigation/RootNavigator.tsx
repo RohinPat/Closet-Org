@@ -4,6 +4,7 @@ import {
   NavigationContainer,
   DefaultTheme,
   DarkTheme,
+  type NavigatorScreenParams,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -27,6 +28,8 @@ import { FitDetailScreen } from '../screens/FitDetailScreen';
 import { CreateFitScreen } from '../screens/CreateFitScreen';
 import { FriendsScreen } from '../screens/FriendsScreen';
 import { PublicProfileScreen } from '../screens/PublicProfileScreen';
+import { PackModeScreen } from '../screens/PackModeScreen';
+import { PersonalSettingsScreen } from '../screens/PersonalSettingsScreen';
 import { shadow, typography } from '../theme';
 
 export type AuthStackParamList = {
@@ -43,14 +46,16 @@ export type MainTabParamList = {
 };
 
 export type AppStackParamList = {
-  MainTabs: undefined;
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   ItemDetail: { item: ClothingItem };
   Wishlist: undefined;
   Stats: undefined;
   Friends: undefined;
+  PackMode: undefined;
   CreateFit: undefined;
   FitDetail: { postId: number };
   PublicProfile: { userId: number };
+  PersonalSettings: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -105,8 +110,11 @@ function GlassHeaderBackground({ surface }: { surface: ThemeSurface }) {
 
 function MainTabs() {
   const { colors, surface } = useTheme();
+  const { user } = useAuth();
+  const socialEnabled = user?.social_enabled !== false;
   return (
     <Tab.Navigator
+      initialRouteName={socialEnabled ? 'FeedTab' : 'ClosetTab'}
       screenOptions={{
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
@@ -130,6 +138,22 @@ function MainTabs() {
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
+      {socialEnabled ? (
+        <Tab.Screen
+          name="FeedTab"
+          component={FeedScreen}
+          options={{
+            tabBarLabel: 'Feed',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'people' : 'people-outline'}
+                color={color}
+                size={size}
+              />
+            ),
+          }}
+        />
+      ) : null}
       <Tab.Screen
         name="ClosetTab"
         component={ClosetScreen}
@@ -138,20 +162,6 @@ function MainTabs() {
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
               name={focused ? 'shirt' : 'shirt-outline'}
-              color={color}
-              size={size}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="FeedTab"
-        component={FeedScreen}
-        options={{
-          tabBarLabel: 'Feed',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'people' : 'people-outline'}
               color={color}
               size={size}
             />
@@ -242,6 +252,11 @@ function AppStackNavigator() {
         options={{ title: 'Friends', headerBackTitle: 'Back' }}
       />
       <AppStack.Screen
+        name="PackMode"
+        component={PackModeScreen}
+        options={{ title: 'Pack Mode', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
         name="CreateFit"
         component={CreateFitScreen}
         options={{ title: 'New fit', headerBackTitle: 'Back' }}
@@ -255,6 +270,11 @@ function AppStackNavigator() {
         name="PublicProfile"
         component={PublicProfileScreen}
         options={{ title: 'Profile', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="PersonalSettings"
+        component={PersonalSettingsScreen}
+        options={{ title: 'Settings', headerBackTitle: 'Back' }}
       />
     </AppStack.Navigator>
   );

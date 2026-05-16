@@ -19,6 +19,9 @@ import type { AppStackParamList } from '../navigation/RootNavigator';
 import * as api from '../api/client';
 import type { ClothingItem } from '../api/types';
 import { itemThumbnailUrl } from '../config';
+import { imagePickerAssetToUpload } from '../utils/imageUpload';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { stackTopPadding } from '../utils/screenSpacing';
 import {
   GlassButton,
   GlassCard,
@@ -37,21 +40,9 @@ import {
 
 type Props = NativeStackScreenProps<AppStackParamList, 'CreateFit'>;
 
-function inferMime(uri: string): string {
-  const lower = uri.toLowerCase();
-  if (lower.endsWith('.png')) return 'image/png';
-  if (lower.endsWith('.webp')) return 'image/webp';
-  if (lower.endsWith('.heic') || lower.endsWith('.heif')) return 'image/heic';
-  return 'image/jpeg';
-}
-
-function inferFilename(uri: string, mime: string): string {
-  const base = uri.split('/').pop()?.split('?')[0];
-  if (base && base.includes('.')) return base;
-  return `fit.${mime.includes('png') ? 'png' : 'jpg'}`;
-}
-
 export function CreateFitScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const headerPad = stackTopPadding(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -90,11 +81,17 @@ export function CreateFitScreen({ navigation }: Props) {
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.85,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (picked.canceled || !picked.assets?.[0]) return;
-    const a = picked.assets[0];
-    setImageUri(a.uri);
-    setMime(a.mimeType || inferMime(a.uri));
+    try {
+      const photo = await imagePickerAssetToUpload(picked.assets[0], 'fit');
+      setImageUri(photo.uri);
+      setMime(photo.mimeType);
+    } catch {
+      setError('Could not prepare that photo. Try another image or take a new one.');
+    }
   }
 
   async function takePhoto() {
@@ -109,9 +106,13 @@ export function CreateFitScreen({ navigation }: Props) {
       quality: 0.85,
     });
     if (picked.canceled || !picked.assets?.[0]) return;
-    const a = picked.assets[0];
-    setImageUri(a.uri);
-    setMime(a.mimeType || inferMime(a.uri));
+    try {
+      const photo = await imagePickerAssetToUpload(picked.assets[0], 'fit');
+      setImageUri(photo.uri);
+      setMime(photo.mimeType);
+    } catch {
+      setError('Could not prepare that photo. Try another image or take a new one.');
+    }
   }
 
   function toggleTag(itemId: number) {
@@ -128,10 +129,9 @@ export function CreateFitScreen({ navigation }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const filename = inferFilename(imageUri, mime);
       const res = await api.createFitPost({
         uri: imageUri,
-        filename,
+        filename: `fit.${mime.includes('png') ? 'png' : 'jpg'}`,
         mimeType: mime,
         caption: caption.trim() || null,
         itemIds: [...tagged],
@@ -152,7 +152,7 @@ export function CreateFitScreen({ navigation }: Props) {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -282,8 +282,6 @@ export function CreateFitScreen({ navigation }: Props) {
   );
 }
 
-const HEADER_PAD = Platform.OS === 'ios' ? 96 : 60;
-
 function makeStyles({
   colors,
   surface,
@@ -293,7 +291,6 @@ function makeStyles({
 }) {
   return StyleSheet.create({
     container: {
-      paddingTop: HEADER_PAD,
       paddingHorizontal: spacing.xl,
       paddingBottom: 80,
     },

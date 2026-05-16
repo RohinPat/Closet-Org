@@ -47,7 +47,7 @@ npm install
 npx expo start
 ```
 
-Scan the QR code with Expo Go (or run on an iOS/Android simulator). If your phone can't reach `localhost`, start Expo with `EXPO_PUBLIC_API_URL=http://192.168.x.x:8000` pointed at your computer's LAN IP.
+Scan the QR code with Expo Go (or run on an iOS/Android simulator). If your phone can't reach `localhost`, start Expo with `EXPO_PUBLIC_API_URL=http://192.168.x.x:8001` pointed at your computer's LAN IP, matching `mobile/app.json`.
 
 ## What's in here
 
@@ -79,13 +79,17 @@ All routes under `/api` require a Bearer JWT (from `POST /api/auth/login`) excep
 | POST | `/api/auth/login` | exchange username/password for token |
 | GET | `/api/auth/me` | current user |
 | PUT | `/api/auth/profile` | update profile |
-| POST | `/api/upload-clothing` | upload image, classify, save |
-| GET | `/api/closet` | list user's items |
+| POST | `/api/upload-clothing` | upload image, classify, save; may include `duplicate_hint` if similar items exist |
+| GET | `/api/closet` | list items; optional filters `category`, `status`, substring search `q` |
+| GET | `/api/closet/insights` | gaps, wardrobe mix, retirement heuristics |
+| POST | `/api/closet/fit-check` | one photo → classification + ranked closet pairings (temp file, not saved) |
 | GET | `/api/item/{id}` | item detail |
+| GET | `/api/item/{id}/outfits` | suggestions that always include this item |
+| PUT | `/api/item/{id}` | patch metadata (brand, colors, **`packed_for_trip`**, tags, …) |
 | PUT | `/api/item/{id}/status` | mark washed / worn / favorite |
 | DELETE | `/api/item/{id}` | remove item |
-| GET | `/api/outfits/recommend` | outfit suggestions |
-| GET | `/api/stats` | counts and by-category breakdown |
+| GET | `/api/outfits/recommend` | outfit suggestions (`occasion`, `season`, **`vibe`** ∈ clean_prep/streetwear/cozy, `seed`, `exclude_item_ids`, `pin_item_ids`; skips recent duplicate combos ~14d) |
+| GET | `/api/stats` | counts, by subcategory, **`best_cpw`** top 5 |
 | GET | `/api/wishlist` | list wishlist items |
 | POST | `/api/wishlist` | add a wishlist entry |
 | PUT | `/api/wishlist/{id}` | edit a wishlist entry |
@@ -100,6 +104,7 @@ All routes under `/api` require a Bearer JWT (from `POST /api/auth/login`) excep
 - Closet screen has persisted density (list/comfy/compact/dense), persisted sort (recent / most worn / neglected / best CPW), and a grid ↔ rails layout toggle (rails group by subcategory). Filters AND together: status chips (Clean / Wash / Favorites) + category chip row + color swatch row + storage-location chip row + free-text search over category, subcategory, style, season, brand, notes, colors. Prefs live in [preferences.ts](mobile/src/preferences.ts).
 - `clothing_items.physical_location` is the laundry state machine's marker (`'closet'` / `'needs_wash'` / `'laundry'`) — it gets clobbered on every wear/wash cycle. The user-facing physical place (e.g. "front rack, left") lives in a separate `storage_location` column edited from the item detail screen.
 - Lending tracker: `clothing_items.lent_to` / `lent_at` / `lent_until`. Item detail has a Lend out / Mark returned button (modal asks name + optional `YYYY-MM-DD` return date); overdue items get a red banner. Lent items are skipped by the outfit recommender and tagged with a Lent badge on the closet card; the closet has a `Lent` filter chip. Endpoints: `PUT /api/item/{id}/lend`, `PUT /api/item/{id}/return`. Reminder push notifications aren't wired yet — the overdue indicator is in-app only.
+- **Planning (roadmap v0):** `GET /api/closet/insights` returns gaps, composition, and **`retirement_candidates`**. **`POST /api/closet/fit-check`** classifies one candidate image and ranks pairing closet items (temp upload deleted after). **`GET /api/item/{id}/outfits`** pins that item in the rule-based recommender. **`GET /api/stats`** includes **`best_cpw`**. **`vibe`** (`clean_prep` / `streetwear` / `cozy`) biases `/api/outfits/recommend`; returned sets are logged to **`outfit_suggestion_history`** so identical item bundles are de-emphasized for about 14 days. **`packed_for_trip`** on `clothing_items` excludes from outfit suggestions while away. **`POST /api/upload-clothing`** may return **`duplicate_hint`**. **`GET /api/closet?q=`** substring filter for server-side search.
 - Wishlist lives in the same `clothing_items` table — entries have `status='wishlist'` (default `'owned'`) plus `wishlist_name`, `wishlist_intent` (`want` / `gift` / `saving` / `sale_watch`), `wishlist_url`. Wishlist rows are excluded from `/api/closet`, `/api/stats`, `/api/outfits/recommend`, `/api/neglected-items`, and `/api/laundry`. The Profile tab → Wishlist screen lists, adds, promotes, and removes them; promotion flips `status` to `'owned'` and resets `date_added` so the item enters the closet fresh. Photo-less entries are allowed (image_path stores `''`); the metadata-only `POST /api/wishlist` is the current path — a "save with photo" flow can reuse `/api/upload-clothing` with a status patch later.
 
 ## Future work

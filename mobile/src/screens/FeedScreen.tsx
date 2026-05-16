@@ -2,7 +2,6 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -20,9 +19,12 @@ import type {
 } from '../navigation/RootNavigator';
 import * as api from '../api/client';
 import type { FitPost } from '../api/types';
+import { API_ORIGIN } from '../config';
 import { GlassButton, ScreenBackground } from '../components/Glass';
 import { PostCard } from '../components/PostCard';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { tabTopPadding } from '../utils/screenSpacing';
 import {
   radii,
   spacing,
@@ -36,11 +38,12 @@ type Nav = CompositeNavigationProp<
   NativeStackNavigationProp<AppStackParamList>
 >;
 
-const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
 const PAGE_SIZE = 30;
 
 export function FeedScreen() {
   const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
+  const headerPad = tabTopPadding(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -51,23 +54,50 @@ export function FeedScreen() {
   const [reachedEnd, setReachedEnd] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const enrichFeedError = useCallback(async (message: string) => {
+    if (!/not\s*found/i.test(message)) return message;
+    try {
+      const r = await fetch(`${API_ORIGIN}/healthz`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      if (r.ok) {
+        return (
+          message +
+          '\n\nDiagnostic: /healthz succeeded - this host is your Closet-Org server, but GET /api/feed returned 404. Fix a double /api in your API URL, or restart uvicorn from the current backend (old processes may lack /api/feed).'
+        );
+      }
+      return (
+        message +
+        `\n\nDiagnostic: /healthz returned HTTP ${r.status} — ${API_ORIGIN} may not be this API (wrong host/port).`
+      );
+    } catch {
+      return (
+        message +
+        `\n\nDiagnostic: no response from ${API_ORIGIN}/healthz — API not running, wrong IP, or firewall.`
+      );
+    }
+  }, []);
+
   const load = useCallback(async () => {
+    setLoading(true);
     setError(null);
     try {
       const data = await api.fetchFeed();
       setPosts(data.posts);
       setReachedEnd(data.posts.length < PAGE_SIZE);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load feed');
+      let msg = e instanceof Error ? e.message : 'Could not load feed';
+      msg = await enrichFeedError(msg);
+      setError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [enrichFeedError]);
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
       load();
     }, [load])
   );
@@ -145,12 +175,28 @@ export function FeedScreen() {
     );
   }
 
-  if (error && posts.length === 0) {
+  if (error && posts.length === 0 && !loading) {
     return (
       <View style={{ flex: 1 }}>
         <ScreenBackground />
         <View style={styles.centered}>
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorTitle}>Could not load feed</Text>
+          <Text style={styles.errorDetail}>{error}</Text>
+          <Text style={styles.errorHint}>
+            {
+              'When there are no posts yet, the feed still loads and shows “No fits yet”—that is normal. “Not found” means the app could not reach your API (wrong address, tunnel mode, or backend not running).'
+            }
+          </Text>
+          {__DEV__ ? (
+            <Text style={[styles.errorHint, { marginBottom: spacing.md }]}>
+              {`Dev API base: ${API_ORIGIN} → ${API_ORIGIN}/api/feed`}
+            </Text>
+          ) : null}
+          {/not\s*found/i.test(error) ? (
+            <Text style={[styles.errorHint, { marginBottom: spacing.md }]}>
+              {`Try: same Wi-Fi as your PC, uvicorn on the port shown above, LAN mode in Expo (not tunnel), or set EXPO_PUBLIC_API_URL to ${API_ORIGIN} (no /api) and restart Metro.`}
+            </Text>
+          ) : null}
           <GlassButton title="Retry" onPress={load} fullWidth={false} />
         </View>
       </View>
@@ -212,29 +258,37 @@ export function FeedScreen() {
             }
           />
         )}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingTop: headerPad }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={colors.accent}
-            progressViewOffset={HEADER_PAD}
+            progressViewOffset={headerPad}
           />
         }
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
-            <Text style={styles.emptyTitle}>No fits yet</Text>
+            <Text style={styles.emptyTitle}>Your feed is ready</Text>
             <Text style={styles.empty}>
-              Add some friends or post your first daily fit check.
+              Posts from you and your friends show here. Until then, this stays
+              quiet—that is the default, not an error.
             </Text>
-            <GlassButton
-              title="Find friends"
-              onPress={() => navigation.navigate('Friends')}
-              fullWidth={false}
-              style={{ marginTop: spacing.lg }}
-            />
+            <View style={styles.emptyActions}>
+              <GlassButton
+                title="Post a fit"
+                onPress={() => navigation.navigate('CreateFit')}
+                fullWidth={false}
+              />
+              <GlassButton
+                title="Find friends"
+                variant="secondary"
+                onPress={() => navigation.navigate('Friends')}
+                fullWidth={false}
+              />
+            </View>
           </View>
         }
         ListFooterComponent={
@@ -263,14 +317,26 @@ function makeStyles({
       alignItems: 'center',
       padding: spacing.xl,
     },
-    errorText: {
+    errorTitle: {
+      ...typography.headline,
+      color: colors.text,
+      textAlign: 'center',
+      marginBottom: spacing.sm,
+    },
+    errorDetail: {
       color: colors.danger,
       textAlign: 'center',
-      marginBottom: spacing.lg,
+      marginBottom: spacing.md,
       fontSize: 15,
     },
+    errorHint: {
+      color: colors.textSecondary,
+      textAlign: 'center',
+      fontSize: 13,
+      lineHeight: 19,
+      marginBottom: spacing.lg,
+    },
     list: {
-      paddingTop: HEADER_PAD,
       paddingHorizontal: spacing.lg,
       paddingBottom: 120,
     },
@@ -327,6 +393,13 @@ function makeStyles({
       textAlign: 'center',
       color: colors.textSecondary,
       fontSize: 15,
+    },
+    emptyActions: {
+      marginTop: spacing.lg,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      gap: spacing.sm,
     },
   });
 }

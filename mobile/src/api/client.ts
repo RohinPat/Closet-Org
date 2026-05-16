@@ -3,17 +3,28 @@ import { Platform } from 'react-native';
 import { apiUrl } from '../config';
 import { formatApiError } from './errors';
 import type {
+  BulkItemPayload,
+  AppSettings,
+  AppSettingsPatch,
   ClothingItem,
+  ClosetLocation,
+  ClosetInsights,
   ClosetStats,
+  FitCheckPairing,
   FitComment,
   FitPost,
   Friend,
   FriendRequest,
   ItemDetailsPatch,
   OutfitRecommendation,
+  PromoteBulkResult,
   PublicProfile,
   PublicUser,
   User,
+  VisualSearchMatch,
+  ForecastDay,
+  WeatherContext,
+  WeatherLocation,
   WishlistCreate,
   WishlistPatch,
 } from './types';
@@ -123,12 +134,156 @@ export async function fetchMe(token?: string | null) {
 export async function fetchCloset(params?: {
   category?: string;
   status?: string;
+  q?: string;
+  packed?: boolean;
+  closetLocationId?: number | null;
 }) {
   const q = new URLSearchParams();
   if (params?.category) q.set('category', params.category);
   if (params?.status) q.set('status', params.status);
+  if (params?.q?.trim()) q.set('q', params.q.trim());
+  if (params?.packed != null) q.set('packed', String(params.packed));
+  if (params?.closetLocationId != null)
+    q.set('closet_location_id', String(params.closetLocationId));
   const suffix = q.toString() ? `?${q}` : '';
   return apiFetch<{ items: ClothingItem[] }>(`/closet${suffix}`);
+}
+
+export async function fetchSettings() {
+  return apiFetch<AppSettings>('/settings');
+}
+
+export async function updateSettings(patch: AppSettingsPatch) {
+  return apiFetch<AppSettings>('/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function fetchClosetLocations() {
+  return apiFetch<{ locations: ClosetLocation[] }>('/closet/locations');
+}
+
+export async function createClosetLocation(body: {
+  name: string;
+  kind?: string;
+  is_default?: boolean;
+}) {
+  return apiFetch<{ success: boolean; location: ClosetLocation }>(
+    '/closet/locations',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  );
+}
+
+export async function updateClosetLocation(
+  locationId: number,
+  patch: { name?: string; kind?: string; is_default?: boolean }
+) {
+  return apiFetch<{ success: boolean; location: ClosetLocation }>(
+    `/closet/locations/${locationId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }
+  );
+}
+
+export async function deleteClosetLocation(locationId: number) {
+  return apiFetch<{ success: boolean; locations: ClosetLocation[] }>(
+    `/closet/locations/${locationId}`,
+    { method: 'DELETE' }
+  );
+}
+
+export async function bulkUpdatePacked(
+  itemIds: number[] | null,
+  packedForTrip: boolean
+) {
+  return apiFetch<{ success: boolean; updated: number }>('/closet/packed', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      item_ids: itemIds,
+      packed_for_trip: packedForTrip,
+    }),
+  });
+}
+
+export async function createBulkItem(body: BulkItemPayload) {
+  return apiFetch<{ success: boolean; item_id: number }>('/closet/bulk-item', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function createBulkItemWithPhoto(
+  body: BulkItemPayload,
+  photo: UploadPhoto
+) {
+  const token = await getStoredToken();
+  const form = new FormData();
+  form.append('name', body.name);
+  form.append('subcategory', body.subcategory);
+  form.append('quantity', String(body.quantity));
+  if (body.clean_count != null) {
+    form.append('clean_count', String(body.clean_count));
+  }
+  if (body.style) form.append('style', body.style);
+  if (body.season) form.append('season', body.season);
+  if (isWeb) {
+    const blob = await (await fetch(photo.uri)).blob();
+    form.append('photo', blob, photo.filename);
+  } else {
+    form.append('photo', {
+      uri: photo.uri,
+      name: photo.filename,
+      type: photo.mimeType,
+    } as unknown as Blob);
+  }
+  return apiFetch<{ success: boolean; item_id: number }>(
+    '/closet/bulk-item/upload',
+    { method: 'POST', body: form },
+    token
+  );
+}
+
+export async function postVisualSearch(photo: UploadPhoto, limit = 24) {
+  const token = await getStoredToken();
+  const form = new FormData();
+  if (isWeb) {
+    const blob = await (await fetch(photo.uri)).blob();
+    form.append('files', blob, photo.filename);
+  } else {
+    form.append('files', {
+      uri: photo.uri,
+      name: photo.filename,
+      type: photo.mimeType,
+    } as unknown as Blob);
+  }
+  return apiFetch<{ matches: VisualSearchMatch[]; hint?: string }>(
+    `/closet/visual-search?limit=${encodeURIComponent(String(limit))}`,
+    { method: 'POST', body: form },
+    token
+  );
+}
+
+export async function promoteBulkItem(itemId: number, count: number) {
+  return apiFetch<PromoteBulkResult>(`/item/${itemId}/promote-bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ count }),
+  });
+}
+
+export async function fetchClosetInsights() {
+  return apiFetch<ClosetInsights>('/closet/insights');
 }
 
 export async function fetchItem(itemId: number) {
@@ -164,6 +319,11 @@ export async function uploadClothing(photos: UploadPhoto[]) {
     success: boolean;
     item_id: number;
     classification: Record<string, unknown>;
+    duplicate_hint?: {
+      category: string;
+      color: string;
+      existing_similar_count: number;
+    } | null;
     image_url: string;
     thumbnail_url?: string | null;
     image_urls?: (string | null)[];
@@ -240,14 +400,126 @@ export async function updateItemStatus(
 export async function fetchOutfitRecommendations(params?: {
   occasion?: string;
   season?: string;
+  /** Stable per day server-side unless overridden; pass e.g. Date.now() to reshuffle. */
+  seed?: number;
+  /** Comma-ready list of owned item ids to omit. */
+  excludeItemIds?: number[];
+  /** Item ids that must appear in every outfit (owned closet ids). */
+  pinItemIds?: number[];
+  /** Vibe preset: clean_prep | streetwear | cozy */
+  vibe?: string;
+  /** Include packed-away items in the backend candidate pool. */
+  includePacked?: boolean;
+  /** Restrict suggestions to one structured closet location. */
+  closetLocationId?: number | null;
+  /** Optional weather-aware scoring context resolved server-side. */
+  lat?: number;
+  lon?: number;
+  weatherDate?: string;
+  locationName?: string;
 }) {
   const q = new URLSearchParams();
   if (params?.occasion) q.set('occasion', params.occasion);
   if (params?.season) q.set('season', params.season);
+  if (params?.seed != null) q.set('seed', String(params.seed));
+  if (params?.vibe) q.set('vibe', params.vibe);
+  if (params?.includePacked) q.set('include_packed', 'true');
+  if (params?.closetLocationId != null)
+    q.set('closet_location_id', String(params.closetLocationId));
+  if (params?.lat != null) q.set('lat', String(params.lat));
+  if (params?.lon != null) q.set('lon', String(params.lon));
+  if (params?.weatherDate) q.set('weather_date', params.weatherDate);
+  if (params?.locationName) q.set('location_name', params.locationName);
+  if (params?.excludeItemIds?.length)
+    q.set('exclude_item_ids', params.excludeItemIds.join(','));
+  if (params?.pinItemIds?.length)
+    q.set('pin_item_ids', params.pinItemIds.join(','));
   const suffix = q.toString() ? `?${q}` : '';
-  return apiFetch<{ outfits: OutfitRecommendation[] }>(
+  return apiFetch<{ outfits: OutfitRecommendation[]; weather?: WeatherContext | null }>(
     `/outfits/recommend${suffix}`
   );
+}
+
+export async function geocodeWeatherLocation(query: string) {
+  const q = new URLSearchParams({ q: query });
+  return apiFetch<{ results: WeatherLocation[] }>(`/weather/geocode?${q}`);
+}
+
+export async function fetchCurrentWeather(params: {
+  lat: number;
+  lon: number;
+  date?: string;
+  locationName?: string;
+}) {
+  const q = new URLSearchParams({
+    lat: String(params.lat),
+    lon: String(params.lon),
+  });
+  if (params.date) q.set('date', params.date);
+  if (params.locationName) q.set('location_name', params.locationName);
+  return apiFetch<{ weather: WeatherContext }>(`/weather/current?${q}`);
+}
+
+export async function fetchWeatherForecast(params: {
+  lat: number;
+  lon: number;
+  startDate?: string;
+  endDate?: string;
+  locationName?: string;
+}) {
+  const q = new URLSearchParams({
+    lat: String(params.lat),
+    lon: String(params.lon),
+  });
+  if (params.startDate) q.set('start_date', params.startDate);
+  if (params.endDate) q.set('end_date', params.endDate);
+  if (params.locationName) q.set('location_name', params.locationName);
+  return apiFetch<{
+    location_name?: string | null;
+    latitude: number;
+    longitude: number;
+    days: ForecastDay[];
+    context: WeatherContext;
+  }>(`/weather/forecast?${q}`);
+}
+
+export async function fetchItemOutfits(
+  itemId: number,
+  params?: {
+    occasion?: string;
+    season?: string;
+    seed?: number;
+    vibe?: string;
+  }
+) {
+  const q = new URLSearchParams();
+  if (params?.occasion) q.set('occasion', params.occasion);
+  if (params?.season) q.set('season', params.season);
+  if (params?.seed != null) q.set('seed', String(params.seed));
+  if (params?.vibe) q.set('vibe', params.vibe);
+  const suffix = q.toString() ? `?${q}` : '';
+  return apiFetch<{ outfits: OutfitRecommendation[] }>(
+    `/item/${itemId}/outfits${suffix}`
+  );
+}
+
+export async function postClosetFitCheck(photo: UploadPhoto) {
+  const token = await getStoredToken();
+  const form = new FormData();
+  if (isWeb) {
+    const blob = await (await fetch(photo.uri)).blob();
+    form.append('files', blob, photo.filename);
+  } else {
+    form.append('files', {
+      uri: photo.uri,
+      name: photo.filename,
+      type: photo.mimeType,
+    } as unknown as Blob);
+  }
+  return apiFetch<{
+    classification: Record<string, unknown>;
+    pairings: FitCheckPairing[];
+  }>(`/closet/fit-check`, { method: 'POST', body: form }, token);
 }
 
 export async function fetchStats() {
@@ -314,7 +586,9 @@ export async function uploadAvatar(asset: AvatarUploadAsset) {
 
 export async function updateProfile(payload: {
   full_name?: string | null;
+  email?: string | null;
   bio?: string | null;
+  theme_preference?: string | null;
 }) {
   return apiFetch<{ success: boolean }>('/auth/profile', {
     method: 'PUT',

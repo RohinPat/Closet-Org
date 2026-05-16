@@ -22,7 +22,12 @@ import { BlurView } from 'expo-blur';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../navigation/RootNavigator';
 import * as api from '../api/client';
-import type { ClothingItem, ItemDetailsPatch } from '../api/types';
+import type {
+  ClothingItem,
+  ClosetLocation,
+  ItemDetailsPatch,
+  OutfitRecommendation,
+} from '../api/types';
 import { itemImageUrl } from '../config';
 import {
   GlassButton,
@@ -31,6 +36,16 @@ import {
   ScreenBackground,
 } from '../components/Glass';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import {
+  CLOTHING_CATEGORIES,
+  CLOTHING_COLORS,
+  CLOTHING_SEASONS,
+  CLOTHING_STYLES,
+  CLOTHING_SUBCATEGORIES,
+} from '../constants/classification';
+import { MAX_USER_TAG_LENGTH, MAX_USER_TAGS } from '../constants/tags';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { stackTopPadding } from '../utils/screenSpacing';
 import {
   radii,
   shadow,
@@ -130,24 +145,45 @@ function formatFieldValue(
 }
 
 export function ItemDetailScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const headerPad = stackTopPadding(insets);
   const { colors, surface } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { item: initial } = route.params;
   const [item, setItem] = useState(initial);
   const [loading, setLoading] = useState(false);
+  const [closetLocations, setClosetLocations] = useState<ClosetLocation[]>([]);
   const [editing, setEditing] = useState<FieldConfig | null>(null);
+  const [tagsModalOpen, setTagsModalOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const full = await api.fetchItem(initial.id);
+      const [full, locs] = await Promise.all([
+        api.fetchItem(initial.id),
+        api.fetchClosetLocations(),
+      ]);
       setItem(full);
+      setClosetLocations(locs.locations);
     } catch {
       /* keep existing */
     } finally {
       setLoading(false);
     }
   }, [initial.id]);
+
+  async function saveClosetLocation(locationId: number | null) {
+    setLoading(true);
+    try {
+      await api.updateItemDetails(item.id, { closet_location_id: locationId });
+      const full = await api.fetchItem(item.id);
+      setItem(full);
+    } catch (e) {
+      Alert.alert('Could not update closet', e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     refresh();
@@ -158,6 +194,11 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   const pageWidth = winWidth - spacing.xl * 2;
   const [pageIndex, setPageIndex] = useState(0);
   const [lendModalOpen, setLendModalOpen] = useState(false);
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [promoteCount, setPromoteCount] = useState('1');
+  const [outfitsModalOpen, setOutfitsModalOpen] = useState(false);
+  const [itemOutfits, setItemOutfits] = useState<OutfitRecommendation[]>([]);
+  const [itemOutfitsLoading, setItemOutfitsLoading] = useState(false);
   const onPageChange = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const idx = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
@@ -186,6 +227,30 @@ export function ItemDetailScreen({ route, navigation }: Props) {
     }
   }
 
+  async function onTogglePackedForTrip() {
+    try {
+      await api.updateItemDetails(item.id, {
+        packed_for_trip: !item.packed_for_trip,
+      });
+      await refresh();
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
+  }
+
+  async function openSuggestedOutfits() {
+    setOutfitsModalOpen(true);
+    setItemOutfitsLoading(true);
+    try {
+      const data = await api.fetchItemOutfits(item.id, { seed: Date.now() });
+      setItemOutfits(data.outfits);
+    } catch {
+      setItemOutfits([]);
+    } finally {
+      setItemOutfitsLoading(false);
+    }
+  }
+
   async function onDelete() {
     const ok = await confirmDelete('Remove this from your closet?');
     if (!ok) return;
@@ -206,6 +271,47 @@ export function ItemDetailScreen({ route, navigation }: Props) {
     }
   }
 
+  async function onBulkWoreOne() {
+    try {
+      await api.updateItemStatus(item.id, { worn: true });
+      await refresh();
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
+  }
+
+  async function submitPromoteBulk() {
+    if (!item.is_bulk) return;
+    const maxPull = Math.min(item.quantity ?? 1, item.clean_count ?? 0);
+    const n = parseInt(promoteCount, 10);
+    if (!Number.isFinite(n) || n < 1) {
+      Alert.alert('Invalid', 'Enter a positive number.');
+      return;
+    }
+    if (n > maxPull) {
+      Alert.alert(
+        'Too many',
+        `You can promote at most ${maxPull} clean units right now.`,
+      );
+      return;
+    }
+    try {
+      const res = await api.promoteBulkItem(item.id, n);
+      setPromoteOpen(false);
+      if (res.bulk_removed) {
+        navigation.goBack();
+        return;
+      }
+      await refresh();
+      Alert.alert(
+        'Promoted',
+        `Created ${res.created_ids.length} individual item(s).`,
+      );
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
+  }
+
   async function onLendSave(lent_to: string, lent_until: string | null) {
     try {
       await api.lendItem(item.id, { lent_to, lent_until });
@@ -219,6 +325,16 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   async function onReturn() {
     try {
       await api.returnItem(item.id);
+      await refresh();
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
+  }
+
+  async function saveTags(patch: ItemDetailsPatch) {
+    try {
+      await api.updateItemDetails(item.id, patch);
+      setTagsModalOpen(false);
       await refresh();
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
@@ -259,7 +375,7 @@ export function ItemDetailScreen({ route, navigation }: Props) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.imageWrap}>
+        <View style={[styles.imageWrap, { paddingTop: headerPad }]}>
           {galleryUris.length > 0 ? (
             <FlatList
               ref={carouselRef}
@@ -283,7 +399,10 @@ export function ItemDetailScreen({ route, navigation }: Props) {
               style={[styles.image, styles.imagePlaceholder, { width: pageWidth }]}
             />
           )}
-          <Pressable onPress={onToggleFavorite} style={styles.favBtn}>
+          <Pressable
+            onPress={onToggleFavorite}
+            style={[styles.favBtn, { top: headerPad + 12 }]}
+          >
             <View
               style={[
                 StyleSheet.absoluteFillObject,
@@ -319,26 +438,83 @@ export function ItemDetailScreen({ route, navigation }: Props) {
         ) : null}
 
         <View style={styles.body}>
-          <Text style={styles.title}>{item.category}</Text>
-          <Text style={styles.sub}>{item.subcategory}</Text>
+          <Pressable
+            onPress={() => setTagsModalOpen(true)}
+            style={({ pressed }) => [
+              styles.tagsSection,
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Edit tags"
+          >
+            <View style={styles.tagsHeader}>
+              <Text style={styles.title}>{item.category}</Text>
+              <View style={styles.editTagsBtn}>
+                <Text style={styles.editTagsText}>Edit tags</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={14}
+                  color={colors.textMuted}
+                />
+              </View>
+            </View>
+            <Text style={styles.sub}>{item.subcategory}</Text>
 
-          <View style={styles.tagRow}>
-            {item.style ? (
-              <View style={styles.tag}>
-                <Text style={styles.tagText}>{item.style}</Text>
+            {item.is_bulk ? (
+              <View style={styles.bulkBanner}>
+                <Ionicons name="layers-outline" size={16} color={colors.accent} />
+                <Text style={styles.bulkBannerText}>
+                  Bulk item — wears use clean count instead of the wear-again meter.
+                </Text>
               </View>
             ) : null}
-            {item.season ? (
-              <View style={styles.tag}>
-                <Text style={styles.tagText}>{item.season}</Text>
+
+            {item.packed_for_trip ? (
+              <View style={styles.tripBanner}>
+                <Ionicons
+                  name="airplane-outline"
+                  size={16}
+                  color={colors.accent}
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={styles.tripBannerText}>
+                  Marked packed for a trip — not used in outfit suggestions until
+                  you turn this off.
+                </Text>
               </View>
             ) : null}
-            {(item.colors || []).map((c) => (
-              <View key={c} style={[styles.tag, styles.colorTag]}>
-                <Text style={styles.tagText}>{c}</Text>
-              </View>
-            ))}
-          </View>
+
+            <View style={styles.tagRow}>
+              {item.style ? (
+                <View style={styles.tag}>
+                  <Text style={styles.tagText}>{item.style}</Text>
+                </View>
+              ) : null}
+              {item.season ? (
+                <View style={styles.tag}>
+                  <Text style={styles.tagText}>{item.season}</Text>
+                </View>
+              ) : null}
+              {(item.colors || []).map((c) => (
+                <View key={c} style={[styles.tag, styles.colorTag]}>
+                  <Text style={styles.tagText}>{c}</Text>
+                </View>
+              ))}
+              {(item.user_tags || []).map((t) => (
+                <View key={t} style={[styles.tag, styles.userTag]}>
+                  <Text style={styles.tagText}>{t}</Text>
+                </View>
+              ))}
+              {!item.style &&
+              !item.season &&
+              (item.colors || []).length === 0 &&
+              (item.user_tags || []).length === 0 ? (
+                <Text style={styles.tagsEmptyHint}>
+                  Tap to edit tags or add your own
+                </Text>
+              ) : null}
+            </View>
+          </Pressable>
 
           {item.lent_to ? (
             <GlassCard
@@ -377,15 +553,34 @@ export function ItemDetailScreen({ route, navigation }: Props) {
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statCol}>
-                <Text
-                  style={[
-                    styles.statValue,
-                    { color: item.washed ? colors.success : colors.warning },
-                  ]}
-                >
-                  {item.washed ? 'Clean' : 'Wash'}
-                </Text>
-                <Text style={styles.statLabel}>status</Text>
+                {item.is_bulk ? (
+                  <>
+                    <Text
+                      style={[
+                        styles.statValue,
+                        {
+                          color:
+                            (item.clean_count ?? 0) > 0 ? colors.success : colors.warning,
+                        },
+                      ]}
+                    >
+                      {item.clean_count ?? 0}/{item.quantity ?? 1}
+                    </Text>
+                    <Text style={styles.statLabel}>clean / total</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text
+                      style={[
+                        styles.statValue,
+                        { color: item.washed ? colors.success : colors.warning },
+                      ]}
+                    >
+                      {item.washed ? 'Clean' : 'Wash'}
+                    </Text>
+                    <Text style={styles.statLabel}>status</Text>
+                  </>
+                )}
               </View>
               {hasCpw ? (
                 <>
@@ -411,6 +606,39 @@ export function ItemDetailScreen({ route, navigation }: Props) {
 
           <GlassCard padded style={styles.detailsCard}>
             <Text style={styles.detailsHeader}>Details</Text>
+            {closetLocations.length > 0 ? (
+              <View style={styles.closetPicker}>
+                <Text style={styles.detailLabel}>Closet</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.closetPickerRow}
+                >
+                  {closetLocations.map((loc) => {
+                    const active = item.closet_location_id === loc.id;
+                    return (
+                      <Pressable
+                        key={loc.id}
+                        onPress={() => saveClosetLocation(loc.id)}
+                        style={[
+                          styles.closetChip,
+                          active && styles.closetChipActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.closetChipText,
+                            active && styles.closetChipTextActive,
+                          ]}
+                        >
+                          {loc.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
             {FIELDS.map((field, idx) => {
               const raw = (item as Record<string, unknown>)[
                 field.key
@@ -451,21 +679,69 @@ export function ItemDetailScreen({ route, navigation }: Props) {
           </GlassCard>
 
           <View style={styles.actions}>
-            <GlassButton
-              title={item.washed ? 'Mark needs wash' : 'Mark clean'}
-              onPress={() => setWashed(!item.washed)}
-              variant="ghost"
-            />
+            {item.is_bulk ? (
+              <GlassButton
+                title="Wore one unit"
+                onPress={onBulkWoreOne}
+                variant="ghost"
+              />
+            ) : null}
+            {item.is_bulk ? (
+              <>
+                <GlassButton
+                  title="All in hamper (0 clean)"
+                  onPress={() => setWashed(false)}
+                  variant="ghost"
+                />
+                <GlassButton
+                  title="Fresh from laundry (all clean)"
+                  onPress={() => setWashed(true)}
+                  variant="ghost"
+                />
+              </>
+            ) : (
+              <GlassButton
+                title={item.washed ? 'Mark needs wash' : 'Mark clean'}
+                onPress={() => setWashed(!item.washed)}
+                variant="ghost"
+              />
+            )}
+            {item.is_bulk && (item.clean_count ?? 0) > 0 ? (
+              <GlassButton
+                title="Promote to individual items…"
+                onPress={() => {
+                  setPromoteCount('1');
+                  setPromoteOpen(true);
+                }}
+                variant="ghost"
+              />
+            ) : null}
             <GlassButton
               title={item.is_favorite ? 'Remove favorite' : 'Mark favorite'}
               onPress={onToggleFavorite}
               variant="ghost"
             />
+            {item.is_bulk ? null : (
+              <GlassButton
+                title={item.lent_to ? 'Mark returned' : 'Lend out'}
+                onPress={
+                  item.lent_to ? onReturn : () => setLendModalOpen(true)
+                }
+                variant="ghost"
+              />
+            )}
             <GlassButton
-              title={item.lent_to ? 'Mark returned' : 'Lend out'}
-              onPress={
-                item.lent_to ? onReturn : () => setLendModalOpen(true)
+              title={
+                item.packed_for_trip
+                  ? 'Mark back home (unpack)'
+                  : 'Packed for trip / away'
               }
+              onPress={onTogglePackedForTrip}
+              variant="ghost"
+            />
+            <GlassButton
+              title="Suggested outfits with this item"
+              onPress={openSuggestedOutfits}
               variant="ghost"
             />
             <GlassButton title="Delete item" onPress={onDelete} variant="danger" />
@@ -480,11 +756,143 @@ export function ItemDetailScreen({ route, navigation }: Props) {
         onSave={saveField}
       />
 
+      <EditTagsModal
+        visible={tagsModalOpen}
+        item={item}
+        onCancel={() => setTagsModalOpen(false)}
+        onSave={saveTags}
+      />
+
       <LendModal
         visible={lendModalOpen}
         onCancel={() => setLendModalOpen(false)}
         onSave={onLendSave}
       />
+
+      <Modal
+        visible={promoteOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPromoteOpen(false)}
+      >
+        <View style={styles.modalWrap}>
+          <Pressable
+            style={styles.sheetBackdrop}
+            onPress={() => setPromoteOpen(false)}
+          />
+          <View
+            style={[
+              styles.outfitsModalSheet,
+              { backgroundColor: colors.surfaceSolid },
+            ]}
+          >
+            <Text style={styles.modalSheetTitle}>Promote to individuals</Text>
+            <Text style={styles.modalSheetMuted}>
+              Pulls from your clean count (max{' '}
+              {Math.min(item.quantity ?? 1, item.clean_count ?? 0)}). Each new
+              row is a normal item you can track separately.
+            </Text>
+            <GlassInputContainer style={styles.modalInputShell}>
+              <TextInput
+                value={promoteCount}
+                onChangeText={setPromoteCount}
+                keyboardType="number-pad"
+                placeholder="How many?"
+                placeholderTextColor={colors.placeholder}
+                style={styles.modalInput}
+              />
+            </GlassInputContainer>
+            <View style={styles.modalActions}>
+              <GlassButton
+                title="Cancel"
+                variant="ghost"
+                onPress={() => setPromoteOpen(false)}
+                style={{ flex: 1 }}
+              />
+              <GlassButton
+                title="Promote"
+                onPress={submitPromoteBulk}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={outfitsModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setOutfitsModalOpen(false)}
+      >
+        <View style={styles.modalWrap}>
+          <Pressable
+            style={styles.sheetBackdrop}
+            onPress={() => setOutfitsModalOpen(false)}
+          />
+          <View
+            style={[
+              styles.outfitsModalSheet,
+              { backgroundColor: colors.surfaceSolid },
+            ]}
+          >
+          <Text style={styles.modalSheetTitle}>Outfits including this piece</Text>
+          {itemOutfitsLoading ? (
+            <ActivityIndicator color={colors.accent} style={{ marginVertical: 20 }} />
+          ) : itemOutfits.length === 0 ? (
+            <Text style={styles.modalSheetMuted}>
+              No combinations found — try marking the item clean or adding pairs.
+            </Text>
+          ) : (
+            <ScrollView
+              style={{ maxHeight: 400 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {itemOutfits.map((o, idx) => (
+                <View key={idx} style={styles.outfitPreviewBlock}>
+                  <Text style={styles.outfitPreviewTitle}>
+                    Option {idx + 1} · score {Math.round(o.score)}
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {o.items.map((it) => {
+                        const uri = itemImageUrl(it.image_path);
+                        return (
+                          <View key={it.id} style={{ width: 64 }}>
+                            {uri ? (
+                              <Image
+                                source={{ uri }}
+                                style={styles.outfitThumb}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View
+                                style={[
+                                  styles.outfitThumb,
+                                  { backgroundColor: surface.thumbBg },
+                                ]}
+                              />
+                            )}
+                            <Text style={styles.outfitThumbLabel} numberOfLines={1}>
+                              {it.subcategory}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+          <GlassButton
+            title="Close"
+            onPress={() => setOutfitsModalOpen(false)}
+            style={{ marginTop: spacing.md }}
+          />
+        </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -509,6 +917,338 @@ type LendModalProps = {
   onCancel: () => void;
   onSave: (lent_to: string, lent_until: string | null) => void | Promise<void>;
 };
+
+type EditTagsModalProps = {
+  visible: boolean;
+  item: ClothingItem;
+  onCancel: () => void;
+  onSave: (patch: ItemDetailsPatch) => void | Promise<void>;
+};
+
+function EditTagsModal({ visible, item, onCancel, onSave }: EditTagsModalProps) {
+  const { colors, surface } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const [category, setCategory] = useState(item.category);
+  const [subcategory, setSubcategory] = useState(item.subcategory);
+  const [style, setStyle] = useState(item.style ?? '');
+  const [season, setSeason] = useState(item.season ?? '');
+  const [selectedColors, setSelectedColors] = useState<Set<string>>(
+    () => new Set(item.colors || [])
+  );
+  const [userTags, setUserTags] = useState<string[]>(item.user_tags || []);
+  const [tagInput, setTagInput] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    setCategory(item.category);
+    setSubcategory(item.subcategory);
+    setStyle(item.style ?? '');
+    setSeason(item.season ?? '');
+    setSelectedColors(new Set(item.colors || []));
+    setUserTags(item.user_tags || []);
+    setTagInput('');
+    setSaving(false);
+  }, [visible, item]);
+
+  function addUserTag() {
+    const trimmed = tagInput.trim();
+    if (!trimmed) return;
+    if (trimmed.length > MAX_USER_TAG_LENGTH) {
+      Alert.alert(
+        'Tag too long',
+        `Keep tags under ${MAX_USER_TAG_LENGTH} characters.`
+      );
+      return;
+    }
+    if (userTags.length >= MAX_USER_TAGS) {
+      Alert.alert('Limit reached', `You can add up to ${MAX_USER_TAGS} tags.`);
+      return;
+    }
+    const lower = trimmed.toLowerCase();
+    if (userTags.some((t) => t.toLowerCase() === lower)) {
+      setTagInput('');
+      return;
+    }
+    setUserTags((prev) => [...prev, trimmed]);
+    setTagInput('');
+  }
+
+  function removeUserTag(tag: string) {
+    setUserTags((prev) => prev.filter((t) => t !== tag));
+  }
+
+  function toggleColor(name: string) {
+    setSelectedColors((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        if (next.size <= 1) return prev;
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  }
+
+  async function handleSave() {
+    if (!category.trim() || !subcategory.trim()) {
+      Alert.alert('Type required', 'Pick a type and group for this item.');
+      return;
+    }
+    if (selectedColors.size === 0) {
+      Alert.alert('Color required', 'Pick at least one color.');
+      return;
+    }
+    const patch: ItemDetailsPatch = {
+      category: category.trim(),
+      subcategory: subcategory.trim(),
+      colors: [...selectedColors],
+      style: style.trim() === '' ? null : style,
+      season: season.trim() === '' ? null : season,
+      user_tags: userTags,
+    };
+    setSaving(true);
+    try {
+      await onSave(patch);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.modalBackdrop}
+      >
+        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel}>
+          <BlurView
+            intensity={30}
+            tint={surface.blurTint}
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: 'rgba(0,0,0,0.35)' },
+            ]}
+          />
+        </Pressable>
+        <GlassCard padded style={[styles.modalCard, styles.tagsModalCard]}>
+          <Text style={styles.modalTitle}>Edit tags</Text>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            style={styles.tagsModalScroll}
+          >
+            <Text style={styles.tagsModalLabel}>Type</Text>
+            <View style={styles.tagsChipRow}>
+              {CLOTHING_CATEGORIES.map((c) => (
+                <TagChip
+                  key={c}
+                  label={c}
+                  active={category === c}
+                  onPress={() => setCategory(c)}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.tagsModalLabel}>Group</Text>
+            <View style={styles.tagsChipRow}>
+              {CLOTHING_SUBCATEGORIES.map((s) => (
+                <TagChip
+                  key={s}
+                  label={s}
+                  active={subcategory === s}
+                  onPress={() => setSubcategory(s)}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.tagsModalLabel}>Style</Text>
+            <View style={styles.tagsChipRow}>
+              <TagChip
+                label="None"
+                active={style === ''}
+                onPress={() => setStyle('')}
+              />
+              {CLOTHING_STYLES.map((s) => (
+                <TagChip
+                  key={s}
+                  label={s}
+                  active={style === s}
+                  onPress={() => setStyle(s)}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.tagsModalLabel}>Season</Text>
+            <View style={styles.tagsChipRow}>
+              <TagChip
+                label="None"
+                active={season === ''}
+                onPress={() => setSeason('')}
+              />
+              {CLOTHING_SEASONS.map((s) => (
+                <TagChip
+                  key={s}
+                  label={s}
+                  active={season === s}
+                  onPress={() => setSeason(s)}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.tagsModalLabel}>Colors</Text>
+            <View style={styles.tagsChipRow}>
+              {CLOTHING_COLORS.map((c) => (
+                <TagChip
+                  key={c}
+                  label={c}
+                  active={selectedColors.has(c)}
+                  onPress={() => toggleColor(c)}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.tagsModalLabel}>Your tags</Text>
+            <Text style={styles.tagsModalHint}>
+              Add labels like work, vintage, or gift — up to {MAX_USER_TAGS}.
+            </Text>
+            <View style={styles.customTagInputRow}>
+              <GlassInputContainer style={styles.customTagInputShell}>
+                <TextInput
+                  value={tagInput}
+                  onChangeText={setTagInput}
+                  placeholder="New tag"
+                  placeholderTextColor={colors.placeholder}
+                  maxLength={MAX_USER_TAG_LENGTH}
+                  returnKeyType="done"
+                  onSubmitEditing={addUserTag}
+                  style={styles.customTagInput}
+                />
+              </GlassInputContainer>
+              <GlassButton
+                title="Add"
+                onPress={addUserTag}
+                disabled={!tagInput.trim()}
+                style={styles.customTagAddBtn}
+              />
+            </View>
+            {userTags.length > 0 ? (
+              <View style={styles.tagsChipRow}>
+                {userTags.map((t) => (
+                  <RemovableTagChip
+                    key={t}
+                    label={t}
+                    onRemove={() => removeUserTag(t)}
+                  />
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.tagsModalHint}>No custom tags yet.</Text>
+            )}
+          </ScrollView>
+          <View style={styles.modalActions}>
+            <GlassButton
+              title="Cancel"
+              variant="ghost"
+              onPress={onCancel}
+              style={{ flex: 1 }}
+            />
+            <GlassButton
+              title="Save"
+              onPress={handleSave}
+              loading={saving}
+              style={{ flex: 1 }}
+            />
+          </View>
+        </GlassCard>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+type TagChipProps = {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+};
+
+type RemovableTagChipProps = {
+  label: string;
+  onRemove: () => void;
+};
+
+function RemovableTagChip({ label, onRemove }: RemovableTagChipProps) {
+  const { colors, surface } = useTheme();
+  return (
+    <Pressable
+      onPress={onRemove}
+      style={({ pressed }) => [
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingLeft: 12,
+          paddingRight: 8,
+          paddingVertical: 7,
+          borderRadius: radii.pill,
+          backgroundColor: surface.chipInactive,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.accent,
+          transform: [{ scale: pressed ? 0.96 : 1 }],
+        },
+      ]}
+      accessibilityLabel={`Remove tag ${label}`}
+    >
+      <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>
+        {label}
+      </Text>
+      <Ionicons
+        name="close-circle"
+        size={16}
+        color={colors.textMuted}
+        style={{ marginLeft: 4 }}
+      />
+    </Pressable>
+  );
+}
+
+function TagChip({ label, active, onPress }: TagChipProps) {
+  const { colors, surface } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          paddingHorizontal: 12,
+          paddingVertical: 7,
+          borderRadius: radii.pill,
+          backgroundColor: active ? colors.accent : surface.chipInactive,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: active ? colors.accent : surface.chipInactiveBorder,
+          transform: [{ scale: pressed ? 0.96 : 1 }],
+        },
+      ]}
+    >
+      <Text
+        style={{
+          fontSize: 13,
+          fontWeight: '600',
+          color: active ? '#fff' : colors.text,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 function LendModal({ visible, onCancel, onSave }: LendModalProps) {
   const { colors, surface } = useTheme();
@@ -708,8 +1448,6 @@ function EditFieldModal({ field, item, onCancel, onSave }: EditModalProps) {
   );
 }
 
-const HEADER_PAD = Platform.OS === 'ios' ? 96 : 80;
-
 function makeStyles({
   colors,
   surface,
@@ -722,7 +1460,6 @@ function makeStyles({
       paddingBottom: spacing.xxl,
     },
     imageWrap: {
-      paddingTop: HEADER_PAD,
       paddingHorizontal: spacing.xl,
     },
     image: {
@@ -754,7 +1491,6 @@ function makeStyles({
     },
     favBtn: {
       position: 'absolute',
-      top: HEADER_PAD + 12,
       right: spacing.xl + 12,
       width: 40,
       height: 40,
@@ -765,9 +1501,34 @@ function makeStyles({
     },
     loader: { marginVertical: spacing.md },
     body: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+    tagsSection: {
+      marginBottom: spacing.lg,
+    },
+    tagsHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    editTagsBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingTop: 4,
+    },
+    editTagsText: {
+      fontSize: 13,
+      color: colors.textMuted,
+      marginRight: 2,
+    },
+    tagsEmptyHint: {
+      fontSize: 13,
+      color: colors.textMuted,
+      fontStyle: 'italic',
+    },
     title: {
       ...typography.title,
       color: colors.text,
+      flex: 1,
     },
     sub: {
       fontSize: 16,
@@ -775,11 +1536,41 @@ function makeStyles({
       marginTop: 4,
       marginBottom: spacing.md,
     },
+    tripBanner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      padding: spacing.md,
+      borderRadius: radii.md,
+      backgroundColor: colors.accentSoft,
+      marginBottom: spacing.md,
+    },
+    tripBannerText: {
+      flex: 1,
+      fontSize: 13,
+      color: colors.textSecondary,
+      lineHeight: 18,
+    },
+    bulkBanner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      padding: spacing.md,
+      borderRadius: radii.md,
+      backgroundColor: surface.chipInactive,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surface.chipInactiveBorder,
+      marginBottom: spacing.md,
+    },
+    bulkBannerText: {
+      flex: 1,
+      fontSize: 13,
+      color: colors.textSecondary,
+      lineHeight: 18,
+    },
     tagRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 8,
-      marginBottom: spacing.lg,
     },
     tag: {
       paddingHorizontal: 12,
@@ -791,6 +1582,11 @@ function makeStyles({
       backgroundColor: surface.chipInactive,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.hairline,
+    },
+    userTag: {
+      backgroundColor: colors.accentSoft,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.accent,
     },
     tagText: {
       fontSize: 13,
@@ -856,6 +1652,35 @@ function makeStyles({
       color: colors.textMuted,
       marginBottom: spacing.sm,
     },
+    closetPicker: {
+      paddingVertical: spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.divider,
+    },
+    closetPickerRow: {
+      gap: spacing.sm,
+      paddingTop: spacing.sm,
+    },
+    closetChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: radii.pill,
+      backgroundColor: surface.chipInactive,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: surface.chipInactiveBorder,
+    },
+    closetChipActive: {
+      backgroundColor: colors.accent,
+      borderColor: colors.accent,
+    },
+    closetChipText: {
+      ...typography.caption,
+      color: colors.text,
+      fontWeight: '700',
+    },
+    closetChipTextActive: {
+      color: '#fff',
+    },
     detailRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -902,6 +1727,48 @@ function makeStyles({
       maxWidth: 420,
       padding: spacing.lg,
     },
+    tagsModalCard: {
+      maxHeight: '85%',
+    },
+    tagsModalScroll: {
+      maxHeight: 360,
+      marginBottom: spacing.md,
+    },
+    tagsModalLabel: {
+      ...typography.micro,
+      color: colors.textMuted,
+      marginTop: spacing.sm,
+      marginBottom: spacing.xs,
+    },
+    tagsModalHint: {
+      fontSize: 12,
+      color: colors.textMuted,
+      marginBottom: spacing.sm,
+    },
+    customTagInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    customTagInputShell: {
+      flex: 1,
+    },
+    customTagInput: {
+      fontSize: 16,
+      color: colors.text,
+      paddingVertical: 10,
+      paddingHorizontal: spacing.md,
+    },
+    customTagAddBtn: {
+      minWidth: 72,
+    },
+    tagsChipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: spacing.sm,
+    },
     modalTitle: {
       ...typography.headline,
       color: colors.text,
@@ -924,6 +1791,49 @@ function makeStyles({
     modalActions: {
       flexDirection: 'row',
       gap: spacing.md,
+    },
+    modalWrap: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    sheetBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+    },
+    outfitsModalSheet: {
+      borderTopLeftRadius: radii.xl,
+      borderTopRightRadius: radii.xl,
+      padding: spacing.xl,
+      paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    },
+    modalSheetTitle: {
+      ...typography.headline,
+      color: colors.text,
+      marginBottom: spacing.sm,
+    },
+    modalSheetMuted: {
+      color: colors.textSecondary,
+      marginVertical: spacing.md,
+      fontSize: 14,
+    },
+    outfitPreviewBlock: {
+      marginBottom: spacing.lg,
+    },
+    outfitPreviewTitle: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      marginBottom: spacing.sm,
+    },
+    outfitThumb: {
+      width: 64,
+      height: 64,
+      borderRadius: radii.md,
+    },
+    outfitThumbLabel: {
+      fontSize: 11,
+      color: colors.textMuted,
+      marginTop: 4,
     },
   });
 }

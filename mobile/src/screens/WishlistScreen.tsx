@@ -31,6 +31,8 @@ import {
 } from '../components/Glass';
 import type { AppStackParamList } from '../navigation/RootNavigator';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { stackTopPadding } from '../utils/screenSpacing';
 import {
   radii,
   spacing,
@@ -73,6 +75,8 @@ function confirmRemove(message: string): Promise<boolean> {
 }
 
 export function WishlistScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const headerPad = stackTopPadding(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -155,7 +159,7 @@ export function WishlistScreen({ navigation }: Props) {
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -445,8 +449,6 @@ function AddWishlistModal({ visible, onCancel, onSave }: AddProps) {
   );
 }
 
-const HEADER_PAD = Platform.OS === 'ios' ? 96 : 80;
-
 function makeStyles({
   colors,
   surface,
@@ -457,7 +459,6 @@ function makeStyles({
   return StyleSheet.create({
     container: {
       paddingHorizontal: spacing.xl,
-      paddingTop: HEADER_PAD,
       paddingBottom: 120,
     },
     heading: {

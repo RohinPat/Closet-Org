@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -11,8 +10,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import * as api from '../api/client';
+import type { ClosetInsights } from '../api/types';
 import { GlassCard, ScreenBackground } from '../components/Glass';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { stackTopPadding } from '../utils/screenSpacing';
 import {
   radii,
   spacing,
@@ -51,11 +53,14 @@ function Tile({ value, label, icon, tint }: TileProps) {
 }
 
 export function StatsScreen() {
+  const insets = useSafeAreaInsets();
+  const headerPad = stackTopPadding(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [stats, setStats] = useState<Awaited<
     ReturnType<typeof api.fetchStats>
   > | null>(null);
+  const [insights, setInsights] = useState<ClosetInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +72,12 @@ export function StatsScreen() {
       setStats(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load stats');
+    }
+    try {
+      const insightData = await api.fetchClosetInsights();
+      setInsights(insightData);
+    } catch {
+      setInsights(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -113,7 +124,7 @@ export function StatsScreen() {
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -188,12 +199,143 @@ export function StatsScreen() {
             })
           )}
         </GlassCard>
+
+        <Text style={styles.sectionTitle}>Best cost-per-wear</Text>
+        <GlassCard padded style={styles.listCard}>
+          {!stats.best_cpw?.length ? (
+            <Text style={styles.muted}>
+              Log a price on items and wear them — your best CPW pieces show up
+              here.
+            </Text>
+          ) : (
+            stats.best_cpw.map((row, i) => (
+              <View
+                key={row.id}
+                style={[
+                  styles.gapRow,
+                  i === (stats.best_cpw?.length ?? 0) - 1 && styles.rowLast,
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.gapTitle}>
+                    {row.subcategory} · {row.category}
+                  </Text>
+                  <Text style={styles.gapDetail}>
+                    ${row.cost_per_wear?.toFixed(2) ?? '—'} per wear · worn{' '}
+                    {row.times_worn}×
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+        </GlassCard>
+
+        <Text style={styles.sectionTitle}>Spring-clean candidates</Text>
+        <GlassCard padded style={styles.listCard}>
+          {!insights?.retirement_candidates?.length ? (
+            <Text style={styles.muted}>
+              {insights
+                ? 'No obvious audit flags — your closet looks balanced.'
+                : 'Loading…'}
+            </Text>
+          ) : (
+            insights.retirement_candidates.map((r, i) => (
+              <View
+                key={r.item_id}
+                style={[
+                  styles.gapRow,
+                  i === insights.retirement_candidates!.length - 1 &&
+                    styles.rowLast,
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.gapTitle}>
+                    {r.subcategory} · #{r.item_id}
+                  </Text>
+                  <Text style={styles.gapDetail}>
+                    {r.reasons.join(' · ')}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+        </GlassCard>
+
+        <Text style={styles.sectionTitle}>Capsule gaps</Text>
+        <GlassCard padded style={styles.listCard}>
+          {!insights || insights.gaps.length === 0 ? (
+            <Text style={styles.muted}>
+              {insights
+                ? 'No major gaps detected — nice work.'
+                : 'Loading…'}
+            </Text>
+          ) : (
+            insights.gaps.map((g, i) => (
+              <View
+                key={g.id}
+                style={[styles.gapRow, i === insights!.gaps.length - 1 && styles.rowLast]}
+              >
+                <View
+                  style={[
+                    styles.gapDot,
+                    g.priority === 'high' && { backgroundColor: colors.danger },
+                    g.priority === 'medium' && {
+                      backgroundColor: 'rgba(255, 159, 10, 0.9)',
+                    },
+                    g.priority === 'low' && {
+                      backgroundColor: colors.textMuted,
+                    },
+                  ]}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.gapTitle}>{g.title}</Text>
+                  <Text style={styles.gapDetail}>{g.detail}</Text>
+                </View>
+              </View>
+            ))
+          )}
+        </GlassCard>
+
+        <Text style={styles.sectionTitle}>Wardrobe mix</Text>
+        <GlassCard padded style={styles.listCard}>
+          {!insights ? (
+            <Text style={styles.muted}>Loading…</Text>
+          ) : (
+            <>
+              <Text style={styles.mixCaption}>
+                Subcategories · {insights.composition.item_count} items
+              </Text>
+              {Object.entries(insights.composition.by_subcategory)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8)
+                .map(([name, count]) => (
+                  <Text key={name} style={styles.mixLine}>
+                    <Text style={styles.mixName}>{name}</Text>
+                    <Text style={styles.mixCount}> {count}</Text>
+                  </Text>
+                ))}
+              {Object.keys(insights.composition.color_buckets).length > 0 ? (
+                <>
+                  <Text style={[styles.mixCaption, { marginTop: spacing.md }]}>
+                    Top colors
+                  </Text>
+                  {Object.entries(insights.composition.color_buckets)
+                    .slice(0, 8)
+                    .map(([name, count]) => (
+                      <Text key={name} style={styles.mixLine}>
+                        <Text style={styles.mixName}>{name}</Text>
+                        <Text style={styles.mixCount}> {count}</Text>
+                      </Text>
+                    ))}
+                </>
+              ) : null}
+            </>
+          )}
+        </GlassCard>
       </ScrollView>
     </View>
   );
 }
-
-const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
 
 function makeStyles({ colors }: { colors: ThemeColors }) {
   return StyleSheet.create({
@@ -206,7 +348,6 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
     error: { color: colors.danger, padding: spacing.xl },
     container: {
       paddingHorizontal: spacing.xl,
-      paddingTop: HEADER_PAD,
       paddingBottom: 120,
     },
     heading: {
@@ -279,5 +420,43 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
       borderRadius: radii.pill,
     },
     muted: { color: colors.textMuted, fontSize: 15 },
+    gapRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      paddingVertical: spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.divider,
+    },
+    gapDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      marginTop: 6,
+      backgroundColor: colors.textMuted,
+    },
+    gapTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 4,
+    },
+    gapDetail: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      lineHeight: 20,
+    },
+    mixCaption: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      marginBottom: spacing.sm,
+    },
+    mixLine: {
+      fontSize: 14,
+      paddingVertical: 4,
+    },
+    mixName: { color: colors.text },
+    mixCount: { color: colors.accent, fontWeight: '600' },
   });
 }

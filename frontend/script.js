@@ -1012,6 +1012,7 @@ async function generateOutfits() {
     const params = new URLSearchParams();
     if (occasion) params.append('occasion', occasion);
     if (season) params.append('season', season);
+    params.append('seed', String(Date.now()));
     
     try {
         const response = await fetch(`${API_BASE}/outfits/recommend?${params}`, {

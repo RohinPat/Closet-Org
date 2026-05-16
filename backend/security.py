@@ -39,8 +39,14 @@ MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 
 _default_origins = "http://localhost:8000,http://127.0.0.1:8000"
 if not PRODUCTION:
-    # Expo's dev servers default to these ports.
-    _default_origins += ",http://localhost:8081,http://localhost:19006,http://localhost:19000"
+    # Expo / Metro dev ports (8084 etc.) + legacy Expo defaults.
+    _dev_ports = (8081, 8082, 8083, 8084, 8085, 8086, 19000, 19006)
+    _pairs = []
+    for _p in _dev_ports:
+        _pairs.extend(
+            [f"http://localhost:{_p}", f"http://127.0.0.1:{_p}"]
+        )
+    _default_origins += "," + ",".join(_pairs)
 ALLOWED_ORIGINS = [
     o.strip()
     for o in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")

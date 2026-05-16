@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,10 +11,23 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as api from '../api/client';
-import type { OutfitRecommendation } from '../api/types';
+import type {
+  ClosetLocation,
+  OutfitRecommendation,
+  WeatherContext,
+} from '../api/types';
 import { itemImageUrl } from '../config';
 import { GlassButton, GlassCard, ScreenBackground } from '../components/Glass';
+import {
+  getWeatherSyncEnabled,
+  requestCurrentCoordinates,
+  setWeatherSyncEnabled,
+  weatherDetail,
+  weatherHeadline,
+} from '../weather';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { tabTopPadding } from '../utils/screenSpacing';
 import {
   radii,
   spacing,
@@ -41,11 +53,25 @@ const SEASONS = [
   { label: 'Winter', value: 'Winter' },
 ];
 
+const VIBES = [
+  { label: 'Any vibe', value: '' },
+  { label: 'Clean prep', value: 'clean_prep' },
+  { label: 'Streetwear', value: 'streetwear' },
+  { label: 'Cozy', value: 'cozy' },
+];
+
 type ChipProps = {
   label: string;
   active: boolean;
   onPress: () => void;
 };
+
+type OutfitSource = 'home' | 'packed';
+
+const OUTFIT_SOURCES: { label: string; value: OutfitSource }[] = [
+  { label: 'Home closet', value: 'home' },
+  { label: 'Travel bag', value: 'packed' },
+];
 
 function Chip({ label, active, onPress }: ChipProps) {
   const { colors, surface } = useTheme();
@@ -86,11 +112,21 @@ function Chip({ label, active, onPress }: ChipProps) {
 }
 
 export function OutfitsScreen() {
+  const insets = useSafeAreaInsets();
+  const headerPad = tabTopPadding(insets);
   const { colors, surface } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [occasion, setOccasion] = useState('');
   const [season, setSeason] = useState('');
+  const [vibe, setVibe] = useState('');
+  const [outfitSource, setOutfitSource] = useState<OutfitSource>('home');
+  const [packCounts, setPackCounts] = useState({ packed: 0, home: 0 });
   const [outfits, setOutfits] = useState<OutfitRecommendation[]>([]);
+  const [closetLocations, setClosetLocations] = useState<ClosetLocation[]>([]);
+  const [activeClosetLocationId, setActiveClosetLocationId] = useState<number | null>(null);
+  const [weatherSync, setWeatherSync] = useState(false);
+  const [weather, setWeather] = useState<WeatherContext | null>(null);
+  const [weatherBusy, setWeatherBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,19 +135,76 @@ export function OutfitsScreen() {
     setError(null);
     setLoading(true);
     try {
+      const [closet, locs, settings] = await Promise.all([
+        api.fetchCloset(),
+        api.fetchClosetLocations(),
+        api.fetchSettings(),
+      ]);
+      setClosetLocations(locs.locations);
+      setActiveClosetLocationId((prev) =>
+        prev === null ? settings.default_closet_location_id ?? null : prev
+      );
+      const locationScoped =
+        activeClosetLocationId == null
+          ? closet.items
+          : closet.items.filter((item) => item.closet_location_id === activeClosetLocationId);
+      const packedIds = locationScoped
+        .filter((item) => item.packed_for_trip)
+        .map((item) => item.id);
+      const homeIds = locationScoped
+        .filter((item) => !item.packed_for_trip)
+        .map((item) => item.id);
+      setPackCounts({ packed: packedIds.length, home: homeIds.length });
+
+      if (outfitSource === 'packed' && packedIds.length === 0) {
+        setOutfits([]);
+        setError('Pack a few clean items first, then Travel bag can suggest outfits.');
+        return;
+      }
+
+      let weatherParams:
+        | { lat: number; lon: number; locationName: string }
+        | undefined;
+      if (weatherSync) {
+        setWeatherBusy(true);
+        try {
+          const coords = await requestCurrentCoordinates();
+          weatherParams = {
+            lat: coords.latitude,
+            lon: coords.longitude,
+            locationName: 'Current location',
+          };
+        } catch (e) {
+          setWeather(null);
+          setError(
+            e instanceof Error
+              ? e.message
+              : 'Could not access location for weather sync.'
+          );
+        }
+      }
+
       const data = await api.fetchOutfitRecommendations({
         occasion: occasion || undefined,
         season: season || undefined,
+        seed: Date.now(),
+        vibe: vibe || undefined,
+        includePacked: outfitSource === 'packed',
+        excludeItemIds: outfitSource === 'packed' ? homeIds : packedIds,
+        closetLocationId: activeClosetLocationId,
+        ...weatherParams,
       });
       setOutfits(data.outfits);
+      setWeather(data.weather ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load outfits');
       setOutfits([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setWeatherBusy(false);
     }
-  }, [occasion, season]);
+  }, [activeClosetLocationId, occasion, outfitSource, season, vibe, weatherSync]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -122,18 +215,29 @@ export function OutfitsScreen() {
     generate();
   }, [generate]);
 
+  useEffect(() => {
+    getWeatherSyncEnabled().then(setWeatherSync);
+  }, []);
+
+  async function toggleWeatherSync() {
+    const next = !weatherSync;
+    setWeatherSync(next);
+    await setWeatherSyncEnabled(next);
+    if (!next) setWeather(null);
+  }
+
   return (
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={colors.accent}
-            progressViewOffset={HEADER_PAD}
+            progressViewOffset={headerPad}
           />
         }
       >
@@ -141,6 +245,62 @@ export function OutfitsScreen() {
         <Text style={styles.blurb}>
           Curated combinations from your closet.
         </Text>
+
+        <GlassCard padded style={styles.weatherCard}>
+          <View style={styles.weatherHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.weatherTitle}>
+                {weatherHeadline(weather)}
+              </Text>
+              <Text style={styles.weatherSub}>
+                {weatherBusy ? 'Syncing forecast...' : weatherDetail(weather)}
+              </Text>
+            </View>
+            <GlassButton
+              title={weatherSync ? 'Weather on' : 'Use weather'}
+              variant={weatherSync ? 'secondary' : 'primary'}
+              onPress={toggleWeatherSync}
+              fullWidth={false}
+            />
+          </View>
+        </GlassCard>
+
+        <Text style={styles.sectionLabel}>Suggestion mode</Text>
+        <View style={styles.chips}>
+          {OUTFIT_SOURCES.map((source) => (
+            <Chip
+              key={source.value}
+              label={
+                source.value === 'packed'
+                  ? `${source.label} (${packCounts.packed})`
+                  : `${source.label} (${packCounts.home})`
+              }
+              active={outfitSource === source.value}
+              onPress={() => setOutfitSource(source.value)}
+            />
+          ))}
+        </View>
+
+        {closetLocations.length > 0 ? (
+          <>
+            <Text style={styles.sectionLabel}>Closet location</Text>
+            <View style={styles.chips}>
+              <Chip
+                label="All closets"
+                active={activeClosetLocationId === null}
+                onPress={() => setActiveClosetLocationId(null)}
+              />
+              {closetLocations.map((loc) => (
+                <Chip
+                  key={loc.id}
+                  label={loc.name}
+                  active={activeClosetLocationId === loc.id}
+                  onPress={() => setActiveClosetLocationId(loc.id)}
+                />
+              ))}
+            </View>
+          </>
+        ) : null}
 
         <Text style={styles.sectionLabel}>Occasion</Text>
         <View style={styles.chips}>
@@ -162,6 +322,18 @@ export function OutfitsScreen() {
               label={s.label}
               active={season === s.value}
               onPress={() => setSeason(s.value)}
+            />
+          ))}
+        </View>
+
+        <Text style={styles.sectionLabel}>Vibe</Text>
+        <View style={styles.chips}>
+          {VIBES.map((v) => (
+            <Chip
+              key={v.value || 'any-v'}
+              label={v.label}
+              active={vibe === v.value}
+              onPress={() => setVibe(v.value)}
             />
           ))}
         </View>
@@ -238,8 +410,6 @@ export function OutfitsScreen() {
   );
 }
 
-const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
-
 const chipStyles = StyleSheet.create({
   chip: {
     paddingHorizontal: 16,
@@ -265,7 +435,6 @@ function makeStyles({
   return StyleSheet.create({
     container: {
       paddingHorizontal: spacing.xl,
-      paddingTop: HEADER_PAD,
       paddingBottom: 120,
     },
     heading: {
@@ -277,6 +446,23 @@ function makeStyles({
       ...typography.callout,
       color: colors.textSecondary,
       marginBottom: spacing.xl,
+    },
+    weatherCard: {
+      marginBottom: spacing.lg,
+    },
+    weatherHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+    },
+    weatherTitle: {
+      ...typography.bodyMedium,
+      color: colors.text,
+    },
+    weatherSub: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      marginTop: 3,
     },
     sectionLabel: {
       ...typography.micro,

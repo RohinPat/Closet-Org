@@ -7,28 +7,32 @@ Realistic, solo-dev-sized work that fits the current stack (FastAPI + SQLite + E
 - **Care label OCR** — point the camera at the tag, scrape wash temperature / dry / iron icons and store them. Show "machine wash cold" on the detail screen. (Bigger piece — see "Plausible but bigger".)
 - **Batch / shelf import** — point the camera at a hung rack or shelf, app detects each garment and creates draft entries. User reviews and saves. Big speedup for the initial closet build.
 - **CSV / spreadsheet import** — for users who already track clothes elsewhere.
+- **Multiple photos per item** — **Shipped:** upload front + back + extras; first photo drives classification, colors merge across all photos, and thumbnail arrays are stored for item detail.
 
 ### Bulk items (socks, underwear, basics)
 Not every garment needs its own photo + record. Plain socks, underwear, undershirts, and basic tees are interchangeable for outfit purposes and just clutter the closet view. Add a "bulk" mode.
 
-- **Schema** — `clothing_items.is_bulk` bool + `quantity` int + `clean_count` int. Photo optional. Bulk items still belong to a category.
-- **Upload flow** — toggle "individual / bulk" on the upload screen. Bulk path skips classification, just prompts: name (e.g. "white crew socks"), category, total quantity. No image required (one optional reference photo).
-- **Smart defaults** — Socks and Underwear default to bulk; everything else defaults to individual. User can override.
-- **Closet view** — bulk items render as a single card with a quantity badge ("12 pairs, 4 clean") instead of one card per pair.
-- **Laundry integration** — bulk items don't go to the laundry queue as one record; instead "wash 3 socks" decrements `clean_count`. The wear-again counter doesn't apply to bulk items by default.
-- **Outfit recommender** — treats bulk items generically ("any clean white sock") rather than picking a specific record.
-- **Promote to individual** — option to convert a bulk item into individual records later (e.g. once you have a fancy pair worth tracking).
+- **Schema** — **Shipped:** `clothing_items.is_bulk` bool + `quantity` int + `clean_count` int. Photo optional. Bulk items still belong to a category.
+- **Upload flow** — **Shipped:** Add tab has Individual / Bulk modes. Bulk path skips classification, prompts for name, subcategory, quantity, optional reference photo.
+- **Smart defaults** — **Partial:** socks and underwear quick presets exist. True "default to bulk after category selection/classification" is still TODO.
+- **Closet view** — **Shipped:** bulk items render as one item with quantity / clean counts instead of one record per pair.
+- **Laundry integration** — **Shipped (v0):** wearing one decrements `clean_count`; washing can reset all clean; wear-again meter is bypassed for bulk.
+- **Outfit recommender** — **Shipped:** bulk items are eligible only while `clean_count > 0`.
+- **Promote to individual** — **Shipped:** convert N units from a bulk row into individual records later (e.g. once you have a fancy pair worth tracking).
 
 ## Wishlist & shopping (single-user, no scraping)
 
-- **Duplicate warning at upload** — when adding an item, check against existing closet by category + dominant color and warn "you already have 4 black tees" before saving.
-- **Closet-fit pre-check** — upload a candidate photo; the recommender tells you which existing items it would pair with. Decide if it fills a real gap.
-- **Capsule gap analysis** — "your closet is missing a neutral blazer / waterproof outer / dressy black shoe". Drives intentional buying instead of accumulation.
+- **Duplicate warning at upload** — **Shipped (baseline):** warn when **category + first classified color** already appears in the closet; embedding-distance dupes remain in [Insights](#insights).
+- **Photo-less wishlist** — **Shipped:** `status='wishlist'` rows with name, intent, URL, price, edit/delete, and promote-to-owned flow from the mobile Wishlist screen.
+- **Save with photo** — TODO: reuse `/api/upload-clothing` then patch `status='wishlist'`, so a retailer screenshot/product image can become a wishlist card.
+- **Closet-fit pre-check** — **Shipped:** `POST /api/closet/fit-check` + Upload tab "Preview pairings" (first photo, not saved). Richer gap-to-buy flow still TODO.
+- **Capsule gap analysis** — **Shipped (rule-based):** `GET /api/closet/insights` + Stats tab; next: link gaps to wishlist targets and buying intents.
 
 ## Travel & packing
 
-- **Pack list builder** — input destination, dates, planned activities; app builds a capsule from your closet that covers the trip (e.g. 5 outfits over 7 days with overlap).
-- **Travel mode** — lock packed items out of normal outfit suggestions; they're "physically not here" until you toggle off.
+- **Pack Mode** — **Shipped (v0):** Profile → Pack Mode lets you bulk mark packed/unpacked, see category counts, and select suggested fits into the travel bag.
+- **Pack list builder** — **Partial:** the app can suggest fits from the current closet and use them as packed selections; still needs destination, dates, planned activities, and coverage logic (e.g. 5 outfits over 7 days with overlap).
+- **Travel mode** — **Shipped (v1):** per-item and bulk `packed_for_trip` flags hide items from regular outfit suggestions. Still to build: trip entity, checklist UI, auto re-enable.
 - **Capsule generator** — given N items as a target, pick the subset that produces the most outfit combinations. Underlies the pack list builder.
 - **Weather sync** — pull forecast for the destination instead of home; bias the pack list accordingly.
 - **Packing checklist** — tap-off-as-packed UI with progress bar; the laundry boss-fight gamification applies here too.
@@ -51,9 +55,9 @@ Chat-style natural-language layer over the rule-based recommender. Bounded cost 
 
 ## Search within your closet
 
-- **Free-text search** — across name, brand, color, notes, category. Lives in the closet's sticky filter bar.
-- **Visual search** — upload a reference photo (an inspo pic or another garment); use CLIP embeddings to return your closest closet items. Requires storing one embedding per item at upload time — CLIP is already loaded in [clothing_classifier.py](backend/models/clothing_classifier.py).
-- **"Outfits containing X"** — pivot from one item card to every outfit (past and recommended) it's part of.
+- **Free-text search** — **Shipped:** optional `q` on `GET /api/closet`; Expo closet still does client-side search for instant filtering.
+- **Visual search** — **Shipped (baseline):** `POST /api/closet/visual-search` embeds a reference photo and returns nearest closet items using per-item CLIP embeddings stored at upload time. Next: show "why this matched" hints and batch backfill embeddings for old rows.
+- **"Outfits containing X"** — **Shipped (generated):** `GET /api/item/{id}/outfits` + item detail modal; past worn-outfit history still TODO.
 - **Color search** — tap a color swatch on the filter bar to show everything in that bucket.
 
 ## Accessibility
@@ -80,13 +84,15 @@ The schema has `wear_again_count` and `max_wear_before_wash` already — most of
 - **Laundry queue** — explicit states: `clean → worn → in_hamper → washing → drying → clean`. Tap "wore today" advances the state.
 - **Outfit of the day** — optional one-tap selfie or just a list of items worn today; feeds the wear history.
 - **Wear history per item** — a small calendar/heatmap on the detail screen.
+- **Storage location** — **Shipped:** user-facing `storage_location` is separate from laundry `physical_location`, so "front rack, left" survives wash cycles.
+- **Lending tracker** — **Shipped (v0):** item detail can lend/return items with `lent_to` + optional due date; closet has a Lent filter and recommender excludes lent pieces. Push reminders still TODO.
 
 ## Recommendations
 
 - **Weather-aware outfits** — pull current/forecast weather from the device and bias the outfit recommender toward season-appropriate items.
 - **Calendar-aware** — read calendar events (work meeting vs gym vs date) and prefer matching styles.
-- **Vibe profiles** — preset moods/personas ("clean prep", "streetwear", "cozy") instead of just occasion/season.
-- **Outfit history** — don't recommend an outfit identical to one worn in the last N days.
+- **Vibe profiles** — **Shipped (v0):** `vibe=clean_prep|streetwear|cozy` on `/api/outfits/recommend`; Outfits tab chips. More personas later.
+- **Outfit history** — **Partial:** API avoids repeating the same item-bundle suggestions for ~14 days via `outfit_suggestion_history`. Skipping combos **actually worn** (wear/feed) still TODO.
 - **Inspo → outfit** — paste a Pinterest URL or upload a runway/inspo pic; the recommender finds the closest items in your closet and proposes the best approximation.
 
 ## Gamification
@@ -130,7 +136,7 @@ Make every chore feel rewarding: uploading, tagging, doing laundry, even cleanin
 
 ### Cost-per-wear (CPW)
 - **Item "level up"** — items have tiers as CPW drops: 💸 fresh ($50+/wear) → 👌 worn-in ($10) → ⭐ great-value ($5) → 🏆 free ($1) → 💎 priceless ($0.10). Tier badge shown on the item card. (CPW is already computed on the detail screen.)
-- **Best-of leaderboard** — top 5 best CPW items, surfaced on the Stats tab.
+- **Best-of leaderboard** — **Shipped:** `best_cpw` on `GET /api/stats` + Stats tab.
 
 ### Closet cleanout
 - **Spring clean event** — quarterly prompt. Marie-Kondo-style swipe-through of neglected items (left = donate, right = keep). Points per decision.
@@ -160,8 +166,8 @@ Make every chore feel rewarding: uploading, tagging, doing laundry, even cleanin
 ## Insights
 
 - **Duplicate detector** — embedding-distance similarity warns when you upload yet another black tee.
-- **Retirement suggestions** — items with high wear count + neglected + low CPW = candidates for donate/sell. Surface in a "spring clean" view.
-- **Wardrobe composition** — % tops/bottoms/etc., season balance, color distribution.
+- **Retirement suggestions** — **Shipped (heuristic):** `retirement_candidates` in `/api/closet/insights` + Stats “Spring-clean candidates”; richer condition/CPW rules later.
+- **Wardrobe composition** — **Shipped:** breakdown in `/api/closet/insights`; full charts/season balance UI polish later.
 
 ## Classification quality
 
@@ -202,5 +208,5 @@ These are doable but cost weeks each — model pipelines or whole new surfaces. 
 - **Voice add** — "add black H&M jeans size 32" via Whisper + a slot-filler that maps to fields. Faster than typing on mobile.
 - **Daily fit pic with auto-detect** — one tap to take a body photo; segment garment regions (Grounding DINO + SAM or a fashion-segmentation model), embed each with CLIP, nearest-neighbor against the user's closet embeddings, advance `wear_again_count` for matched items. Show matches for user confirmation before saving — corrections become labeled data. The capture half is easy; the auto-detect pipeline is the real work.
 - **Browser extension wishlist drafter** — small MV3 extension; one click on a retailer product page drafts a wishlist item with image + price. Separate codebase but small.
-- **Friends & feed (single-instance social)** — _v1 in progress (2026-05-14)._ Friendships (request/accept/reject), avatar + bio profiles, fit-pic posts with item tags, chronological feed, emoji reactions, threaded comments. Schema: `friendships`, `fit_posts`, `post_reactions`, `post_comments`. Still TODO: outfit-repeat detector ("you wore this exact combo to Sarah's last Friday"), push notifications, moderation primitives (report, block, rate-limited comments), full pagination cursor instead of `before` timestamp.
+- **Friends & feed (single-instance social)** — **Shipped (v1 baseline):** friends (request/accept/reject/remove), public profiles, avatar + bio, fit-pic posts with item tags, chronological feed, emoji reactions, comments. Schema: `friendships`, `fit_posts`, `post_reactions`, `post_comments`. Still TODO: outfit-repeat detector ("you wore this exact combo to Sarah's last Friday"), push notifications, moderation primitives (report, block, rate-limited comments), full pagination cursor instead of `before` timestamp.
 - **Year-in-review / "On this day"** — December montage of the year's fit pics, top items by wear count, "most worn outfit"; quiet replay of a fit pic from one year ago. Easy once the fit-pic stream exists.

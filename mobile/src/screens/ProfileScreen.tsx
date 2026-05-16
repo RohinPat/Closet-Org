@@ -28,6 +28,15 @@ import {
 } from '../components/Glass';
 import { Avatar } from '../components/Avatar';
 import type { AppStackParamList } from '../navigation/RootNavigator';
+import { imagePickerAssetToUpload } from '../utils/imageUpload';
+import {
+  getLocationPermissionLabel,
+  getWeatherSyncEnabled,
+  requestCurrentCoordinates,
+  setWeatherSyncEnabled,
+} from '../weather';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { tabTopPadding } from '../utils/screenSpacing';
 import {
   radii,
   shadow,
@@ -52,15 +61,10 @@ const THEME_OPTIONS: ThemeOption[] = [
   { value: 'dark', label: 'Dark', icon: 'moon-outline' },
 ];
 
-function inferMime(uri: string): string {
-  const lower = uri.toLowerCase();
-  if (lower.endsWith('.png')) return 'image/png';
-  if (lower.endsWith('.webp')) return 'image/webp';
-  return 'image/jpeg';
-}
-
 export function ProfileScreen() {
   const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
+  const headerPad = tabTopPadding(insets);
   const { user, signOut, refreshUser } = useAuth();
   const { colors, surface, pref, mode, setPref } = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -74,6 +78,8 @@ export function ProfileScreen() {
   const [draftBio, setDraftBio] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [weatherSync, setWeatherSync] = useState(false);
+  const [weatherPermission, setWeatherPermission] = useState('Unknown');
 
   const loadProfileAndPosts = useCallback(async () => {
     if (!user) return;
@@ -95,8 +101,29 @@ export function ProfileScreen() {
     useCallback(() => {
       setLoadingPosts(true);
       loadProfileAndPosts();
+      getWeatherSyncEnabled().then(setWeatherSync);
+      getLocationPermissionLabel().then(setWeatherPermission);
     }, [loadProfileAndPosts])
   );
+
+  async function toggleWeatherSync() {
+    const next = !weatherSync;
+    if (next) {
+      try {
+        await requestCurrentCoordinates();
+      } catch (e) {
+        Alert.alert(
+          'Location not enabled',
+          e instanceof Error ? e.message : 'Could not access your location.'
+        );
+        setWeatherPermission(await getLocationPermissionLabel());
+        return;
+      }
+    }
+    setWeatherSync(next);
+    await setWeatherSyncEnabled(next);
+    setWeatherPermission(await getLocationPermissionLabel());
+  }
 
   function beginEdit() {
     setDraftName(user?.full_name ?? '');
@@ -131,19 +158,16 @@ export function ProfileScreen() {
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.85,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       allowsEditing: true,
       aspect: [1, 1],
     });
     if (picked.canceled || !picked.assets?.[0]) return;
-    const asset = picked.assets[0];
-    const mime = asset.mimeType || inferMime(asset.uri);
     setUploadingAvatar(true);
     try {
-      await api.uploadAvatar({
-        uri: asset.uri,
-        filename: asset.fileName || `avatar.${mime.includes('png') ? 'png' : 'jpg'}`,
-        mimeType: mime,
-      });
+      const photo = await imagePickerAssetToUpload(picked.assets[0], 'avatar');
+      await api.uploadAvatar(photo);
       await refreshUser();
       await loadProfileAndPosts();
     } catch (e) {
@@ -157,27 +181,30 @@ export function ProfileScreen() {
   }
 
   if (!user) return null;
+  const socialEnabled = user.social_enabled !== false;
 
   return (
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.headerRow}>
           <Text style={styles.heading}>Profile</Text>
-          <Pressable
-            onPress={() => navigation.navigate('Friends')}
-            style={({ pressed }) => [
-              styles.headerBtn,
-              { opacity: pressed ? 0.7 : 1 },
-            ]}
-            accessibilityLabel="Friends"
-          >
-            <Ionicons name="people-outline" size={20} color={colors.text} />
-          </Pressable>
+          {socialEnabled ? (
+            <Pressable
+              onPress={() => navigation.navigate('Friends')}
+              style={({ pressed }) => [
+                styles.headerBtn,
+                { opacity: pressed ? 0.7 : 1 },
+              ]}
+              accessibilityLabel="Friends"
+            >
+              <Ionicons name="people-outline" size={20} color={colors.text} />
+            </Pressable>
+          ) : null}
         </View>
 
         <GlassCard padded style={styles.card}>
@@ -266,12 +293,14 @@ export function ProfileScreen() {
                 label="Fits"
                 styles={styles}
               />
-              <Stat
-                value={profile?.friend_count ?? 0}
-                label="Friends"
-                styles={styles}
-                onPress={() => navigation.navigate('Friends')}
-              />
+              {socialEnabled ? (
+                <Stat
+                  value={profile?.friend_count ?? 0}
+                  label="Friends"
+                  styles={styles}
+                  onPress={() => navigation.navigate('Friends')}
+                />
+              ) : null}
               <Stat
                 value={profile?.item_count ?? 0}
                 label="Items"
@@ -288,51 +317,108 @@ export function ProfileScreen() {
                 variant="ghost"
                 style={{ flex: 1 }}
               />
-              <GlassButton
-                title="Post fit"
-                onPress={() => navigation.navigate('CreateFit')}
-                style={{ flex: 1 }}
-              />
+              {socialEnabled ? (
+                <GlassButton
+                  title="Post fit"
+                  onPress={() => navigation.navigate('CreateFit')}
+                  style={{ flex: 1 }}
+                />
+              ) : null}
             </View>
           ) : null}
         </GlassCard>
 
-        <Text style={styles.sectionLabel}>Your fits</Text>
-        {loadingPosts ? (
-          <View style={{ paddingVertical: spacing.lg }}>
-            <ActivityIndicator color={colors.accent} />
-          </View>
-        ) : posts.length === 0 ? (
-          <Text style={styles.emptyHint}>
-            You haven't posted yet. Tap Post fit to share today's look.
-          </Text>
-        ) : (
-          <View style={styles.grid}>
-            {posts.map((p) => {
-              const uri = absoluteUrl(p.image_path);
-              return (
-                <Pressable
-                  key={p.id}
-                  onPress={() =>
-                    navigation.navigate('FitDetail', { postId: p.id })
-                  }
-                  style={({ pressed }) => [
-                    styles.gridItem,
-                    { transform: [{ scale: pressed ? 0.97 : 1 }] },
-                  ]}
-                >
-                  {uri ? (
-                    <Image source={{ uri }} style={styles.gridImage} />
-                  ) : (
-                    <View style={[styles.gridImage, styles.gridPlaceholder]} />
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
+        {socialEnabled ? (
+          <>
+            <Text style={styles.sectionLabel}>Your fits</Text>
+            {loadingPosts ? (
+              <View style={{ paddingVertical: spacing.lg }}>
+                <ActivityIndicator color={colors.accent} />
+              </View>
+            ) : posts.length === 0 ? (
+              <Text style={styles.emptyHint}>
+                You haven't posted yet. Tap Post fit to share today's look.
+              </Text>
+            ) : (
+              <View style={styles.grid}>
+                {posts.map((p) => {
+                  const uri = absoluteUrl(p.image_path);
+                  return (
+                    <Pressable
+                      key={p.id}
+                      onPress={() =>
+                        navigation.navigate('FitDetail', { postId: p.id })
+                      }
+                      style={({ pressed }) => [
+                        styles.gridItem,
+                        { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                      ]}
+                    >
+                      {uri ? (
+                        <Image source={{ uri }} style={styles.gridImage} />
+                      ) : (
+                        <View style={[styles.gridImage, styles.gridPlaceholder]} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        ) : null}
 
         <Text style={styles.sectionLabel}>Closet</Text>
+        <Pressable
+          onPress={() => navigation.navigate('PersonalSettings')}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
+          <GlassCard padded style={styles.card}>
+            <View style={styles.rowHeader}>
+              <Ionicons
+                name="settings-outline"
+                size={18}
+                color={colors.accent}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.rowTitle}>Personal settings</Text>
+              <View style={{ flex: 1 }} />
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textMuted}
+              />
+            </View>
+            <Text style={styles.hint}>
+              Account, layout, weather, social mode, and closet locations.
+            </Text>
+          </GlassCard>
+        </Pressable>
+        <Pressable
+          onPress={() => navigation.navigate('PackMode')}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
+          <GlassCard padded style={styles.card}>
+            <View style={styles.rowHeader}>
+              <Ionicons
+                name="airplane-outline"
+                size={18}
+                color={colors.accent}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.rowTitle}>Pack Mode</Text>
+              <View style={{ flex: 1 }} />
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.textMuted}
+              />
+            </View>
+            <Text style={styles.hint}>
+              Build a travel bag, bulk pack or unpack items, and use it for trip
+              outfit ideas.
+            </Text>
+          </GlassCard>
+        </Pressable>
         <Pressable
           onPress={() => navigation.navigate('Wishlist')}
           style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
@@ -384,6 +470,30 @@ export function ProfileScreen() {
             </Text>
           </GlassCard>
         </Pressable>
+
+        <Text style={styles.sectionLabel}>Weather</Text>
+        <GlassCard padded style={styles.card}>
+          <View style={styles.rowHeader}>
+            <Ionicons
+              name="partly-sunny-outline"
+              size={18}
+              color={colors.accent}
+              style={{ marginRight: 8 }}
+            />
+            <Text style={styles.rowTitle}>Weather sync</Text>
+          </View>
+          <Text style={styles.hint}>
+            {weatherSync
+              ? `On - location ${weatherPermission.toLowerCase()}`
+              : `Off - location ${weatherPermission.toLowerCase()}`}
+          </Text>
+          <GlassButton
+            title={weatherSync ? 'Turn off weather sync' : 'Turn on weather sync'}
+            variant={weatherSync ? 'secondary' : 'primary'}
+            onPress={toggleWeatherSync}
+            style={{ marginTop: spacing.md }}
+          />
+        </GlassCard>
 
         <Text style={styles.sectionLabel}>Appearance</Text>
         <GlassCard padded style={styles.card}>
@@ -502,8 +612,6 @@ function Stat({
   return <View style={{ flex: 1 }}>{inner}</View>;
 }
 
-const HEADER_PAD = Platform.OS === 'ios' ? 64 : 32;
-
 function makeStyles({
   colors,
   surface,
@@ -514,7 +622,6 @@ function makeStyles({
   return StyleSheet.create({
     container: {
       paddingHorizontal: spacing.xl,
-      paddingTop: HEADER_PAD,
       paddingBottom: 120,
     },
     headerRow: {

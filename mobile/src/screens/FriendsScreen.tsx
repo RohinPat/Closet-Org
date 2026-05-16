@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -26,6 +25,8 @@ import {
 } from '../components/Glass';
 import { Avatar } from '../components/Avatar';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { stackTopPadding } from '../utils/screenSpacing';
 import {
   radii,
   spacing,
@@ -40,6 +41,8 @@ type TabKey = 'friends' | 'requests' | 'search';
 
 export function FriendsScreen() {
   const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
+  const headerPad = stackTopPadding(insets);
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -169,7 +172,7 @@ export function FriendsScreen() {
     <View style={{ flex: 1 }}>
       <ScreenBackground />
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingTop: headerPad }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -434,8 +437,6 @@ function UserRow({ user, styles, onPress, trailing }: UserRowProps) {
   );
 }
 
-const HEADER_PAD = Platform.OS === 'ios' ? 96 : 60;
-
 function makeStyles({
   colors,
   surface,
@@ -445,7 +446,6 @@ function makeStyles({
 }) {
   return StyleSheet.create({
     container: {
-      paddingTop: HEADER_PAD,
       paddingHorizontal: spacing.lg,
       paddingBottom: 100,
     },

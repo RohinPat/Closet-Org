@@ -1,6 +1,6 @@
 import sqlite3
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import json
 from pathlib import Path
 
@@ -111,10 +111,15 @@ class DatabaseManager:
                 lent_until DATE,
                 rotation_category TEXT DEFAULT 'new',
                 notes TEXT,
+                user_tags TEXT DEFAULT '[]',
                 status TEXT DEFAULT 'owned',
                 wishlist_intent TEXT,
                 wishlist_url TEXT,
                 wishlist_name TEXT,
+                is_bulk INTEGER NOT NULL DEFAULT 0,
+                quantity INTEGER NOT NULL DEFAULT 1,
+                clean_count INTEGER NOT NULL DEFAULT 1,
+                clip_embedding TEXT,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
@@ -163,6 +168,22 @@ class DatabaseManager:
         if "lockout_until" not in existing_user_cols:
             cursor.execute(
                 "ALTER TABLE users ADD COLUMN lockout_until TIMESTAMP"
+            )
+        if "social_enabled" not in existing_user_cols:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN social_enabled INTEGER NOT NULL DEFAULT 1"
+            )
+        if "app_mode" not in existing_user_cols:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN app_mode TEXT NOT NULL DEFAULT 'normal'"
+            )
+        if "default_tab" not in existing_user_cols:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN default_tab TEXT NOT NULL DEFAULT 'closet'"
+            )
+        if "default_closet_location_id" not in existing_user_cols:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN default_closet_location_id INTEGER"
             )
 
         cursor.execute("PRAGMA table_info(clothing_items)")
@@ -214,6 +235,49 @@ class DatabaseManager:
             cursor.execute(
                 "ALTER TABLE clothing_items ADD COLUMN wishlist_name TEXT"
             )
+        if "user_tags" not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE clothing_items ADD COLUMN user_tags TEXT DEFAULT '[]'"
+            )
+        if "packed_for_trip" not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE clothing_items ADD COLUMN packed_for_trip INTEGER NOT NULL DEFAULT 0"
+            )
+        if "is_bulk" not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE clothing_items ADD COLUMN is_bulk INTEGER NOT NULL DEFAULT 0"
+            )
+        if "quantity" not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE clothing_items ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1"
+            )
+        if "clean_count" not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE clothing_items ADD COLUMN clean_count INTEGER NOT NULL DEFAULT 1"
+            )
+        if "clip_embedding" not in existing_cols:
+            cursor.execute("ALTER TABLE clothing_items ADD COLUMN clip_embedding TEXT")
+        if "closet_location_id" not in existing_cols:
+            cursor.execute(
+                "ALTER TABLE clothing_items ADD COLUMN closet_location_id INTEGER"
+            )
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS closet_locations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                kind TEXT DEFAULT 'home',
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_closet_locations_user "
+            "ON closet_locations(user_id, is_default)"
+        )
 
         # Social: friendships, fit posts, reactions, comments.
         cursor.execute('''
@@ -287,6 +351,22 @@ class DatabaseManager:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_post_comments_post "
             "ON post_comments(post_id, created_at)"
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS outfit_suggestion_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                item_signature TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_osh_user_time "
+            "ON outfit_suggestion_history(user_id, created_at DESC)"
         )
 
         conn.commit()
@@ -388,7 +468,8 @@ class DatabaseManager:
     
     def update_user_profile(self, user_id: int, full_name: Optional[str] = None,
                            bio: Optional[str] = None, avatar_url: Optional[str] = None,
-                           theme_preference: Optional[str] = None) -> bool:
+                           theme_preference: Optional[str] = None,
+                           email: Optional[str] = None) -> bool:
         """Update user profile information"""
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -408,6 +489,9 @@ class DatabaseManager:
         if theme_preference is not None:
             updates.append("theme_preference = ?")
             params.append(theme_preference)
+        if email is not None:
+            updates.append("email = ?")
+            params.append(email)
         
         if not updates:
             conn.close()
@@ -422,6 +506,249 @@ class DatabaseManager:
         conn.commit()
         conn.close()
         
+        return success
+
+    def get_user_settings(self, user_id: int) -> Optional[Dict]:
+        self.ensure_default_closet_location(user_id)
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        return {
+            "social_enabled": bool(user.get("social_enabled", 1)),
+            "app_mode": user.get("app_mode") or "normal",
+            "default_tab": user.get("default_tab") or "closet",
+            "default_closet_location_id": user.get("default_closet_location_id"),
+            "theme_preference": user.get("theme_preference") or "system",
+        }
+
+    def update_user_settings(
+        self,
+        user_id: int,
+        *,
+        social_enabled: Optional[bool] = None,
+        app_mode: Optional[str] = None,
+        default_tab: Optional[str] = None,
+        default_closet_location_id: Optional[int] = None,
+        theme_preference: Optional[str] = None,
+    ) -> bool:
+        updates = []
+        params = []
+        if social_enabled is not None:
+            updates.append("social_enabled = ?")
+            params.append(1 if social_enabled else 0)
+            updates.append("app_mode = ?")
+            params.append("normal" if social_enabled else "closet_only")
+        if app_mode is not None:
+            updates.append("app_mode = ?")
+            params.append(app_mode)
+        if default_tab is not None:
+            updates.append("default_tab = ?")
+            params.append(default_tab)
+        if theme_preference is not None:
+            updates.append("theme_preference = ?")
+            params.append(theme_preference)
+        if default_closet_location_id is not None:
+            loc = self.get_closet_location(default_closet_location_id, user_id)
+            if not loc:
+                return False
+            self.set_default_closet_location(user_id, default_closet_location_id)
+            updates.append("default_closet_location_id = ?")
+            params.append(default_closet_location_id)
+        if not updates:
+            return True
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
+            [*params, user_id],
+        )
+        success = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        return success
+
+    def ensure_default_closet_location(self, user_id: int) -> Dict:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM closet_locations
+            WHERE user_id = ?
+            ORDER BY is_default DESC, id ASC
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        if row:
+            loc = dict(row)
+            if not loc.get("is_default"):
+                cursor.execute(
+                    "UPDATE closet_locations SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END WHERE user_id = ?",
+                    (loc["id"], user_id),
+                )
+            cursor.execute(
+                "UPDATE users SET default_closet_location_id = ? WHERE id = ?",
+                (loc["id"], user_id),
+            )
+            conn.commit()
+            conn.close()
+            loc["is_default"] = True
+            return loc
+        cursor.execute(
+            """
+            INSERT INTO closet_locations (user_id, name, kind, is_default)
+            VALUES (?, 'Home', 'home', 1)
+            """,
+            (user_id,),
+        )
+        loc_id = cursor.lastrowid
+        cursor.execute(
+            "UPDATE users SET default_closet_location_id = ? WHERE id = ?",
+            (loc_id, user_id),
+        )
+        conn.commit()
+        cursor.execute("SELECT * FROM closet_locations WHERE id = ?", (loc_id,))
+        loc = dict(cursor.fetchone())
+        conn.close()
+        loc["is_default"] = True
+        return loc
+
+    def list_closet_locations(self, user_id: int) -> List[Dict]:
+        self.ensure_default_closet_location(user_id)
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM closet_locations
+            WHERE user_id = ?
+            ORDER BY is_default DESC, name COLLATE NOCASE
+            """,
+            (user_id,),
+        )
+        rows = []
+        for row in cursor.fetchall():
+            loc = dict(row)
+            loc["is_default"] = bool(loc.get("is_default", 0))
+            rows.append(loc)
+        conn.close()
+        return rows
+
+    def get_closet_location(self, location_id: int, user_id: int) -> Optional[Dict]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM closet_locations WHERE id = ? AND user_id = ?",
+            (location_id, user_id),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return None
+        loc = dict(row)
+        loc["is_default"] = bool(loc.get("is_default", 0))
+        return loc
+
+    def set_default_closet_location(self, user_id: int, location_id: int) -> bool:
+        if not self.get_closet_location(location_id, user_id):
+            return False
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE closet_locations SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+            (location_id, user_id),
+        )
+        cursor.execute(
+            "UPDATE users SET default_closet_location_id = ? WHERE id = ?",
+            (location_id, user_id),
+        )
+        conn.commit()
+        conn.close()
+        return True
+
+    def create_closet_location(
+        self, user_id: int, name: str, kind: str = "home", is_default: bool = False
+    ) -> int:
+        clean_name = name.strip()
+        if not clean_name:
+            raise ValueError("name required")
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        if is_default:
+            cursor.execute("UPDATE closet_locations SET is_default = 0 WHERE user_id = ?", (user_id,))
+        cursor.execute(
+            """
+            INSERT INTO closet_locations (user_id, name, kind, is_default)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, clean_name, kind.strip() or "home", 1 if is_default else 0),
+        )
+        loc_id = cursor.lastrowid
+        if is_default:
+            cursor.execute(
+                "UPDATE users SET default_closet_location_id = ? WHERE id = ?",
+                (loc_id, user_id),
+            )
+        conn.commit()
+        conn.close()
+        self.ensure_default_closet_location(user_id)
+        return loc_id
+
+    def update_closet_location(
+        self,
+        user_id: int,
+        location_id: int,
+        *,
+        name: Optional[str] = None,
+        kind: Optional[str] = None,
+        is_default: Optional[bool] = None,
+    ) -> bool:
+        if not self.get_closet_location(location_id, user_id):
+            return False
+        updates = []
+        params = []
+        if name is not None and name.strip():
+            updates.append("name = ?")
+            params.append(name.strip())
+        if kind is not None and kind.strip():
+            updates.append("kind = ?")
+            params.append(kind.strip())
+        if updates:
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                f"UPDATE closet_locations SET {', '.join(updates)} WHERE id = ? AND user_id = ?",
+                [*params, location_id, user_id],
+            )
+            conn.commit()
+            conn.close()
+        if is_default is True:
+            return self.set_default_closet_location(user_id, location_id)
+        return True
+
+    def delete_closet_location(self, user_id: int, location_id: int) -> bool:
+        loc = self.get_closet_location(location_id, user_id)
+        if not loc:
+            return False
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE clothing_items SET closet_location_id = NULL WHERE user_id = ? AND closet_location_id = ?",
+            (user_id, location_id),
+        )
+        cursor.execute(
+            "DELETE FROM closet_locations WHERE id = ? AND user_id = ?",
+            (location_id, user_id),
+        )
+        success = cursor.rowcount > 0
+        cursor.execute(
+            "UPDATE users SET default_closet_location_id = NULL WHERE id = ? AND default_closet_location_id = ?",
+            (user_id, location_id),
+        )
+        conn.commit()
+        conn.close()
+        self.ensure_default_closet_location(user_id)
         return success
     
     # Clothing Management Methods (Updated for multi-user)
@@ -442,6 +769,7 @@ class DatabaseManager:
         """
         conn = self.get_connection()
         cursor = conn.cursor()
+        default_loc = self.ensure_default_closet_location(user_id)
 
         colors_json = json.dumps(colors)
         if image_paths is None:
@@ -465,17 +793,123 @@ class DatabaseManager:
             INSERT INTO clothing_items
             (user_id, image_path, thumbnail_path, image_paths, thumbnail_paths,
              category, subcategory, colors, season, style,
-             purchase_date, purchase_price, purchase_location, brand, size, max_wear_before_wash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             purchase_date, purchase_price, purchase_location, brand, size,
+             max_wear_before_wash, closet_location_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (user_id, image_path, thumbnail_path, image_paths_json, thumbnail_paths_json,
               category, subcategory, colors_json, season, style,
-              purchase_date, purchase_price, purchase_location, brand, size, max_wear_before_wash))
+              purchase_date, purchase_price, purchase_location, brand, size,
+              max_wear_before_wash, default_loc["id"]))
 
         item_id = cursor.lastrowid
         conn.commit()
         conn.close()
 
         return item_id
+
+    def add_bulk_clothing_item(
+        self,
+        user_id: int,
+        name: str,
+        subcategory: str,
+        quantity: int,
+        clean_count: int,
+        colors: List[str],
+        season: str,
+        style: str,
+        *,
+        image_path: str = "",
+        thumbnail_path: Optional[str] = None,
+        image_paths: Optional[List[str]] = None,
+        thumbnail_paths: Optional[List[Optional[str]]] = None,
+        clip_embedding: Optional[List[float]] = None,
+    ) -> int:
+        """Add an interchangeable multi-quantity item (socks, basics)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        default_loc = self.ensure_default_closet_location(user_id)
+
+        q = max(1, min(int(quantity), 999))
+        c = max(0, min(int(clean_count), q))
+        cols = [str(x).strip() for x in colors if str(x).strip()]
+        if not cols:
+            cols = ["Neutral"]
+        colors_json = json.dumps(cols)
+        if image_paths is None:
+            image_paths = [image_path] if image_path else [""]
+        if thumbnail_paths is None:
+            thumbnail_paths = [thumbnail_path]
+        image_paths_json = json.dumps(image_paths)
+        thumbnail_paths_json = json.dumps(thumbnail_paths)
+
+        washed_flag = 1 if c > 0 else 0
+        emb_json = json.dumps(clip_embedding) if clip_embedding else None
+
+        cursor.execute(
+            """
+            INSERT INTO clothing_items
+            (user_id, image_path, thumbnail_path, image_paths, thumbnail_paths,
+             category, subcategory, colors, season, style, max_wear_before_wash,
+             is_bulk, quantity, clean_count, washed, physical_location, clip_embedding,
+             closet_location_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                image_path,
+                thumbnail_path,
+                image_paths_json,
+                thumbnail_paths_json,
+                name.strip(),
+                subcategory.strip(),
+                colors_json,
+                season,
+                style,
+                1,
+                1,
+                q,
+                c,
+                washed_flag,
+                "closet" if washed_flag else "needs_wash",
+                emb_json,
+                default_loc["id"],
+            ),
+        )
+
+        item_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return item_id
+
+    def count_owned_similar_by_category_color(
+        self, user_id: int, category: str, color_name: str
+    ) -> int:
+        """How many owned items share this category and contain this color name."""
+        color_key = (color_name or "").strip()
+        if not color_key:
+            return 0
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT colors FROM clothing_items
+            WHERE user_id = ? AND category = ?
+            AND (status IS NULL OR status = 'owned')
+            AND COALESCE(is_bulk, 0) = 0
+            """,
+            (user_id, category),
+        )
+        n = 0
+        for row in cursor.fetchall():
+            try:
+                cols = json.loads(row["colors"])
+            except (TypeError, ValueError):
+                continue
+            if color_key in cols:
+                n += 1
+        conn.close()
+        return n
 
     @staticmethod
     def _decode_image_paths(item: Dict) -> None:
@@ -502,6 +936,35 @@ class DatabaseManager:
         else:
             item["thumbnail_paths"] = [item.get("thumbnail_path")] if item.get("image_path") else []
 
+    @staticmethod
+    def _decode_user_tags(item: Dict) -> None:
+        raw = item.get("user_tags")
+        if raw:
+            try:
+                parsed = json.loads(raw)
+                item["user_tags"] = [
+                    str(t).strip() for t in parsed if str(t).strip()
+                ]
+            except (TypeError, ValueError):
+                item["user_tags"] = []
+        else:
+            item["user_tags"] = []
+
+    @staticmethod
+    def _normalize_bulk_fields(item: Dict) -> None:
+        bulk = bool(item.get("is_bulk", 0))
+        item["is_bulk"] = bulk
+        q = int(item.get("quantity") or 1)
+        q = max(1, q)
+        raw_c = item.get("clean_count")
+        if raw_c is None:
+            c = q
+        else:
+            c = int(raw_c)
+        c = max(0, min(c, q))
+        item["quantity"] = q
+        item["clean_count"] = c
+
     def set_thumbnail_path(self, item_id: int, thumbnail_path: Optional[str]) -> bool:
         """Update only the thumbnail_path for an existing item (used by backfill)."""
         conn = self.get_connection()
@@ -515,6 +978,158 @@ class DatabaseManager:
         conn.close()
         return success
 
+    def set_clip_embedding(self, item_id: int, embedding: List[float]) -> bool:
+        """Persist a L2-normalized CLIP embedding (JSON float list) on an item."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE clothing_items SET clip_embedding = ? WHERE id = ?",
+            (json.dumps(embedding), item_id),
+        )
+        success = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        return success
+
+    @staticmethod
+    def _strip_clip_embedding_public(item: Optional[Dict]) -> None:
+        if item is not None:
+            item.pop("clip_embedding", None)
+
+    def list_owned_clip_embeddings(self, user_id: int) -> List[Tuple[int, List[float]]]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, clip_embedding FROM clothing_items
+            WHERE user_id = ?
+              AND (status IS NULL OR status = 'owned')
+              AND clip_embedding IS NOT NULL
+              AND TRIM(clip_embedding) != ''
+            """,
+            (user_id,),
+        )
+        out: List[Tuple[int, List[float]]] = []
+        for row in cursor.fetchall():
+            try:
+                vec = json.loads(row["clip_embedding"])
+                if isinstance(vec, list) and len(vec) > 8:
+                    out.append((int(row["id"]), [float(x) for x in vec]))
+            except (TypeError, ValueError, KeyError):
+                continue
+        conn.close()
+        return out
+
+    def promote_bulk_to_individuals(
+        self, item_id: int, user_id: int, count: int
+    ) -> Optional[List[int]]:
+        """Split ``count`` clean units off a bulk row into standalone items."""
+        if count < 1:
+            return None
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM clothing_items
+            WHERE id = ? AND user_id = ? AND COALESCE(is_bulk, 0) = 1
+              AND (status IS NULL OR status = 'owned')
+            """,
+            (item_id, user_id),
+        )
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return None
+        p = dict(row)
+        qty = max(1, int(p.get("quantity") or 1))
+        cc_raw = p.get("clean_count")
+        cc = int(cc_raw) if cc_raw is not None else qty
+        cc = max(0, min(cc, qty))
+        if count > qty or count > cc:
+            conn.close()
+            return None
+
+        created: List[int] = []
+        mw = max(1, int(p.get("max_wear_before_wash") or 1))
+        tags_raw = p.get("user_tags")
+        tags_json = tags_raw if tags_raw else "[]"
+        packed = int(p.get("packed_for_trip") or 0)
+        clip_raw = p.get("clip_embedding")
+        img_p = (p.get("image_path") or "") or ""
+        img_paths_sql = (
+            p.get("image_paths")
+            if p.get("image_paths")
+            else json.dumps([img_p])
+        )
+        thumbs_sql = (
+            p.get("thumbnail_paths")
+            if p.get("thumbnail_paths") is not None
+            else json.dumps([p.get("thumbnail_path")])
+        )
+
+        try:
+            for _ in range(count):
+                cursor.execute(
+                    """
+                    INSERT INTO clothing_items (
+                        user_id, image_path, thumbnail_path, image_paths, thumbnail_paths,
+                        category, subcategory, colors, season, style,
+                        purchase_date, purchase_price, purchase_location, brand, size,
+                        max_wear_before_wash, notes, user_tags, storage_location, packed_for_trip,
+                        is_bulk, quantity, clean_count, washed, physical_location,
+                        clip_embedding, status
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, 1, 1, 'closet', ?, 'owned')
+                    """,
+                    (
+                        user_id,
+                        img_p,
+                        p.get("thumbnail_path"),
+                        img_paths_sql,
+                        thumbs_sql,
+                        p["category"],
+                        p["subcategory"],
+                        p["colors"],
+                        p.get("season"),
+                        p.get("style"),
+                        p.get("purchase_date"),
+                        p.get("purchase_price"),
+                        p.get("purchase_location"),
+                        p.get("brand"),
+                        p.get("size"),
+                        mw,
+                        p.get("notes"),
+                        tags_json,
+                        p.get("storage_location"),
+                        packed,
+                        clip_raw,
+                    ),
+                )
+                created.append(cursor.lastrowid)
+
+            if count >= qty:
+                cursor.execute("DELETE FROM clothing_items WHERE id = ?", (item_id,))
+            else:
+                nq = qty - count
+                nc = cc - count
+                wf = 1 if nc > 0 else 0
+                pl = "closet" if wf else "needs_wash"
+                cursor.execute(
+                    """
+                    UPDATE clothing_items SET quantity = ?, clean_count = ?,
+                           washed = ?, physical_location = ?
+                    WHERE id = ?
+                    """,
+                    (nq, nc, wf, pl, item_id),
+                )
+            conn.commit()
+        except sqlite3.Error:
+            conn.rollback()
+            conn.close()
+            return None
+        conn.close()
+        return created
+
     # Whitelist of free-text/metadata columns the API is allowed to patch.
     # Keep this tight — anything wear/wash related goes through update_item_status.
     _EDITABLE_DETAIL_FIELDS = {
@@ -525,7 +1140,23 @@ class DatabaseManager:
         "purchase_price",
         "purchase_location",
         "storage_location",
+        "category",
+        "subcategory",
+        "season",
+        "style",
+        "colors",
+        "user_tags",
+        "packed_for_trip",
+        "quantity",
+        "clean_count",
+        "closet_location_id",
     }
+
+    _MAX_USER_TAGS = 20
+    _MAX_USER_TAG_LEN = 40
+
+    # category / subcategory are NOT NULL — never cleared to None.
+    _REQUIRED_TEXT_FIELDS = {"category", "subcategory"}
 
     def update_item_details(self, item_id: int, user_id: int, **fields) -> bool:
         """Patch user-editable metadata on an item.
@@ -537,6 +1168,59 @@ class DatabaseManager:
         clean: Dict = {}
         for key, value in fields.items():
             if key not in self._EDITABLE_DETAIL_FIELDS:
+                continue
+            if key == "packed_for_trip":
+                if value is None:
+                    continue
+                clean[key] = 1 if bool(value) else 0
+                continue
+            if key == "colors":
+                if not isinstance(value, list):
+                    continue
+                names = [str(c).strip() for c in value if str(c).strip()]
+                if not names:
+                    continue
+                clean[key] = json.dumps(names)
+                continue
+            if key == "user_tags":
+                if not isinstance(value, list):
+                    continue
+                names: List[str] = []
+                seen: set = set()
+                for tag in value:
+                    s = str(tag).strip()
+                    if not s or len(s) > self._MAX_USER_TAG_LEN:
+                        continue
+                    key_lower = s.lower()
+                    if key_lower in seen:
+                        continue
+                    seen.add(key_lower)
+                    names.append(s)
+                    if len(names) >= self._MAX_USER_TAGS:
+                        break
+                clean[key] = json.dumps(names)
+                continue
+            if key in ("quantity", "clean_count"):
+                if value is None:
+                    continue
+                try:
+                    clean[key] = int(value)
+                except (TypeError, ValueError):
+                    continue
+                continue
+            if key == "closet_location_id":
+                if value is None:
+                    clean[key] = None
+                    continue
+                try:
+                    clean[key] = int(value)
+                except (TypeError, ValueError):
+                    continue
+                continue
+            if key in self._REQUIRED_TEXT_FIELDS:
+                if not isinstance(value, str) or not value.strip():
+                    continue
+                clean[key] = value.strip()
                 continue
             # Treat empty strings as "clear this field" rather than storing ''.
             if isinstance(value, str) and value.strip() == "":
@@ -551,11 +1235,40 @@ class DatabaseManager:
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT user_id FROM clothing_items WHERE id = ?",
+            "SELECT user_id, is_bulk, quantity, clean_count FROM clothing_items WHERE id = ?",
             (item_id,),
         )
         row = cursor.fetchone()
         if not row or row["user_id"] != user_id:
+            conn.close()
+            return False
+
+        if "quantity" in clean or "clean_count" in clean:
+            if not row["is_bulk"]:
+                clean.pop("quantity", None)
+                clean.pop("clean_count", None)
+            else:
+                q0 = int(row["quantity"] or 1)
+                c_raw = row["clean_count"]
+                c0 = int(c_raw) if c_raw is not None else q0
+                q = int(clean["quantity"]) if "quantity" in clean else q0
+                c = int(clean["clean_count"]) if "clean_count" in clean else c0
+                q = max(1, min(999, q))
+                if "quantity" in clean and "clean_count" not in clean:
+                    c = min(c0, q)
+                else:
+                    c = max(0, min(c, q))
+                clean["quantity"] = q
+                clean["clean_count"] = c
+                clean["washed"] = 1 if c > 0 else 0
+                clean["physical_location"] = "closet" if c > 0 else "needs_wash"
+
+        if "closet_location_id" in clean and clean["closet_location_id"] is not None:
+            if not self.get_closet_location(int(clean["closet_location_id"]), user_id):
+                conn.close()
+                return False
+
+        if not clean:
             conn.close()
             return False
 
@@ -571,7 +1284,9 @@ class DatabaseManager:
         return success
     
     def get_all_items(self, user_id: int, category: Optional[str] = None,
-                     status: Optional[str] = None) -> List[Dict]:
+                     status: Optional[str] = None,
+                     packed: Optional[bool] = None,
+                     closet_location_id: Optional[int] = None) -> List[Dict]:
         """Get all owned clothing items with optional filters.
 
         Wishlist items (status='wishlist') are always excluded — they have
@@ -592,6 +1307,14 @@ class DatabaseManager:
         elif status == "dirty":
             query += " AND washed = 0"
 
+        if packed is not None:
+            query += " AND packed_for_trip = ?"
+            params.append(1 if packed else 0)
+
+        if closet_location_id is not None:
+            query += " AND closet_location_id = ?"
+            params.append(int(closet_location_id))
+
         query += " ORDER BY date_added DESC"
         
         cursor.execute(query, params)
@@ -601,13 +1324,61 @@ class DatabaseManager:
         for row in rows:
             item = dict(row)
             item["colors"] = json.loads(item["colors"])
+            self._decode_user_tags(item)
             item["worn"] = bool(item["worn"])
             item["washed"] = bool(item["washed"])
+            item["packed_for_trip"] = bool(item.get("packed_for_trip", 0))
             self._decode_image_paths(item)
+            self._normalize_bulk_fields(item)
+            self._strip_clip_embedding_public(item)
             items.append(item)
 
         conn.close()
         return items
+
+    def set_packed_for_trip_bulk(
+        self,
+        user_id: int,
+        packed_for_trip: bool,
+        item_ids: Optional[List[int]] = None,
+    ) -> int:
+        """Bulk-pack owned items. If item_ids is omitted, update all packed rows."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        packed_value = 1 if packed_for_trip else 0
+
+        if item_ids is None:
+            cursor.execute(
+                """
+                UPDATE clothing_items
+                SET packed_for_trip = ?
+                WHERE user_id = ?
+                  AND (status IS NULL OR status = 'owned')
+                  AND packed_for_trip = 1
+                """,
+                (packed_value, user_id),
+            )
+        else:
+            clean_ids = sorted({int(i) for i in item_ids if int(i) > 0})
+            if not clean_ids:
+                conn.close()
+                return 0
+            placeholders = ",".join("?" for _ in clean_ids)
+            cursor.execute(
+                f"""
+                UPDATE clothing_items
+                SET packed_for_trip = ?
+                WHERE user_id = ?
+                  AND (status IS NULL OR status = 'owned')
+                  AND id IN ({placeholders})
+                """,
+                [packed_value, user_id, *clean_ids],
+            )
+
+        updated = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return updated
 
     def get_item(self, item_id: int) -> Optional[Dict]:
         """Get a specific clothing item with calculated metrics"""
@@ -620,10 +1391,14 @@ class DatabaseManager:
         if row:
             item = dict(row)
             item["colors"] = json.loads(item["colors"])
+            self._decode_user_tags(item)
             item["worn"] = bool(item["worn"])
             item["washed"] = bool(item["washed"])
             item["is_favorite"] = bool(item.get("is_favorite", False))
+            item["packed_for_trip"] = bool(item.get("packed_for_trip", 0))
             self._decode_image_paths(item)
+            self._normalize_bulk_fields(item)
+            self._strip_clip_embedding_public(item)
 
             # Calculate cost per wear
             if item.get("purchase_price") and item["times_worn"] > 0:
@@ -663,84 +1438,146 @@ class DatabaseManager:
         """Update the worn/washed status of an item with multi-wear tracking"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
-        # Get current item state. Wear/wash doesn't apply to wishlist entries.
-        cursor.execute("""
-            SELECT wear_again_count, max_wear_before_wash, times_worn, freshness_score, status
+
+        cursor.execute(
+            """
+            SELECT wear_again_count, max_wear_before_wash, times_worn, freshness_score, status,
+                   COALESCE(is_bulk, 0) AS is_bulk, quantity, clean_count
             FROM clothing_items WHERE id = ?
-        """, (item_id,))
+            """,
+            (item_id,),
+        )
         item = cursor.fetchone()
 
         if not item or (item["status"] and item["status"] != "owned"):
             conn.close()
             return False
-        
+
+        is_bulk = bool(item["is_bulk"])
+        qty = max(1, int(item["quantity"] or 1))
+        cc_raw = item["clean_count"]
+        cc = int(cc_raw) if cc_raw is not None else qty
+        cc = max(0, min(cc, qty))
+
+        if is_bulk:
+            updates: List[str] = []
+            params: List = []
+
+            if worn is not None:
+                updates.append("worn = ?")
+                params.append(1 if worn else 0)
+
+                if worn:
+                    if cc <= 0:
+                        conn.close()
+                        return False
+                    new_cc = cc - 1
+                    updates.append("times_worn = times_worn + 1")
+                    updates.append("last_worn = ?")
+                    params.append(datetime.now().isoformat())
+                    updates.append("clean_count = ?")
+                    params.append(new_cc)
+                    updates.append("washed = ?")
+                    params.append(1 if new_cc > 0 else 0)
+                    updates.append(
+                        "physical_location = ?"
+                    )
+                    params.append("closet" if new_cc > 0 else "needs_wash")
+                    cursor.execute(
+                        "INSERT INTO wear_history (item_id, occasion, rating) VALUES (?, ?, ?)",
+                        (item_id, occasion, rating),
+                    )
+                    new_fresh = max(0.0, float(item["freshness_score"]) - 0.02)
+                    updates.append("freshness_score = ?")
+                    params.append(new_fresh)
+
+            if wear_again is not None:
+                # Wear-again multi-wear skips bulk — counts already track inventory.
+                pass
+
+            if washed is not None:
+                if washed:
+                    updates.append("clean_count = ?")
+                    params.append(qty)
+                    updates.append("washed = 1")
+                    updates.append("wear_again_count = 0")
+                    updates.append("freshness_score = 1.0")
+                    updates.append("physical_location = 'closet'")
+                else:
+                    updates.append("clean_count = 0")
+                    updates.append("washed = 0")
+                    updates.append("physical_location = 'needs_wash'")
+
+            if not updates:
+                conn.close()
+                return True
+
+            query = f"UPDATE clothing_items SET {', '.join(updates)} WHERE id = ?"
+            params.append(item_id)
+            cursor.execute(query, params)
+            success = cursor.rowcount > 0
+            conn.commit()
+            conn.close()
+            return success
+
         updates = []
         params = []
-        
+
         if worn is not None:
             updates.append("worn = ?")
             params.append(1 if worn else 0)
-            
+
             if worn:
-                # Increment times worn
                 updates.append("times_worn = times_worn + 1")
                 updates.append("last_worn = ?")
                 params.append(datetime.now().isoformat())
-                
-                # Increment wear-again count
+
                 updates.append("wear_again_count = wear_again_count + 1")
-                
-                # Add to wear history
+
                 cursor.execute(
                     "INSERT INTO wear_history (item_id, occasion, rating) VALUES (?, ?, ?)",
-                    (item_id, occasion, rating)
+                    (item_id, occasion, rating),
                 )
-                
-                # Check if needs washing
+
                 new_wear_count = item["wear_again_count"] + 1
                 if new_wear_count >= item["max_wear_before_wash"]:
                     updates.append("washed = 0")
                     updates.append("physical_location = 'needs_wash'")
-                
-                # Update freshness score (decrease slightly with each wear)
+
                 new_freshness = max(0.0, float(item["freshness_score"]) - 0.05)
                 updates.append("freshness_score = ?")
                 params.append(new_freshness)
-        
+
         if wear_again is not None:
-            # User decided item can be worn again without washing
             if wear_again:
-                updates.append("washed = 1")  # Still considered "clean enough"
+                updates.append("washed = 1")
                 updates.append("physical_location = 'closet'")
             else:
-                # Send to laundry
                 updates.append("washed = 0")
                 updates.append("physical_location = 'laundry'")
-        
+
         if washed is not None:
             updates.append("washed = ?")
             params.append(1 if washed else 0)
-            
+
             if washed:
-                # Reset wear-again count when washed
                 updates.append("wear_again_count = 0")
                 updates.append("freshness_score = 1.0")
                 updates.append("physical_location = 'closet'")
-        
+
         if not updates:
             conn.close()
             return True
-        
+
         query = f"UPDATE clothing_items SET {', '.join(updates)} WHERE id = ?"
         params.append(item_id)
-        
+
         cursor.execute(query, params)
         success = cursor.rowcount > 0
-        
+
         conn.commit()
         conn.close()
-        
+
         return success
     
     def delete_item(self, item_id: int) -> bool:
@@ -808,17 +1645,87 @@ class DatabaseManager:
             WHERE {owned_filter} AND date_added >= datetime('now', '-7 days')
         """, (user_id,))
         recent = cursor.fetchone()["recent"]
-        
+
+        best_cpw: List[Dict] = []
+        cursor.execute(
+            f"""
+            SELECT id, category, subcategory, times_worn, purchase_price,
+                   thumbnail_path, image_path,
+                   (purchase_price * 1.0 / times_worn) AS cpw
+            FROM clothing_items
+            WHERE {owned_filter}
+              AND times_worn > 0
+              AND purchase_price IS NOT NULL
+              AND purchase_price > 0
+            ORDER BY cpw ASC
+            LIMIT 5
+            """,
+            (user_id,),
+        )
+        for row in cursor.fetchall():
+            d = dict(row)
+            cpw_val = d.pop("cpw", None)
+            d["cost_per_wear"] = round(float(cpw_val), 2) if cpw_val is not None else None
+            best_cpw.append(d)
+
         conn.close()
-        
+
         return {
             "total_items": total,
             "by_category": by_category,
             "dirty_items": dirty,
             "clean_items": total - dirty,
             "most_worn": most_worn,
-            "recently_added": recent
+            "recently_added": recent,
+            "best_cpw": best_cpw,
         }
+
+    def get_recent_outfit_signatures(
+        self, user_id: int, days: int = 14, limit: int = 100
+    ) -> set:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""
+            SELECT item_signature FROM outfit_suggestion_history
+            WHERE user_id = ? AND created_at >= datetime('now', '-{int(days)} days')
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        )
+        sigs = {row["item_signature"] for row in cursor.fetchall()}
+        conn.close()
+        return sigs
+
+    def log_outfit_recommendations(self, user_id: int, outfits: List[Dict]) -> None:
+        if not outfits:
+            return
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM outfit_suggestion_history
+            WHERE user_id = ? AND created_at < datetime('now', '-90 days')
+            """,
+            (user_id,),
+        )
+        for o in outfits:
+            items = o.get("items") or []
+            if not items:
+                continue
+            sig = ",".join(
+                str(i["id"]) for i in sorted(items, key=lambda x: int(x["id"]))
+            )
+            cursor.execute(
+                """
+                INSERT INTO outfit_suggestion_history (user_id, item_signature)
+                VALUES (?, ?)
+                """,
+                (user_id, sig),
+            )
+        conn.commit()
+        conn.close()
     
     def _calculate_rotation_category(self, times_worn: int, days_owned: int) -> str:
         """Calculate rotation category based on wear frequency"""
@@ -911,6 +1818,7 @@ class DatabaseManager:
         for row in cursor.fetchall():
             item = dict(row)
             item["colors"] = json.loads(item["colors"])
+            self._decode_user_tags(item)
             self._decode_image_paths(item)
             items.append(item)
 
@@ -1098,10 +2006,12 @@ class DatabaseManager:
         for row in rows:
             item = dict(row)
             item["colors"] = json.loads(item["colors"]) if item.get("colors") else []
+            self._decode_user_tags(item)
             item["worn"] = bool(item["worn"])
             item["washed"] = bool(item["washed"])
             item["is_favorite"] = bool(item.get("is_favorite", False))
             self._decode_image_paths(item)
+            self._strip_clip_embedding_public(item)
             items.append(item)
 
         conn.close()
@@ -1183,10 +2093,22 @@ class DatabaseManager:
         return success
 
     def add_to_laundry_queue(self, item_id: int, priority: str = "normal") -> int:
-        """Add item to laundry queue"""
+        """Add item to laundry queue. Returns ``-2`` if the item is a bulk SKU."""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
+        cursor.execute(
+            "SELECT COALESCE(is_bulk, 0) AS b FROM clothing_items WHERE id = ?",
+            (item_id,),
+        )
+        chk = cursor.fetchone()
+        if not chk:
+            conn.close()
+            return 0
+        if chk["b"]:
+            conn.close()
+            return -2
+
         # Check if already in queue
         cursor.execute("""
             SELECT id FROM laundry_queue 
@@ -1238,7 +2160,9 @@ class DatabaseManager:
         for row in cursor.fetchall():
             item = dict(row)
             item["colors"] = json.loads(item["colors"])
+            self._decode_user_tags(item)
             self._decode_image_paths(item)
+            self._strip_clip_embedding_public(item)
             items.append(item)
 
         # Group by status

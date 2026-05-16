@@ -5,7 +5,7 @@ React Native app (Expo) for the Closet-Org FastAPI backend. Features: sign in, c
 ## Prerequisites
 
 - Node.js 18+ and npm
-- Backend running from the repo `backend/` folder (`python main.py` on port **8000** by default)
+- Backend running from the repo `backend/` folder (`python main.py`; this app is configured for port **8001** in `app.json`)
 - For device builds: Expo Go, or EAS for standalone apps
 
 ## Install
@@ -17,27 +17,27 @@ npm install
 
 ## API URL
 
-The app defaults to `http://localhost:8000`. That only works when Metro and the API run on the **same machine** and the client can reach that host.
+The app defaults to the host Expo/Metro reports, using the configured API port from `app.json` (`8001` in this repo). That only works when the client can reach your computer on the local network.
 
 | Client | Typical `EXPO_PUBLIC_API_URL` |
 |--------|--------------------------------|
-| Same machine, iOS Simulator | `http://localhost:8000` |
-| Android Emulator | `http://10.0.2.2:8000` |
-| Physical phone on Wi‑Fi | `http://<your-pc-lan-ip>:8000` (e.g. `http://192.168.1.50:8000`) |
+| Same machine, iOS Simulator | `http://localhost:8001` |
+| Android Emulator | `http://10.0.2.2:8001` |
+| Physical phone on Wi-Fi | `http://<your-pc-lan-ip>:8001` (e.g. `http://192.168.1.50:8001`) |
 
 Do not use a trailing slash.
 
 **PowerShell (session only):**
 
 ```powershell
-$env:EXPO_PUBLIC_API_URL = "http://10.0.2.2:8000"
+$env:EXPO_PUBLIC_API_URL = "http://10.0.2.2:8001"
 npx expo start
 ```
 
 **macOS/Linux:**
 
 ```bash
-EXPO_PUBLIC_API_URL=http://192.168.1.50:8000 npx expo start
+EXPO_PUBLIC_API_URL=http://192.168.1.50:8001 npx expo start
 ```
 
 Restart Expo after changing this variable so the bundle picks it up.
