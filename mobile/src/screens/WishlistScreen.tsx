@@ -449,7 +449,7 @@ function AddWishlistModal({ visible, initial, onCancel, onSave }: AddProps) {
             ]}
           />
         </Pressable>
-        <GlassCard padded style={styles.modalCard}>
+        <GlassCard padded variant="solid" style={styles.modalCard}>
           <Text style={styles.modalTitle}>Add to wishlist</Text>
           <Pressable
             onPress={pickPhoto}

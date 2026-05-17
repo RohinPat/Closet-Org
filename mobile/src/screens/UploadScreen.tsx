@@ -970,7 +970,7 @@ export function UploadScreen() {
         ) : null}
 
         {mode === 'individual' && wishlistOpen && photos.length > 0 ? (
-          <GlassCard padded style={styles.wishlistCard}>
+          <GlassCard padded variant="solid" style={styles.wishlistCard}>
             <Text style={styles.resultTitle}>Wishlist target</Text>
             <Text style={styles.resultSub}>
               Save this photo as shopping research. It stays out of closet stats

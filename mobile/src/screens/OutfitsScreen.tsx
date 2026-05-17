@@ -1,8 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
 
+  Dimensions,
+
   Image,
+
+  Modal,
+
+  Platform,
 
   Pressable,
 
@@ -11,6 +17,8 @@ import {
   ScrollView,
 
   StyleSheet,
+
+  Switch,
 
   Text,
 
@@ -52,8 +60,6 @@ import {
 
   weatherDetail,
 
-  weatherHeadline,
-
 } from '../weather';
 
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
@@ -63,6 +69,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tabScrollContentPaddingTop, TAB_SCREEN_SCROLL_BOTTOM } from '../utils/screenSpacing';
 
 import {
+
+  blur,
 
   radii,
 
@@ -76,7 +84,7 @@ import {
 
 } from '../theme';
 
-import { useOutfitsAssistantPanels } from '../preferences';
+import { useOutfitsAiStylistEnabled } from '../preferences';
 
 import { Ionicons } from '@expo/vector-icons';
 
@@ -128,18 +136,6 @@ const VIBES = [
   { label: 'Minimal', value: 'minimal' },
   { label: 'Bold', value: 'bold' },
   { label: 'Athleisure', value: 'athleisure' },
-
-];
-
-
-
-const QUICK_PROMPTS = [
-
-  'What should I wear today?',
-
-  'What goes with my green jacket?',
-
-  "I'm bored of my usual.",
 
 ];
 
@@ -376,7 +372,7 @@ export function OutfitsScreen() {
 
   const scrollTop = tabScrollContentPaddingTop(insets);
 
-  const { colors, surface } = useTheme();
+  const { colors, surface, mode } = useTheme();
 
   const styles = useThemedStyles(makeStyles);
 
@@ -422,15 +418,9 @@ export function OutfitsScreen() {
 
   const [feedbackBySignature, setFeedbackBySignature] = useState<Record<string, string>>({});
 
-  const [assistantPanels, setAssistantPanels] = useOutfitsAssistantPanels();
+  const [aiStylistEnabled, setAiStylistEnabled] = useOutfitsAiStylistEnabled();
 
-
-
-  const planPinIdsRef = useRef<number[]>([]);
-
-  const [plannedDayDraft, setPlannedDayDraft] = useState('');
-
-  const [pinnedPlanCount, setPinnedPlanCount] = useState(0);
+  const [extrasMenuOpen, setExtrasMenuOpen] = useState(false);
 
 
 
@@ -745,10 +735,6 @@ export function OutfitsScreen() {
 
         closetLocationId: effectiveClosetLocationId,
 
-        pinItemIds:
-
-          planPinIdsRef.current.length > 0 ? planPinIdsRef.current : undefined,
-
         ...weatherParams,
 
       });
@@ -777,81 +763,43 @@ export function OutfitsScreen() {
 
 
 
-  const applyPlannedPinsForDay = useCallback(async () => {
+  const onRefresh = useCallback(() => {
 
-    const iso = plannedDayDraft.trim();
+    setRefreshing(true);
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    if (aiStylistEnabled) {
 
-      setError('Use YYYY-MM-DD for the planned date (e.g. 2026-06-01).');
+      void (async () => {
+
+        try {
+
+          await askStylist();
+
+        } finally {
+
+          setRefreshing(false);
+
+        }
+
+      })();
 
       return;
 
     }
 
-    setError(null);
+    void generate();
 
-    try {
-
-      const { plans } = await api.fetchPlannedOutfits(true);
-
-      const match = plans.find((p) => p.planned_for === iso && p.status !== 'skipped');
-
-      const pins = [...(match?.item_ids ?? [])];
-
-      planPinIdsRef.current = pins;
-
-      setPinnedPlanCount(pins.length);
-
-      if (!match) {
-
-        setError('No outfit plan on that date — add one in Planning ahead.');
-
-      }
-
-    } catch (e) {
-
-      setError(e instanceof Error ? e.message : 'Could not load planned outfits.');
-
-    }
-
-    await generate();
-
-  }, [plannedDayDraft, generate]);
-
-
-
-  const clearPlannedPinsForDay = useCallback(async () => {
-
-    planPinIdsRef.current = [];
-
-    setPinnedPlanCount(0);
-
-    setPlannedDayDraft('');
-
-    setError(null);
-
-    await generate();
-
-  }, [generate]);
-
-
-
-  const onRefresh = useCallback(() => {
-
-    setRefreshing(true);
-
-    generate();
-
-  }, [generate]);
+  }, [aiStylistEnabled, generate]);
 
 
 
   useEffect(() => {
 
+    if (aiStylistEnabled) return;
+
     generate();
 
-  }, [generate]);
+  }, [aiStylistEnabled, generate]);
 
 
 
@@ -860,20 +808,6 @@ export function OutfitsScreen() {
     getWeatherSyncEnabled().then(setWeatherSync);
 
   }, []);
-
-
-
-  async function toggleWeatherSync() {
-
-    const next = !weatherSync;
-
-    setWeatherSync(next);
-
-    await setWeatherSyncEnabled(next);
-
-    if (!next) setWeather(null);
-
-  }
 
 
 
@@ -1077,11 +1011,259 @@ export function OutfitsScreen() {
 
 
 
-  const bothWidgets =
+  function renderAiStylistMainPanel() {
 
-    assistantPanels.weather === 'widget' &&
+    return (
 
-    assistantPanels.stylist === 'widget';
+      <GlassCard padded style={styles.stylistMainCard}>
+
+        <View style={styles.stylistHeader}>
+
+          <View style={{ flex: 1 }}>
+
+            <Text style={styles.stylistTitle}>AI Stylist</Text>
+
+            <Text style={styles.stylistSub}>
+
+              Ask in your own words. The stylist only considers items and tags already in your closet — not photos.
+
+            </Text>
+
+          </View>
+
+          <View style={styles.stylistHeaderAside}>
+
+            <View style={styles.sourceBadge}>
+
+              <Text style={styles.sourceText}>
+
+                {stylistResponse?.source === 'claude' ? 'Claude' : 'Local'}
+
+              </Text>
+
+            </View>
+
+          </View>
+
+        </View>
+
+        <GlassInputContainer style={styles.promptShellAi}>
+
+          <TextInput
+
+            value={stylistPrompt}
+
+            onChangeText={setStylistPrompt}
+
+            placeholder="What should I wear today?"
+
+            placeholderTextColor={colors.textMuted}
+
+            style={styles.promptInputAi}
+
+            multiline
+
+            returnKeyType="send"
+
+            onSubmitEditing={() => askStylist()}
+
+          />
+
+        </GlassInputContainer>
+
+        {stylistGroundingItems.length > 0 ? (
+
+          <>
+
+            <Text style={styles.groundingLabel}>Ground with an item</Text>
+
+            <View style={styles.quickPrompts}>
+
+              <Chip
+
+                label="No specific item"
+
+                active={selectedStylistItemId === null}
+
+                onPress={() => setSelectedStylistItemId(null)}
+
+              />
+
+              {stylistGroundingItems.map((item) => (
+
+                <Chip
+
+                  key={item.id}
+
+                  label={itemChipLabel(item)}
+
+                  active={selectedStylistItemId === item.id}
+
+                  onPress={() => setSelectedStylistItemId(item.id)}
+
+                />
+
+              ))}
+
+            </View>
+
+          </>
+
+        ) : null}
+
+        <GlassButton
+
+          title="Ask stylist"
+
+          onPress={() => askStylist()}
+
+          loading={stylistLoading}
+
+          style={styles.stylistButton}
+
+        />
+
+        {stylistError ? <Text style={styles.error}>{stylistError}</Text> : null}
+
+        {stylistResponse ? (
+
+          <View style={styles.stylistResponse}>
+
+            <Text style={styles.stylistMessage}>{stylistResponse.message}</Text>
+
+            {stylistResponse.suggestions.map((suggestion, idx) => (
+
+              <View key={`${suggestion.title}-${idx}`} style={styles.stylistSuggestion}>
+
+                <View style={styles.cardHeader}>
+
+                  <Text style={styles.cardTitle}>{suggestion.title}</Text>
+
+                  <View style={styles.scoreBadge}>
+
+                    <Text style={styles.scoreText}>
+
+                      {Math.round(suggestion.outfit.score)}
+
+                    </Text>
+
+                  </View>
+
+                </View>
+
+                <Text style={styles.rationale}>{suggestion.rationale}</Text>
+
+                <ScrollView
+
+                  horizontal
+
+                  showsHorizontalScrollIndicator={false}
+
+                  contentContainerStyle={styles.outfitRow}
+
+                >
+
+                  {suggestion.outfit.items.map((item) => {
+
+                    const uri = itemImageUrl(item.image_path);
+
+                    return (
+
+                      <View key={item.id} style={styles.mini}>
+
+                        {uri ? (
+
+                          <Image
+
+                            source={{ uri }}
+
+                            style={styles.miniImg}
+
+                            resizeMode="cover"
+
+                          />
+
+                        ) : (
+
+                          <View
+
+                            style={[
+
+                              styles.miniImg,
+
+                              { backgroundColor: surface.thumbBg },
+
+                            ]}
+
+                          />
+
+                        )}
+
+                        <Text style={styles.miniLabel} numberOfLines={1}>
+
+                          {item.subcategory}
+
+                        </Text>
+
+                      </View>
+
+                    );
+
+                  })}
+
+                </ScrollView>
+
+                <View style={styles.feedbackRow}>
+
+                  <GlassButton
+
+                    title="Useful"
+
+                    variant="secondary"
+
+                    fullWidth={false}
+
+                    onPress={() => sendStylistFeedback(suggestion.signature, true)}
+
+                  />
+
+                  <GlassButton
+
+                    title="Not useful"
+
+                    variant="secondary"
+
+                    fullWidth={false}
+
+                    onPress={() => sendStylistFeedback(suggestion.signature, false)}
+
+                  />
+
+                  {feedbackBySignature[suggestion.signature] ? (
+
+                    <Text style={styles.feedbackText}>
+
+                      {feedbackBySignature[suggestion.signature]}
+
+                    </Text>
+
+                  ) : null}
+
+                </View>
+
+              </View>
+
+            ))}
+
+          </View>
+
+        ) : null}
+
+      </GlassCard>
+
+    );
+
+  }
 
 
 
@@ -1115,587 +1297,57 @@ export function OutfitsScreen() {
 
       >
 
-        <Text style={styles.heading}>Outfits</Text>
+        <View style={styles.titleRow}>
 
-        <Text style={styles.blurb}>
+          <Text style={[styles.heading, styles.titleRowHeading]}>Outfits</Text>
 
-          Curated combinations from your closet.
+          <Pressable
+
+            onPress={() => setExtrasMenuOpen(true)}
+
+            hitSlop={10}
+
+            style={({ pressed }) => [
+
+              styles.extrasMenuButton,
+
+              { opacity: pressed ? 0.65 : 1 },
+
+            ]}
+
+            accessibilityRole="button"
+
+            accessibilityLabel="Open outfit options"
+
+          >
+
+            <Ionicons name="menu-outline" size={26} color={colors.text} />
+
+            {(weatherSync || aiStylistEnabled) ? (
+
+              <View style={styles.extrasMenuBadgeDot} />
+
+            ) : null}
+
+          </Pressable>
+
+        </View>
+
+        <Text style={[styles.blurb, aiStylistEnabled && styles.blurbAiMode]}>
+
+          {aiStylistEnabled
+
+            ? 'Ask the stylist for outfit ideas — it uses your closet metadata, not photos.'
+
+            : 'Curated combinations from your closet.'}
 
         </Text>
 
 
 
-        <View style={styles.assistantPanelsWrap}>
 
-        <GlassCard
 
-          padded={assistantPanels.weather === 'full'}
-
-          radius={assistantPanels.weather === 'widget' ? radii.md : radii.lg}
-
-          style={[
-
-            styles.weatherCard,
-
-            bothWidgets && assistantPanels.weather === 'widget'
-
-              ? styles.assistantCardTightGap
-
-              : null,
-
-          ]}
-
-        >
-
-          {assistantPanels.weather === 'full' ? (
-
-          <View style={styles.weatherHeader}>
-
-            <View style={{ flex: 1 }}>
-
-              <Text style={styles.weatherTitle}>
-
-                {weatherHeadline(weather)}
-
-              </Text>
-
-              <Text style={styles.weatherSub}>
-
-                {weatherBusy ? 'Syncing forecast...' : weatherDetail(weather)}
-
-              </Text>
-
-            </View>
-
-            <View style={styles.assistantHeaderActions}>
-
-              <Pressable
-
-                onPress={() => setAssistantPanels({ weather: 'widget' })}
-
-                hitSlop={10}
-
-                style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
-
-                accessibilityRole="button"
-
-                accessibilityLabel="Minimize weather"
-
-              >
-
-                <Ionicons
-
-                  name="chevron-down"
-
-                  size={22}
-
-                  color={colors.textMuted}
-
-                />
-
-              </Pressable>
-
-              <GlassButton
-
-                title={weatherSync ? 'Weather on' : 'Use weather'}
-
-                variant={weatherSync ? 'secondary' : 'primary'}
-
-                onPress={toggleWeatherSync}
-
-                fullWidth={false}
-
-              />
-
-            </View>
-
-          </View>
-
-          ) : (
-
-          <View style={styles.assistantWidgetInset}>
-
-          <View
-
-            style={[styles.assistantWidgetRowInner, styles.assistantWidgetRowStretch]}
-
-          >
-
-            <Pressable
-
-              onPress={() => setAssistantPanels({ weather: 'full' })}
-
-              style={styles.assistantWidgetTap}
-
-              accessibilityRole="button"
-
-              accessibilityLabel="Expand weather"
-
-            >
-
-              <Ionicons
-
-                name="partly-sunny-outline"
-
-                size={22}
-
-                color={colors.accent}
-
-              />
-
-              <View style={styles.assistantWidgetTextCol}>
-
-                <Text style={styles.widgetHeadline} numberOfLines={1}>
-
-                  {weatherHeadline(weather)}
-
-                </Text>
-
-                <Text style={styles.widgetCaption} numberOfLines={1}>
-
-                  {weatherBusy
-
-                    ? 'Syncing…'
-
-                    : weather
-
-                    ? weatherDetail(weather)
-
-                    : 'Weather off · tap for options'}
-
-                </Text>
-
-              </View>
-
-            </Pressable>
-
-            <Pressable
-
-              onPress={toggleWeatherSync}
-
-              hitSlop={10}
-
-              accessibilityRole="button"
-
-              accessibilityLabel={
-
-                weatherSync ? 'Turn off weather sync' : 'Use weather'
-
-              }
-
-            >
-
-              <Ionicons
-
-                name={weatherSync ? 'cloud-done-outline' : 'cloud-outline'}
-
-                size={22}
-
-                color={weatherSync ? colors.accent : colors.textMuted}
-
-              />
-
-            </Pressable>
-
-          </View>
-
-          </View>
-
-          )}
-
-        </GlassCard>
-
-
-
-        <GlassCard
-
-          padded={assistantPanels.stylist === 'full'}
-
-          radius={assistantPanels.stylist === 'widget' ? radii.md : radii.lg}
-
-          style={[
-
-            styles.stylistCard,
-
-            bothWidgets && assistantPanels.stylist === 'widget'
-
-              ? styles.assistantStylistPairLast
-
-              : null,
-
-          ]}
-
-        >
-
-          {assistantPanels.stylist === 'full' ? (
-
-          <>
-
-          <View style={styles.stylistHeader}>
-
-            <View style={{ flex: 1 }}>
-
-              <Text style={styles.stylistTitle}>AI Stylist</Text>
-
-              <Text style={styles.stylistSub}>
-
-                Ask for a mood, item, or occasion. It uses your closet metadata, not photos.
-
-              </Text>
-
-            </View>
-
-            <View style={styles.stylistHeaderAside}>
-
-              <Pressable
-
-                onPress={() => setAssistantPanels({ stylist: 'widget' })}
-
-                hitSlop={10}
-
-                style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
-
-                accessibilityRole="button"
-
-                accessibilityLabel="Minimize AI stylist"
-
-              >
-
-                <Ionicons
-
-                  name="chevron-down"
-
-                  size={22}
-
-                  color={colors.textMuted}
-
-                />
-
-              </Pressable>
-
-              <View style={styles.sourceBadge}>
-
-                <Text style={styles.sourceText}>
-
-                  {stylistResponse?.source === 'claude' ? 'Claude' : 'Local'}
-
-                </Text>
-
-              </View>
-
-            </View>
-
-          </View>
-
-          <GlassInputContainer style={styles.promptShell}>
-
-            <TextInput
-
-              value={stylistPrompt}
-
-              onChangeText={setStylistPrompt}
-
-              placeholder="Ask what to wear..."
-
-              placeholderTextColor={colors.textMuted}
-
-              style={styles.promptInput}
-
-              multiline
-
-              returnKeyType="send"
-
-              onSubmitEditing={() => askStylist()}
-
-            />
-
-          </GlassInputContainer>
-
-          <View style={styles.quickPrompts}>
-
-            {QUICK_PROMPTS.map((prompt) => (
-
-              <Chip
-
-                key={prompt}
-
-                label={prompt}
-
-                active={stylistPrompt === prompt}
-
-                onPress={() => askStylist(prompt)}
-
-              />
-
-            ))}
-
-          </View>
-
-          {stylistGroundingItems.length > 0 ? (
-
-            <>
-
-              <Text style={styles.groundingLabel}>Ground with an item</Text>
-
-              <View style={styles.quickPrompts}>
-
-                <Chip
-
-                  label="No specific item"
-
-                  active={selectedStylistItemId === null}
-
-                  onPress={() => setSelectedStylistItemId(null)}
-
-                />
-
-                {stylistGroundingItems.map((item) => (
-
-                  <Chip
-
-                    key={item.id}
-
-                    label={itemChipLabel(item)}
-
-                    active={selectedStylistItemId === item.id}
-
-                    onPress={() => setSelectedStylistItemId(item.id)}
-
-                  />
-
-                ))}
-
-              </View>
-
-            </>
-
-          ) : null}
-
-          <GlassButton
-
-            title="Ask stylist"
-
-            onPress={() => askStylist()}
-
-            loading={stylistLoading}
-
-            style={styles.stylistButton}
-
-          />
-
-          {stylistError ? <Text style={styles.error}>{stylistError}</Text> : null}
-
-          {stylistResponse ? (
-
-            <View style={styles.stylistResponse}>
-
-              <Text style={styles.stylistMessage}>{stylistResponse.message}</Text>
-
-              {stylistResponse.suggestions.map((suggestion, idx) => (
-
-                <View key={`${suggestion.title}-${idx}`} style={styles.stylistSuggestion}>
-
-                  <View style={styles.cardHeader}>
-
-                    <Text style={styles.cardTitle}>{suggestion.title}</Text>
-
-                    <View style={styles.scoreBadge}>
-
-                      <Text style={styles.scoreText}>
-
-                        {Math.round(suggestion.outfit.score)}
-
-                      </Text>
-
-                    </View>
-
-                  </View>
-
-                  <Text style={styles.rationale}>{suggestion.rationale}</Text>
-
-                  <ScrollView
-
-                    horizontal
-
-                    showsHorizontalScrollIndicator={false}
-
-                    contentContainerStyle={styles.outfitRow}
-
-                  >
-
-                    {suggestion.outfit.items.map((item) => {
-
-                      const uri = itemImageUrl(item.image_path);
-
-                      return (
-
-                        <View key={item.id} style={styles.mini}>
-
-                          {uri ? (
-
-                            <Image
-
-                              source={{ uri }}
-
-                              style={styles.miniImg}
-
-                              resizeMode="cover"
-
-                            />
-
-                          ) : (
-
-                            <View
-
-                              style={[
-
-                                styles.miniImg,
-
-                                { backgroundColor: surface.thumbBg },
-
-                              ]}
-
-                            />
-
-                          )}
-
-                          <Text style={styles.miniLabel} numberOfLines={1}>
-
-                            {item.subcategory}
-
-                          </Text>
-
-                        </View>
-
-                      );
-
-                    })}
-
-                  </ScrollView>
-
-                  <View style={styles.feedbackRow}>
-
-                    <GlassButton
-
-                      title="Useful"
-
-                      variant="secondary"
-
-                      fullWidth={false}
-
-                      onPress={() => sendStylistFeedback(suggestion.signature, true)}
-
-                    />
-
-                    <GlassButton
-
-                      title="Not useful"
-
-                      variant="secondary"
-
-                      fullWidth={false}
-
-                      onPress={() => sendStylistFeedback(suggestion.signature, false)}
-
-                    />
-
-                    {feedbackBySignature[suggestion.signature] ? (
-
-                      <Text style={styles.feedbackText}>
-
-                        {feedbackBySignature[suggestion.signature]}
-
-                      </Text>
-
-                    ) : null}
-
-                  </View>
-
-                </View>
-
-              ))}
-
-            </View>
-
-          ) : null}
-
-          </>
-
-          ) : (
-
-          <View style={styles.assistantWidgetInset}>
-
-          <Pressable
-
-            onPress={() => setAssistantPanels({ stylist: 'full' })}
-
-            style={[styles.assistantWidgetRowInner, styles.assistantWidgetRowStretch]}
-
-            accessibilityRole="button"
-
-            accessibilityLabel="Expand AI stylist"
-
-          >
-
-            <Ionicons
-
-              name="sparkles-outline"
-
-              size={20}
-
-              color={colors.accent}
-
-            />
-
-            <View style={styles.assistantWidgetTextCol}>
-
-              <Text style={styles.widgetHeadline} numberOfLines={1}>
-
-                AI Stylist
-
-              </Text>
-
-              <Text style={styles.widgetCaption} numberOfLines={1}>
-
-                {stylistLoading
-
-                  ? 'Thinking…'
-
-                  : stylistError
-
-                  ? stylistError
-
-                  : stylistResponse
-
-                  ? stylistResponse.message
-
-                  : 'Tap to ask what to wear'}
-
-              </Text>
-
-            </View>
-
-            <Ionicons
-
-              name="chevron-forward"
-
-              size={16}
-
-              color={colors.textMuted}
-
-            />
-
-          </Pressable>
-
-          </View>
-
-          )}
-
-        </GlassCard>
-
-        </View>
-
-        <Text style={styles.sectionLabel}>Suggestion mode</Text>
+        <Text style={[styles.sectionLabel, aiStylistEnabled && styles.sectionLabelAiMode]}>Suggestion mode</Text>
 
         <View style={styles.chips}>
 
@@ -1731,7 +1383,7 @@ export function OutfitsScreen() {
 
           <>
 
-            <Text style={styles.sectionLabel}>Closet location</Text>
+            <Text style={[styles.sectionLabel, aiStylistEnabled && styles.sectionLabelAiMode]}>Closet location</Text>
 
             <View style={styles.chips}>
 
@@ -1766,6 +1418,16 @@ export function OutfitsScreen() {
           </>
 
         ) : null}
+
+
+
+        {aiStylistEnabled ? renderAiStylistMainPanel() : null}
+
+
+
+        {!aiStylistEnabled ? (
+
+        <>
 
 
 
@@ -1841,81 +1503,7 @@ export function OutfitsScreen() {
 
 
 
-        <Text style={styles.sectionLabel}>Planned day pins</Text>
 
-        <Text style={styles.plannedHint}>
-
-          Enter a date (YYYY-MM-DD) to pin items from that outfit plan and refresh suggestions.
-
-        </Text>
-
-        <GlassInputContainer style={styles.plannedShell}>
-
-          <TextInput
-
-            value={plannedDayDraft}
-
-            onChangeText={setPlannedDayDraft}
-
-            placeholder="2026-06-01"
-
-            placeholderTextColor={colors.placeholder}
-
-            autoCapitalize="none"
-
-            autoCorrect={false}
-
-            keyboardType="numbers-and-punctuation"
-
-            style={[styles.plannedInput, { color: colors.text }]}
-
-          />
-
-        </GlassInputContainer>
-
-        <View style={styles.plannedBtns}>
-
-          <GlassButton
-
-            title="Use plan"
-
-            onPress={applyPlannedPinsForDay}
-
-            loading={loading}
-
-            style={styles.plannedBtnHalf}
-
-            fullWidth={false}
-
-          />
-
-          <GlassButton
-
-            title="Clear pins"
-
-            variant="ghost"
-
-            onPress={clearPlannedPinsForDay}
-
-            loading={loading}
-
-            style={styles.plannedBtnHalf}
-
-            fullWidth={false}
-
-          />
-
-        </View>
-
-        {pinnedPlanCount > 0 ? (
-
-          <Text style={styles.plannedStatus}>
-
-            Pinning {pinnedPlanCount} item(s) from your plan.
-
-          </Text>
-
-        ) : null}
 
 
 
@@ -2091,7 +1679,137 @@ export function OutfitsScreen() {
 
         ))}
 
+        </>
+
+        ) : null}
+
       </ScrollView>
+
+      <Modal
+        visible={extrasMenuOpen}
+        animationType="slide"
+        transparent
+        statusBarTranslucent={Platform.OS === 'android'}
+        onRequestClose={() => setExtrasMenuOpen(false)}
+      >
+        <View style={styles.extrasModalWrap}>
+          <Pressable
+            style={styles.extrasSheetBackdrop}
+            onPress={() => setExtrasMenuOpen(false)}
+          />
+          <View
+            style={[
+              styles.extrasSheet,
+              { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.sm },
+            ]}
+          >
+            <BlurView
+              intensity={Platform.OS === 'ios' ? blur.intensity : 48}
+              tint={surface.blurTint}
+              style={styles.extrasSheetFrost}
+            />
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                styles.extrasSheetFrost,
+                {
+                  backgroundColor:
+                    mode === 'light'
+                      ? 'rgba(255, 255, 255, 0.76)'
+                      : 'rgba(26, 26, 36, 0.72)',
+                },
+              ]}
+            />
+            <View style={styles.extrasSheetHandlePad}>
+              <View style={[styles.extrasSheetHandle, { backgroundColor: colors.textMuted }]} />
+            </View>
+            <View style={styles.extrasSheetHeader}>
+              <View style={styles.extrasSheetHeaderSide} />
+              <Text style={styles.extrasSheetTitle}>Outfit options</Text>
+              <Pressable
+                onPress={() => setExtrasMenuOpen(false)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Close menu"
+                style={({ pressed }) => [
+                  styles.extrasSheetClose,
+                  { backgroundColor: surface.secondaryOverlay, opacity: pressed ? 0.75 : 1 },
+                ]}
+              >
+                <Ionicons name="close" size={22} color={colors.text} />
+              </Pressable>
+            </View>
+            <Text style={styles.extrasSheetHint}>These apply to outfit suggestions on this tab.</Text>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={styles.extrasSheetScroll}
+              contentContainerStyle={styles.extrasSheetInner}
+            >
+              <GlassCard
+                padded={false}
+                radius={radii.lg}
+                variant="solid"
+                style={styles.extrasMenuGroup}
+              >
+                <View style={styles.extrasMenuRow}>
+                  <View style={[styles.extrasMenuIconWrap, { backgroundColor: colors.accentSoft }]}>
+                    <Ionicons name="partly-sunny-outline" size={22} color={colors.accent} />
+                  </View>
+                  <View style={styles.toggleRowText}>
+                    <Text style={styles.toggleLabel}>Weather-aware outfits</Text>
+                    <Text style={styles.toggleCaption} numberOfLines={3}>
+                      {weatherBusy
+                        ? 'Syncing forecast…'
+                        : weatherSync
+                          ? weather
+                            ? weatherDetail(weather)
+                            : 'On — forecast loads with your next suggestion.'
+                          : 'Off — suggestions ignore the forecast.'}
+                    </Text>
+                  </View>
+                  <Switch
+                    accessibilityLabel="Use weather in outfit suggestions"
+                    value={weatherSync}
+                    onValueChange={(on) => {
+                      void (async () => {
+                        setWeatherSync(on);
+                        await setWeatherSyncEnabled(on);
+                        if (!on) setWeather(null);
+                      })();
+                    }}
+                    trackColor={{ false: colors.hairline, true: colors.accentSoft }}
+                    thumbColor={Platform.OS === 'android' ? (weatherSync ? colors.accent : colors.surfaceSolid) : undefined}
+                  />
+                </View>
+                <View style={[styles.extrasMenuDivider, { backgroundColor: surface.cardBorder }]} />
+                <View style={styles.extrasMenuRow}>
+                  <View style={[styles.extrasMenuIconWrap, { backgroundColor: colors.accentSoft }]}>
+                    <Ionicons name="sparkles" size={22} color={colors.accent} />
+                  </View>
+                  <View style={styles.toggleRowText}>
+                    <Text style={styles.toggleLabel}>AI stylist</Text>
+                    <Text style={styles.toggleCaption} numberOfLines={3}>
+                      {aiStylistEnabled
+                        ? 'Stylist replaces occasion / season / vibe filters on the main screen.'
+                        : 'Classic filters and scored outfits on the main screen.'}
+                    </Text>
+                  </View>
+                  <Switch
+                    accessibilityLabel="Use AI stylist on the main outfit screen"
+                    value={aiStylistEnabled}
+                    onValueChange={(on) => {
+                      setAiStylistEnabled(on);
+                    }}
+                    trackColor={{ false: colors.hairline, true: colors.accentSoft }}
+                    thumbColor={Platform.OS === 'android' ? (aiStylistEnabled ? colors.accent : colors.surfaceSolid) : undefined}
+                  />
+                </View>
+              </GlassCard>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
     </View>
 
@@ -2172,6 +1890,290 @@ function makeStyles({
       color: colors.textSecondary,
 
       marginBottom: spacing.xl,
+
+    },
+
+    blurbAiMode: {
+
+      marginBottom: spacing.md,
+
+    },
+
+    sectionLabelAiMode: {
+
+      marginTop: spacing.xs,
+
+    },
+
+    titleRow: {
+
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      gap: spacing.sm,
+
+      marginBottom: 6,
+
+    },
+
+    titleRowHeading: {
+
+      flex: 1,
+
+      marginBottom: 0,
+
+    },
+
+    extrasMenuButton: {
+
+      position: 'relative',
+
+      padding: spacing.xs,
+
+    },
+
+    extrasMenuBadgeDot: {
+
+      position: 'absolute',
+
+      top: 4,
+
+      right: 2,
+
+      width: 8,
+
+      height: 8,
+
+      borderRadius: 4,
+
+      backgroundColor: colors.accent,
+
+    },
+
+    extrasModalWrap: {
+
+      ...StyleSheet.absoluteFillObject,
+
+      justifyContent: 'flex-end',
+
+    },
+
+    extrasSheetBackdrop: {
+
+      ...StyleSheet.absoluteFillObject,
+
+      backgroundColor: 'rgba(0,0,0,0.38)',
+
+    },
+
+    extrasSheet: {
+
+      width: '100%',
+
+      overflow: 'hidden',
+
+      borderTopLeftRadius: radii.xl,
+
+      borderTopRightRadius: radii.xl,
+
+      paddingHorizontal: spacing.lg,
+
+      paddingTop: 0,
+
+      maxHeight: Dimensions.get('screen').height * 0.92,
+
+      borderTopWidth: StyleSheet.hairlineWidth,
+
+      borderLeftWidth: StyleSheet.hairlineWidth,
+
+      borderRightWidth: StyleSheet.hairlineWidth,
+
+      borderColor: surface.tabBarTopLine,
+
+    },
+
+    extrasSheetFrost: {
+
+      borderTopLeftRadius: radii.xl,
+
+      borderTopRightRadius: radii.xl,
+
+    },
+
+    extrasSheetHandlePad: {
+
+      paddingTop: spacing.sm,
+
+      paddingBottom: spacing.xs,
+
+      alignItems: 'center',
+
+    },
+
+    extrasSheetHandle: {
+
+      width: 40,
+
+      height: 5,
+
+      borderRadius: radii.pill,
+
+      opacity: 0.35,
+
+    },
+
+    extrasSheetHeader: {
+
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      marginBottom: spacing.xs,
+
+    },
+
+    extrasSheetHeaderSide: {
+
+      width: 40,
+
+      height: 40,
+
+    },
+
+    extrasSheetTitle: {
+
+      ...typography.headline,
+
+      flex: 1,
+
+      textAlign: 'center',
+
+      color: colors.text,
+
+    },
+
+    extrasSheetClose: {
+
+      width: 40,
+
+      height: 40,
+
+      borderRadius: 20,
+
+      alignItems: 'center',
+
+      justifyContent: 'center',
+
+    },
+
+    extrasSheetHint: {
+
+      ...typography.caption,
+
+      color: colors.textMuted,
+
+      textAlign: 'center',
+
+      marginBottom: spacing.lg,
+
+      paddingHorizontal: spacing.md,
+
+      lineHeight: 18,
+
+    },
+
+    extrasSheetScroll: {
+
+      flexGrow: 0,
+
+      maxHeight: Dimensions.get('window').height * 0.45,
+
+    },
+
+    extrasSheetInner: {
+
+      paddingBottom: spacing.sm,
+
+    },
+
+    extrasMenuGroup: {
+
+      overflow: 'hidden',
+
+    },
+
+    extrasMenuRow: {
+
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      gap: spacing.md,
+
+      paddingVertical: spacing.lg,
+
+      paddingHorizontal: spacing.lg,
+
+    },
+
+    extrasMenuDivider: {
+
+      height: StyleSheet.hairlineWidth,
+
+      marginLeft: spacing.lg + 44 + spacing.md,
+
+    },
+
+    extrasMenuIconWrap: {
+
+      width: 44,
+
+      height: 44,
+
+      borderRadius: radii.md,
+
+      alignItems: 'center',
+
+      justifyContent: 'center',
+
+    },
+
+    toggleRowText: {
+
+      flex: 1,
+
+      minWidth: 0,
+
+    },
+
+    toggleLabel: {
+
+      ...typography.bodyMedium,
+
+      fontSize: 16,
+
+      color: colors.text,
+
+    },
+
+    toggleCaption: {
+
+      ...typography.caption,
+
+      color: colors.textSecondary,
+
+      marginTop: 4,
+
+      lineHeight: 18,
+
+    },
+
+    stylistMainCard: {
+
+      marginTop: spacing.lg,
+
+      marginBottom: spacing.lg,
 
     },
 
@@ -2323,7 +2325,7 @@ function makeStyles({
 
       gap: spacing.md,
 
-      marginBottom: spacing.md,
+      marginBottom: spacing.sm,
 
     },
 
@@ -2367,28 +2369,6 @@ function makeStyles({
 
     },
 
-    promptShell: {
-
-      minHeight: 88,
-
-      justifyContent: 'flex-start',
-
-    },
-
-    promptInput: {
-
-      color: colors.text,
-
-      minHeight: 88,
-
-      paddingHorizontal: spacing.md,
-
-      paddingVertical: spacing.sm,
-
-      textAlignVertical: 'top',
-
-    },
-
     quickPrompts: {
 
       flexDirection: 'row',
@@ -2397,7 +2377,7 @@ function makeStyles({
 
       gap: 8,
 
-      marginTop: spacing.md,
+      marginTop: spacing.sm,
 
     },
 
@@ -2407,7 +2387,31 @@ function makeStyles({
 
       color: colors.textSecondary,
 
-      marginTop: spacing.md,
+      marginTop: spacing.sm,
+
+    },
+
+    promptShellAi: {
+
+      minHeight: 72,
+
+      justifyContent: 'flex-start',
+
+      marginBottom: spacing.xs,
+
+    },
+
+    promptInputAi: {
+
+      color: colors.text,
+
+      minHeight: 72,
+
+      paddingHorizontal: spacing.md,
+
+      paddingVertical: spacing.sm,
+
+      textAlignVertical: 'top',
 
     },
 

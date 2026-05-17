@@ -22,6 +22,8 @@ type GlassCardProps = ViewProps & {
   radius?: number;
   tint?: 'light' | 'dark' | 'default';
   padded?: boolean;
+  /** Readable panels over busy backgrounds / modals; uses a solid surface on dark mode (no glass blur). */
+  variant?: 'glass' | 'solid';
 };
 
 export function GlassCard({
@@ -31,13 +33,15 @@ export function GlassCard({
   radius = radii.lg,
   tint,
   padded = true,
+  variant = 'glass',
   ...rest
 }: GlassCardProps) {
   const { colors, surface, mode } = useTheme();
   const resolvedTint = tint ?? surface.blurTint;
   /* Light: blur clips show a gray rim; hairlines/shadows read as a dirty frame on white fills. */
   const lightSurface = mode === 'light';
-  const skipCardBlur = lightSurface;
+  const solidCard = variant === 'solid';
+  const skipCardBlur = lightSurface || solidCard;
   const cardShadow = lightSurface
     ? Platform.select({
         ios: {
@@ -54,7 +58,7 @@ export function GlassCard({
       style={[
         sharedStyles.cardShell,
         Platform.OS === 'android' &&
-          (lightSurface
+          (lightSurface || solidCard
             ? { backgroundColor: colors.surfaceSolid }
             : { backgroundColor: surface.cardOverlay }),
         { borderRadius: radius },
@@ -75,10 +79,10 @@ export function GlassCard({
           StyleSheet.absoluteFill,
           {
             borderRadius: radius,
-            backgroundColor: lightSurface
+            backgroundColor: lightSurface || solidCard
               ? colors.surfaceSolid
               : surface.cardOverlay,
-            borderWidth: lightSurface ? 0 : StyleSheet.hairlineWidth,
+            borderWidth: lightSurface || solidCard ? 0 : StyleSheet.hairlineWidth,
             borderColor: surface.cardBorder,
           },
         ]}

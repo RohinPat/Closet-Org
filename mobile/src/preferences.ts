@@ -146,69 +146,36 @@ export function useClosetFilterBarSections(): [
   return [expanded, toggleSection];
 }
 
-export type OutfitsAssistantPanelMode = 'full' | 'widget';
+const OUTFITS_AI_STYLIST_KEY = 'outfits_ai_stylist_v1';
 
-export type OutfitsAssistantPanelsState = {
-  weather: OutfitsAssistantPanelMode;
-  stylist: OutfitsAssistantPanelMode;
-};
-
-const OUTFITS_ASSISTANT_PANELS_KEY = 'outfits_assistant_panels_v1';
-
-const DEFAULT_OUTFITS_ASSISTANT_PANELS: OutfitsAssistantPanelsState = {
-  weather: 'full',
-  stylist: 'full',
-};
-
-function readOutfitsAssistantPanelsSync(): OutfitsAssistantPanelsState {
-  const out = { ...DEFAULT_OUTFITS_ASSISTANT_PANELS };
+function readOutfitsAiStylistSync(): boolean {
   try {
-    const raw = SecureStore.getItem(OUTFITS_ASSISTANT_PANELS_KEY);
-    if (!raw) return out;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (parsed.weather === 'full' || parsed.weather === 'widget') {
-      out.weather = parsed.weather;
-    }
-    if (parsed.stylist === 'full' || parsed.stylist === 'widget') {
-      out.stylist = parsed.stylist;
-    }
+    const raw = SecureStore.getItem(OUTFITS_AI_STYLIST_KEY);
+    if (raw === '1' || raw === 'true') return true;
+    if (raw === '0' || raw === 'false') return false;
   } catch {
-    // keep defaults
+    // ignore
   }
-  return out;
+  return false;
 }
 
-async function writeOutfitsAssistantPanels(
-  next: OutfitsAssistantPanelsState
-): Promise<void> {
+async function writeOutfitsAiStylist(next: boolean): Promise<void> {
   try {
-    await SecureStore.setItemAsync(
-      OUTFITS_ASSISTANT_PANELS_KEY,
-      JSON.stringify(next)
-    );
+    await SecureStore.setItemAsync(OUTFITS_AI_STYLIST_KEY, next ? '1' : '0');
   } catch {
     // best-effort
   }
 }
 
-export function useOutfitsAssistantPanels(): [
-  OutfitsAssistantPanelsState,
-  (patch: Partial<OutfitsAssistantPanelsState>) => void,
-] {
-  const [state, setState] = useState(readOutfitsAssistantPanelsSync);
+export function useOutfitsAiStylistEnabled(): [boolean, (next: boolean) => void] {
+  const [enabled, setEnabled] = useState(readOutfitsAiStylistSync);
 
-  const update = useCallback(
-    (patch: Partial<OutfitsAssistantPanelsState>) => {
-      setState((prev) => {
-        const next = { ...prev, ...patch };
-        void writeOutfitsAssistantPanels(next);
-        return next;
-      });
-    },
-    []
-  );
+  const update = useCallback((next: boolean) => {
+    setEnabled(next);
+    void writeOutfitsAiStylist(next);
+  }, []);
 
-  return [state, update];
+  return [enabled, update];
 }
 
 export function sortLabel(sort: SortKey): string {

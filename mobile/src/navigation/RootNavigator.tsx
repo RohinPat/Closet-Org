@@ -93,7 +93,7 @@ function GlassTabBarBackground({ surface }: { surface: ThemeSurface }) {
   return (
     <View style={StyleSheet.absoluteFill}>
       <BlurView
-        intensity={Platform.OS === 'ios' ? 80 : 60}
+        intensity={Platform.OS === 'ios' ? 90 : 72}
         tint={surface.blurTint}
         style={StyleSheet.absoluteFill}
       />

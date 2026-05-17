@@ -167,7 +167,7 @@ const LIGHT_SURFACE: SurfacePalette = {
   ghostOverlay: 'rgba(247, 245, 242, 0.72)',
   secondaryOverlay: 'rgba(255, 255, 255, 0.78)',
   secondaryBorder: 'rgba(28, 25, 23, 0.1)',
-  tabBarOverlay: 'rgba(255, 255, 255, 0.6)',
+  tabBarOverlay: 'rgba(255, 255, 255, 0.9)',
   tabBarTopLine: 'rgba(255, 255, 255, 0.85)',
   headerOverlay: 'rgba(255, 255, 255, 0.6)',
   thumbBg: '#EDE9E4',
@@ -185,7 +185,8 @@ const DARK_SURFACE: SurfacePalette = {
   ghostOverlay: 'rgba(255, 255, 255, 0.05)',
   secondaryOverlay: 'rgba(20, 20, 30, 0.45)',
   secondaryBorder: 'rgba(255, 255, 255, 0.12)',
-  tabBarOverlay: 'rgba(10, 10, 20, 0.55)',
+  /* Match solid sheet tone (#1A1A24) so the bar doesn’t read as thin glass over the gradient. */
+  tabBarOverlay: 'rgba(26, 26, 36, 0.88)',
   tabBarTopLine: 'rgba(255, 255, 255, 0.10)',
   headerOverlay: 'rgba(10, 10, 20, 0.5)',
   thumbBg: '#23232E',
