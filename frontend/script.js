@@ -30,6 +30,26 @@ function escapeHtml(value) {
     return String(value).replace(/[&<>"'`/]/g, (ch) => _ESC_MAP[ch]);
 }
 
+function formatApiError(detail) {
+    if (detail === null || detail === undefined) return 'Unknown error';
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+        return detail
+            .map((entry) => {
+                if (typeof entry === 'string') return entry;
+                if (entry && typeof entry.msg === 'string') return entry.msg;
+                return JSON.stringify(entry);
+            })
+            .join('; ');
+    }
+    if (typeof detail === 'object' && typeof detail.msg === 'string') return detail.msg;
+    try {
+        return JSON.stringify(detail);
+    } catch {
+        return String(detail);
+    }
+}
+
 function safeUrl(value) {
     // Allow only http(s), relative paths, and our own /uploads/. Anything
     // else (javascript:, data:, vbscript:) collapses to an empty string.
@@ -504,7 +524,7 @@ async function uploadClothing() {
     uploadBtn.textContent = 'Classifying...';
     
     const formData = new FormData();
-    formData.append('file', selectedFile);
+    formData.append('files', selectedFile);
     
     try {
         const response = await fetch(`${API_BASE}/upload-clothing`, {
@@ -521,7 +541,7 @@ async function uploadClothing() {
             showClassificationResult(data);
             loadCloset(); // Refresh closet
         } else {
-            alert('Upload failed: ' + (data.detail || 'Unknown error'));
+            alert('Upload failed: ' + formatApiError(data.detail));
         }
     } catch (error) {
         alert('Upload failed: ' + error.message);
