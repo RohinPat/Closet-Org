@@ -95,7 +95,7 @@ Then re-run **Deploy production** on GitHub.
 | `deploy_prod.sh: command not found` | Server repo is behind `main` — bootstrap pull (see below), then re-run deploy |
 | `.git/FETCH_HEAD: Permission denied` | Run bootstrap pull below — fixes `.git` ownership for `ubuntu` |
 | `git pull` failed | Local changes on server — `cd /opt/closet-org && sudo git status`, stash or reset |
-| Health check fails | `journalctl -u closet-org -n 80` on server |
+| Health check fails / 502 | Often SQLite permissions — on server: `sudo chgrp closet-org /opt/closet-org/backend && sudo chmod 2775 /opt/closet-org/backend && sudo chown closet-org:closet-org /opt/closet-org/backend/closet.db* && sudo systemctl restart closet-org` then `journalctl -u closet-org -n 50` |
 
 ---
 
