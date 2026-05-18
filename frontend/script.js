@@ -1,81 +1,384 @@
 // API Base URL
 const API_BASE = window.location.origin + '/api';
 
+const _utils = window.ClosetWebUtils;
+if (!_utils) {
+    throw new Error('ClosetWebUtils failed to load. Hard-refresh the page (Ctrl+Shift+R).');
+}
+
+const {
+    CLOSET_DENSITY_KEY,
+    CLOSET_LAYOUT_KEY,
+    DENSITY_LABELS,
+    escapeHtml,
+    formatApiError,
+    safeUrl,
+    closetItemImageUrl,
+    readClosetDensity: readClosetDensityFromStorage,
+    readClosetLayout: readClosetLayoutFromStorage,
+    nextClosetDensity,
+    toggleClosetLayoutValue,
+    buildClosetGridClassName,
+} = _utils;
+
+function readClosetDensity() {
+    return readClosetDensityFromStorage(localStorage);
+}
+
+function readClosetLayout() {
+    return readClosetLayoutFromStorage(localStorage);
+}
+
+function applyClosetViewClasses() {
+    const grid = document.getElementById('closet-grid');
+    if (!grid) return;
+    const density = readClosetDensity();
+    const layout = readClosetLayout();
+    grid.className = buildClosetGridClassName(density, layout);
+    const densityBtn = document.getElementById('closet-density-btn');
+    if (densityBtn) {
+        const label = DENSITY_LABELS[density] || 'Density';
+        densityBtn.title = `Density: ${label}`;
+        densityBtn.setAttribute('aria-label', `Density: ${label}`);
+    }
+    const layoutBtn = document.getElementById('closet-layout-btn');
+    if (layoutBtn) {
+        const label = layout === 'rails' ? 'Category rails' : 'Grid';
+        layoutBtn.title = `Layout: ${label}`;
+        layoutBtn.setAttribute('aria-label', `Layout: ${label}`);
+    }
+}
+
+function isClosetFilterActive() {
+    const category = document.getElementById('category-filter')?.value || '';
+    const status = document.getElementById('status-filter')?.value || '';
+    const rotation = document.getElementById('rotation-filter')?.value || '';
+    const q = document.getElementById('closet-search')?.value?.trim() || '';
+    const loc = document.getElementById('closet-location-filter')?.value || '';
+    return (
+        closetFilterKeys.size > 0 ||
+        !!closetColorFilter ||
+        !!category ||
+        !!status ||
+        !!rotation ||
+        !!q ||
+        !!loc ||
+        closetVisualSearchMode
+    );
+}
+
+function updateClosetStudioMeta(visibleCount, totalCount) {
+    const meta = document.getElementById('closet-studio-meta');
+    const clearBtn = document.getElementById('closet-studio-clear');
+    const refineBtn = document.getElementById('closet-filter-open');
+    const filtered = isClosetFilterActive();
+    const total = typeof totalCount === 'number' ? totalCount : visibleCount;
+    const noun = total === 1 ? 'piece' : 'pieces';
+
+    if (meta) {
+        let line = `${visibleCount} ${noun}`;
+        if (filtered && visibleCount !== total) {
+            line = `${visibleCount} of ${total} ${total === 1 ? 'piece' : 'pieces'}`;
+        }
+        const sortEl = document.getElementById('sort-by');
+        const sortKey = sortEl?.value || 'recent';
+        const sortLabels = {
+            recent: 'Recently added',
+            most_worn: 'Most worn',
+            neglected: 'Neglected',
+            cpw: 'Best CPW',
+            last_worn: 'Last worn',
+            least_worn: 'Least worn',
+            freshness: 'Freshness',
+        };
+        line += ` · ${sortLabels[sortKey] || 'Sorted'}`;
+        if (filtered) line += ' · filtered';
+        meta.textContent = line;
+    }
+    if (clearBtn) clearBtn.classList.toggle('hidden', !filtered);
+    if (refineBtn) refineBtn.classList.toggle('is-active', filtered);
+}
+
+function openClosetFilterDrawer() {
+    const drawer = document.getElementById('closet-filter-drawer');
+    const openBtn = document.getElementById('closet-filter-open');
+    if (!drawer) return;
+    drawer.classList.add('is-open');
+    drawer.setAttribute('aria-hidden', 'false');
+    openBtn?.setAttribute('aria-expanded', 'true');
+    document.body.classList.add('closet-filter-drawer-open');
+}
+
+function closeClosetFilterDrawer() {
+    const drawer = document.getElementById('closet-filter-drawer');
+    const openBtn = document.getElementById('closet-filter-open');
+    if (!drawer) return;
+    drawer.classList.remove('is-open');
+    drawer.setAttribute('aria-hidden', 'true');
+    openBtn?.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('closet-filter-drawer-open');
+}
+
+function initClosetFilterDrawer() {
+    document.getElementById('closet-filter-open')?.addEventListener('click', openClosetFilterDrawer);
+    document.getElementById('closet-filter-close')?.addEventListener('click', closeClosetFilterDrawer);
+    document.getElementById('closet-filter-backdrop')?.addEventListener('click', closeClosetFilterDrawer);
+    document.getElementById('closet-filter-apply')?.addEventListener('click', () => {
+        closeClosetFilterDrawer();
+        loadCloset();
+    });
+    document.getElementById('closet-studio-clear')?.addEventListener('click', clearAllClosetFilters);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.getElementById('closet-filter-drawer')?.classList.contains('is-open')) {
+            closeClosetFilterDrawer();
+        }
+    });
+}
+
+function cycleClosetDensity() {
+    const next = nextClosetDensity(readClosetDensity());
+    localStorage.setItem(CLOSET_DENSITY_KEY, next);
+    applyClosetViewClasses();
+    loadCloset();
+}
+
+function toggleClosetLayout() {
+    const next = toggleClosetLayoutValue(readClosetLayout());
+    localStorage.setItem(CLOSET_LAYOUT_KEY, next);
+    applyClosetViewClasses();
+    loadCloset();
+}
+
+
 // State
+const CLOSET_SORT_KEY = 'closet_web_sort';
 let currentTab = 'closet';
 let activeCarePane = 'laundry';
+let closetFilterKeys = new Set();
+let closetColorFilter = '';
+let closetSelectedItemId = null;
+let closetKeyboardFocusId = null;
+let closetVisualSearchMode = false;
+let lastUploadedItemId = null;
 let selectedFile = null;
 let currentUser = null;
 let authToken = null;
 
+function isDesktopCloset() {
+    return window.matchMedia('(min-width: 1024px)').matches;
+}
+
+function syncFilterToggleUi() {
+    document.querySelectorAll('[data-filter-key]').forEach((chip) => {
+        const key = chip.dataset.filterKey;
+        chip.classList.toggle('active', closetFilterKeys.has(key));
+    });
+}
+
+function syncStatusSelectFromFilterKeys() {
+    const statusEl = document.getElementById('status-filter');
+    if (!statusEl) return;
+    const hasClean = closetFilterKeys.has('clean');
+    const hasWash = closetFilterKeys.has('wash');
+    if (hasClean && !hasWash) statusEl.value = 'clean';
+    else if (hasWash && !hasClean) statusEl.value = 'dirty';
+    else statusEl.value = '';
+}
+
+function applyClosetClientFilters(items) {
+    return items.filter((item) => {
+        if (closetFilterKeys.has('clean') && !item.washed) return false;
+        if (closetFilterKeys.has('wash') && item.washed) return false;
+        if (closetFilterKeys.has('favorites') && !item.is_favorite) return false;
+        if (closetFilterKeys.has('lent') && !item.lent_to) return false;
+        if (closetFilterKeys.has('packed') && !item.packed_for_trip) return false;
+        return true;
+    });
+}
+
+function closetHasActiveFilters() {
+    const category = document.getElementById('category-filter')?.value || '';
+    const rotation = document.getElementById('rotation-filter')?.value || '';
+    const q = document.getElementById('closet-search')?.value.trim() || '';
+    const loc = document.getElementById('closet-location-filter')?.value || '';
+    return (
+        closetFilterKeys.size > 0 ||
+        !!closetColorFilter ||
+        !!category ||
+        !!rotation ||
+        !!q ||
+        !!loc
+    );
+}
+
+function clearAllClosetFilters() {
+    closetFilterKeys.clear();
+    closetColorFilter = '';
+    closetVisualSearchMode = false;
+    const category = document.getElementById('category-filter');
+    const status = document.getElementById('status-filter');
+    const rotation = document.getElementById('rotation-filter');
+    const search = document.getElementById('closet-search');
+    const loc = document.getElementById('closet-location-filter');
+    if (category) category.value = '';
+    if (status) status.value = '';
+    if (rotation) rotation.value = '';
+    if (search) search.value = '';
+    if (loc) loc.value = '';
+    syncChipsFromSelects();
+    syncFilterToggleUi();
+    document.querySelectorAll('.color-chip').forEach((c) => {
+        c.classList.toggle('active', !c.dataset.color);
+    });
+    setVisualSearchMode(false);
+    updateClosetLocationBadge();
+    loadCloset();
+}
+
+function updateClosetLocationBadge() {
+    const badge = document.getElementById('closet-location-badge');
+    const locSel = document.getElementById('closet-location-filter');
+    if (!badge || !locSel) return;
+    if (!locSel.value) {
+        badge.classList.add('hidden');
+        badge.textContent = '';
+        locSel.classList.remove('filter-select--active');
+        return;
+    }
+    const label = locSel.options[locSel.selectedIndex]?.text || 'Location';
+    badge.textContent = `Showing: ${label}`;
+    badge.classList.remove('hidden');
+    locSel.classList.add('filter-select--active');
+}
+
+function closeClosetDetailPane() {
+    closetSelectedItemId = null;
+    document.getElementById('closet-detail-pane')?.classList.add('hidden');
+    document.getElementById('closet-tab')?.classList.remove('closet-has-detail');
+    document.querySelectorAll('.clothing-card.is-selected, .rail-card.is-selected').forEach((el) => {
+        el.classList.remove('is-selected');
+    });
+}
+
+function highlightClosetCard(itemId) {
+    closetKeyboardFocusId = itemId || null;
+    document.querySelectorAll('.clothing-card, .rail-card').forEach((card) => {
+        const id = Number(card.dataset.itemId);
+        const selected = id === itemId;
+        card.classList.toggle('is-selected', selected);
+        card.classList.toggle('is-keyboard-focus', selected && itemId != null);
+    });
+}
+
+function getClosetGridCards() {
+    const grid = document.getElementById('closet-grid');
+    if (!grid) return [];
+    return [...grid.querySelectorAll('.clothing-card, .rail-card')];
+}
+
+function moveClosetGridFocus(delta) {
+    const cards = getClosetGridCards();
+    if (!cards.length) return;
+    let idx = cards.findIndex((c) => c.classList.contains('is-keyboard-focus'));
+    if (idx < 0 && closetKeyboardFocusId) {
+        idx = cards.findIndex((c) => Number(c.dataset.itemId) === closetKeyboardFocusId);
+    }
+    if (idx < 0) idx = 0;
+    else idx = Math.max(0, Math.min(cards.length - 1, idx + delta));
+    const itemId = Number(cards[idx].dataset.itemId);
+    highlightClosetCard(itemId);
+    cards[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function setOutfitsContainerEmpty(container, opts) {
+    container.classList.remove('outfits-container--has-results');
+    container.innerHTML = ClosetWebUtils.emptyStateMarkup(opts);
+    ClosetWebUtils.bindEmptyStateCtas(container, (tab) => showTab(tab));
+}
+
+function seedOutfitsEmptyIfNeeded() {
+    const container = document.getElementById('outfits-container');
+    if (!container || container.dataset.seeded || container.querySelector('.outfit-card')) return;
+    setOutfitsContainerEmpty(container, {
+        variant: 'outfits',
+        title: 'Ready when you are',
+        message: 'Generate outfits from your clean closet, or ask the AI stylist.',
+    });
+    container.dataset.seeded = '1';
+}
+
+function renderClosetEmptyState() {
+    const filtered = closetHasActiveFilters();
+    if (filtered) {
+        return `<div class="empty-state empty-state--closet">
+            <p>No items match your filters.</p>
+            <p class="hint-text">Try clearing filters or broadening your search.</p>
+            <button type="button" class="btn btn-secondary btn-sm" id="closet-empty-clear">Clear filters</button>
+        </div>`;
+    }
+    return `<div class="empty-state empty-state--closet">
+        <svg class="empty-state-illustration" viewBox="0 0 120 100" width="120" height="100" aria-hidden="true">
+            <rect x="20" y="25" width="80" height="55" rx="8" fill="var(--color-accent-soft)" stroke="var(--primary-color)" stroke-width="2"/>
+            <path d="M35 45h50M35 58h35" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="88" cy="38" r="10" fill="var(--card-bg)" stroke="var(--primary-color)" stroke-width="2"/>
+        </svg>
+        <p>Your closet is empty</p>
+        <p class="hint-text">Add your first piece to start building outfits.</p>
+        <button type="button" class="btn btn-primary btn-sm" id="closet-empty-add">Add clothing</button>
+    </div>`;
+}
+
+function setVisualSearchMode(on, label) {
+    closetVisualSearchMode = on;
+    const strip = document.getElementById('visual-search-strip');
+    const labelEl = document.getElementById('visual-search-strip-label');
+    if (!strip) return;
+    strip.classList.toggle('hidden', !on);
+    if (labelEl && label) labelEl.textContent = label;
+}
+
+function initClosetShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        if (currentTab !== 'closet') return;
+        const tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) {
+            if (e.key !== 'Escape') return;
+        }
+        if (e.key === '/' && tag !== 'INPUT') {
+            e.preventDefault();
+            document.getElementById('closet-search')?.focus();
+            return;
+        }
+        if (e.key === 'Escape') {
+            if (closetVisualSearchMode) {
+                clearAllClosetFilters();
+                return;
+            }
+            if (closetSelectedItemId) {
+                closeClosetDetailPane();
+                closeModal();
+            }
+            return;
+        }
+        if (e.key === 'Enter' && closetKeyboardFocusId) {
+            e.preventDefault();
+            showItemModal(closetKeyboardFocusId);
+            return;
+        }
+        const arrowMap = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -1, ArrowDown: 1 };
+        if (arrowMap[e.key] != null) {
+            e.preventDefault();
+            moveClosetGridFocus(arrowMap[e.key]);
+        }
+    });
+    document.getElementById('visual-search-clear')?.addEventListener('click', () => {
+        clearAllClosetFilters();
+    });
+    document.getElementById('closet-clear-filters')?.addEventListener('click', clearAllClosetFilters);
+}
+
 // ---- XSS defence ------------------------------------------------------------
-// Every place we drop string data into innerHTML must wrap it in escapeHtml.
-// We've also got a separate `safeUrl` for src= / href= so a stored
-// `javascript:` URL can't surface from a malicious item record. The CSP
-// already blocks inline-script execution, but escaping keeps even visual
-// injection (broken layouts via injected <style>) off the table.
-
-const _ESC_MAP = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-    '`': '&#96;',
-    '/': '&#x2F;',
-};
-
-function escapeHtml(value) {
-    if (value === null || value === undefined) return '';
-    return String(value).replace(/[&<>"'`/]/g, (ch) => _ESC_MAP[ch]);
-}
-
-function formatApiError(detail) {
-    if (detail === null || detail === undefined) return 'Unknown error';
-    if (typeof detail === 'string') return detail;
-    if (Array.isArray(detail)) {
-        return detail
-            .map((entry) => {
-                if (typeof entry === 'string') return entry;
-                if (entry && typeof entry.msg === 'string') return entry.msg;
-                return JSON.stringify(entry);
-            })
-            .join('; ');
-    }
-    if (typeof detail === 'object' && typeof detail.msg === 'string') return detail.msg;
-    try {
-        return JSON.stringify(detail);
-    } catch {
-        return String(detail);
-    }
-}
-
-function safeUrl(value) {
-    // Allow only http(s), relative paths, and our own /uploads/. Anything
-    // else (javascript:, data:, vbscript:) collapses to an empty string.
-    if (value === null || value === undefined) return '';
-    const s = String(value).trim();
-    if (s === '') return '';
-    if (/^https?:\/\//i.test(s)) return escapeHtml(s);
-    if (s.startsWith('/uploads/')) return escapeHtml(s);
-    if (s.startsWith('uploads/')) {
-        return escapeHtml('/' + s.replace(/^\/+/, ''));
-    }
-    // DB stores absolute paths (e.g. /opt/closet-org/uploads/item_abc.webp).
-    const base = s.split(/[/\\]/).pop();
-    if (base && /^item_[^/\\]+\.(webp|png|jpe?g|gif)$/i.test(base)) {
-        return escapeHtml('/uploads/' + encodeURIComponent(base));
-    }
-    if (s.startsWith('/') || s.startsWith('./')) {
-        return escapeHtml(s);
-    }
-    return '';
-}
-
-function closetItemImageUrl(item) {
-    if (!item) return '';
-    return safeUrl(item.thumbnail_path || item.image_path);
-}
+// escapeHtml / safeUrl live in /frontend/lib/web-utils.js (shared with Vitest).
 
 async function apiFetch(path, options = {}) {
     const headers = {
@@ -140,21 +443,11 @@ async function checkAuthentication() {
         
         currentUser = await response.json();
         initializeApp();
-        if (currentUser.social_enabled !== false) {
-            showTab('feed');
-        }
     } catch (error) {
         console.error('Auth error:', error);
-        const onApp = window.location.pathname === '/app' || window.location.pathname.endsWith('/app');
-        if (!onApp || !authToken) {
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('user');
-            window.location.href = '/frontend/login.html';
-            return;
-        }
-        showFatalAppError(
-            error.message || 'Could not start the app. Try a hard refresh or sign in again.'
-        );
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
+        window.location.href = '/frontend/login.html';
     }
 }
 
@@ -175,20 +468,7 @@ function showFatalAppError(message) {
 
 // Initialize App
 function initializeApp() {
-    // Set user info in header
-    updateUserDisplay();
-    
-    // Initialize components
-    initNavigation();
-    initUpload();
-    initThemeToggle();
-    initUserMenu();
-    initProfile();
-
-    initClosetFilterUi();
-    initCareSubnav();
-    initItemModal();
-
+    // Expose API before any code that calls window.ClosetApp (e.g. applySocialNav in updateUserDisplay).
     window.ClosetApp = {
         API_BASE,
         authToken,
@@ -208,22 +488,89 @@ function initializeApp() {
         showToast,
         updateUserDisplay,
         refreshCurrentUser,
+        applyThemePreference,
         loadOutfitsPlannedPreview: () =>
             window.ClosetFeatures?.loadOutfitsPlannedPreview?.(),
+        isDesktopCloset,
+        closeClosetDetailPane,
+        setVisualSearchMode,
+        clearAllClosetFilters,
+        showConfirmDialog,
+        openAppModal,
+        closeAppModal,
+        closeModal,
+        getSelectedUploadFile: () => selectedFile,
+        navigateToWishlistPrefill: (prefill) => {
+            window.ClosetFeatures?.applyWishlistPrefill?.(prefill);
+            showTab('wishlist');
+        },
     };
 
-    if (window.ClosetFeatures) {
-        window.ClosetFeatures.init();
-        window.ClosetFeatures.loadProfileHub();
-        window.ClosetFeatures.loadOutfitsPlannedPreview();
+    try {
+        updateUserDisplay();
+        initNavigation();
+        initUpload();
+        initThemeToggle();
+        initUserMenu();
+        initProfile();
+        initClosetFilterUi();
+        initClosetShortcuts();
+        initCareSubnav();
+        initItemModal();
+        initAppDialogs();
+    } catch (err) {
+        console.error('initializeApp setup failed:', err);
+        showFatalAppError(
+            err instanceof Error ? err.message : 'Could not start the app. Try a hard refresh.'
+        );
     }
 
-    if (window.ClosetUpgrade) {
-        window.ClosetUpgrade.init();
+    try {
+        if (window.ClosetFeatures) {
+            window.ClosetFeatures.init();
+            window.ClosetFeatures.loadProfileHub();
+            window.ClosetFeatures.loadOutfitsPlannedPreview();
+            window.ClosetFeatures.loadOnboardingBanner?.();
+        }
+        if (window.ClosetUpgrade) {
+            window.ClosetUpgrade.init();
+        }
+        if (window.ClosetUpload) {
+            window.ClosetUpload.init();
+        }
+    } catch (err) {
+        console.error('Feature modules init failed:', err);
     }
 
-    loadCloset().catch((err) => console.error('loadCloset failed:', err));
+    applyClosetViewClasses();
 
+    const deep = ClosetWebUtils.parseAppDeepLink(window.location.search);
+    let startTab = deep.tab;
+    if (!startTab) {
+        startTab = currentUser?.social_enabled !== false ? 'feed' : 'closet';
+    }
+    const startOptions = {};
+    if (deep.pinIds.length) {
+        startOptions.pinItemId = deep.pinIds.length === 1 ? deep.pinIds[0] : deep.pinIds;
+    }
+    if (deep.wishlist && (deep.wishlist.openAdd || deep.wishlist.name)) {
+        startOptions.wishlistPrefill = deep.wishlist;
+    }
+    showTab(startTab, startOptions);
+
+    // Defer welcome popup until shell layout has painted.
+    setTimeout(() => window.ClosetOnboarding?.maybeShow?.(), 120);
+
+    loadCloset().catch((err) => {
+        console.error('loadCloset failed:', err);
+        const grid = document.getElementById('closet-grid');
+        if (grid) {
+            grid.innerHTML = `<div class="empty-state"><p>${escapeHtml(err.message)}</p><button type="button" class="btn btn-secondary btn-sm" id="closet-retry-btn">Retry</button></div>`;
+            document.getElementById('closet-retry-btn')?.addEventListener('click', () => loadCloset());
+        }
+    });
+
+    seedOutfitsEmptyIfNeeded();
     document.getElementById('generate-outfits-btn')?.addEventListener('click', () => generateOutfits());
     const reshuffleBtn = document.getElementById('reshuffle-outfits-btn');
     if (reshuffleBtn) {
@@ -264,12 +611,31 @@ function updateUserDisplay() {
     if (userInitials) userInitials.textContent = initials;
     if (profileInitials) profileInitials.textContent = initials;
 
-    const feedBtn = document.getElementById('nav-feed');
+    const feedBtn = document.querySelector('.header .nav-btn--feed');
     const socialOn = currentUser.social_enabled !== false;
     if (feedBtn) feedBtn.classList.toggle('hidden', !socialOn);
+    document.querySelectorAll('.mobile-tab-bar .nav-btn--feed').forEach((btn) => {
+        btn.classList.toggle('hidden', !socialOn);
+    });
     if (window.ClosetFeatures?.applySocialNav) {
         window.ClosetFeatures.applySocialNav();
     }
+}
+
+function resolveThemePreference(pref) {
+    if (pref === 'system') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    if (window.ClosetWebUtils?.resolveThemePreference) {
+        return window.ClosetWebUtils.resolveThemePreference(pref);
+    }
+    return pref === 'dark' ? 'dark' : 'light';
+}
+
+function applyThemePreference(pref) {
+    const resolved = resolveThemePreference(pref || 'light');
+    document.documentElement.setAttribute('data-theme', resolved);
+    updateThemeIcon(resolved);
 }
 
 // Theme Toggle
@@ -277,21 +643,23 @@ function initThemeToggle() {
     const themeToggle = document.getElementById('theme-toggle');
     if (!themeToggle) return;
     const savedTheme = currentUser.theme_preference || 'light';
-    
-    // Apply saved theme
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    updateThemeIcon(savedTheme);
-    
+    applyThemePreference(savedTheme);
+
+    if (savedTheme === 'system') {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            applyThemePreference('system');
+        });
+    }
+
     themeToggle.addEventListener('click', async () => {
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        
+        const currentResolved = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentResolved === 'dark' ? 'light' : 'dark';
+
         document.documentElement.setAttribute('data-theme', newTheme);
         updateThemeIcon(newTheme);
-        
-        // Save theme preference
+
         try {
-            await fetch(`${API_BASE}/auth/profile`, {
+            await fetch(`${API_BASE}/settings`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${authToken}`,
@@ -299,6 +667,7 @@ function initThemeToggle() {
                 },
                 body: JSON.stringify({ theme_preference: newTheme })
             });
+            currentUser.theme_preference = newTheme;
         } catch (error) {
             console.error('Failed to save theme preference:', error);
         }
@@ -433,6 +802,8 @@ function loadProfileData() {
                 day: 'numeric',
             })
         );
+    } else {
+        setText('profile-created', '—');
     }
 
     if (currentUser.last_login) {
@@ -446,6 +817,8 @@ function loadProfileData() {
                 minute: '2-digit',
             })
         );
+    } else {
+        setText('profile-last-login', '—');
     }
 }
 
@@ -495,12 +868,16 @@ function showTab(tabName, options = {}) {
 
     if (tabName === 'closet') {
         loadCloset();
+        window.ClosetFeatures?.loadOnboardingBanner?.();
     } else if (tabName === 'care') {
         showCarePane(activeCarePane || 'laundry');
     } else if (tabName === 'profile') {
         loadProfileData();
     } else if (tabName === 'outfits') {
         window.ClosetFeatures?.loadOutfitsPlannedPreview?.();
+        window.ClosetUpgrade?.populateAiStylistPins?.();
+    } else if (tabName === 'feed') {
+        window.ClosetFeatures?.loadFeed?.(false);
     }
 
     window.ClosetFeatures?.onTabShown?.(tabName, options);
@@ -543,12 +920,36 @@ function setChipGroupActive(group, value) {
 
 function syncChipsFromSelects() {
     const category = document.getElementById('category-filter');
-    const status = document.getElementById('status-filter');
     const rotation = document.getElementById('rotation-filter');
-    if (!category || !status || !rotation) return;
+    if (!category || !rotation) return;
     setChipGroupActive('category', category.value);
-    setChipGroupActive('status', status.value);
     setChipGroupActive('rotation', rotation.value);
+    syncFilterToggleUi();
+}
+
+function initClosetFilterSections() {
+    const sections = ClosetWebUtils.readClosetFilterSections(localStorage);
+    document.querySelectorAll('[data-filter-section]').forEach((section) => {
+        const id = section.dataset.filterSection;
+        const expanded = sections[id] !== false;
+        const toggle = section.querySelector('.filter-section-toggle');
+        const body = section.querySelector('.filter-section-body');
+        if (body) body.classList.toggle('hidden', !expanded);
+        if (toggle) toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        toggle?.addEventListener('click', () => {
+            const nextExpanded = body?.classList.contains('hidden');
+            if (body) body.classList.toggle('hidden', !nextExpanded);
+            toggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+            const next = { ...ClosetWebUtils.readClosetFilterSections(localStorage), [id]: nextExpanded };
+            ClosetWebUtils.writeClosetFilterSections(localStorage, next);
+        });
+    });
+}
+
+function syncClosetLocationFilters(fromEl, toEl) {
+    if (!fromEl || !toEl || fromEl === toEl) return;
+    toEl.innerHTML = fromEl.innerHTML;
+    toEl.value = fromEl.value;
 }
 
 function initClosetFilterUi() {
@@ -563,15 +964,60 @@ function initClosetFilterUi() {
     });
 
     const sortEl = document.getElementById('sort-by');
-    if (sortEl) sortEl.addEventListener('change', loadCloset);
+    if (sortEl) {
+        const savedRaw = localStorage.getItem(CLOSET_SORT_KEY);
+        const savedSort = ClosetWebUtils.normalizeClosetSortKey(savedRaw);
+        if (savedSort && sortEl.querySelector(`option[value="${savedSort}"]`)) {
+            sortEl.value = savedSort;
+            if (savedRaw !== savedSort) localStorage.setItem(CLOSET_SORT_KEY, savedSort);
+        }
+        sortEl.addEventListener('change', () => {
+            localStorage.setItem(CLOSET_SORT_KEY, sortEl.value);
+            loadCloset();
+        });
+    }
 
-    document.querySelectorAll('.filter-chip').forEach((chip) => {
+    initClosetFilterSections();
+    initClosetFilterDrawer();
+
+    const locRail = document.getElementById('closet-location-filter-rail');
+    const locToolbar = document.getElementById('closet-location-filter');
+    if (locRail && locToolbar) {
+        const syncLoc = (source, target) => {
+            if (target.options.length !== source.options.length) {
+                target.innerHTML = source.innerHTML;
+            }
+            target.value = source.value;
+        };
+        locToolbar.addEventListener('change', () => {
+            syncLoc(locToolbar, locRail);
+            updateClosetLocationBadge();
+            loadCloset();
+        });
+        locRail.addEventListener('change', () => {
+            syncLoc(locRail, locToolbar);
+            updateClosetLocationBadge();
+            loadCloset();
+        });
+    }
+
+    document.querySelectorAll('[data-filter-key]').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            const key = chip.dataset.filterKey;
+            if (closetFilterKeys.has(key)) closetFilterKeys.delete(key);
+            else closetFilterKeys.add(key);
+            syncFilterToggleUi();
+            syncStatusSelectFromFilterKeys();
+            loadCloset();
+        });
+    });
+
+    document.querySelectorAll('.filter-chip[data-chip-group]').forEach((chip) => {
         chip.addEventListener('click', () => {
             const group = chip.dataset.chipGroup;
             const value = chip.dataset.value;
             const map = {
                 category: 'category-filter',
-                status: 'status-filter',
                 rotation: 'rotation-filter',
             };
             const selectId = map[group];
@@ -579,6 +1025,20 @@ function initClosetFilterUi() {
             document.getElementById(selectId).value = value;
             setChipGroupActive(group, value);
             loadCloset();
+        });
+    });
+
+    document.getElementById('closet-location-filter')?.addEventListener('change', () => {
+        updateClosetLocationBadge();
+        loadCloset();
+    });
+
+    document.querySelectorAll('input[name="outfit-source"]').forEach((radio) => {
+        radio.addEventListener('change', () => {
+            document.querySelectorAll('.source-chip').forEach((label) => {
+                const input = label.querySelector('input[name="outfit-source"]');
+                label.classList.toggle('active', input && input.checked);
+            });
         });
     });
 
@@ -593,6 +1053,20 @@ function initClosetFilterUi() {
     }
 
     syncChipsFromSelects();
+
+    document.getElementById('closet-density-btn')?.addEventListener('click', cycleClosetDensity);
+    document.getElementById('closet-layout-btn')?.addEventListener('click', toggleClosetLayout);
+
+    document.querySelectorAll('.color-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            const color = chip.dataset.color || '';
+            document.querySelectorAll('.color-chip').forEach((c) => {
+                c.classList.toggle('active', c === chip);
+            });
+            closetColorFilter = color;
+            loadCloset();
+        });
+    });
 }
 
 // Upload functionality
@@ -658,11 +1132,18 @@ function initUpload() {
         resetUpload();
         showTab('upload');
     });
+
+    document.getElementById('view-closet-btn')?.addEventListener('click', () => {
+        showTab('closet');
+        if (lastUploadedItemId) {
+            showItemModal(lastUploadedItemId);
+        }
+    });
 }
 
 function handleFileSelect(file) {
     if (!file || !file.type.startsWith('image/')) {
-        alert('Please select an image file');
+        showToast('Please select an image file');
         return;
     }
     
@@ -705,7 +1186,7 @@ async function uploadClothing() {
             try {
                 data = JSON.parse(bodyText);
             } catch {
-                alert(
+                showToast(
                     'Upload failed: server returned invalid JSON (HTTP ' +
                         response.status +
                         ').'
@@ -714,7 +1195,7 @@ async function uploadClothing() {
             }
         } else if (!response.ok) {
             const snippet = bodyText.replace(/\s+/g, ' ').trim().slice(0, 120);
-            alert(
+            showToast(
                 'Upload failed: HTTP ' +
                     response.status +
                     (snippet ? ' — ' + snippet : '') +
@@ -726,13 +1207,15 @@ async function uploadClothing() {
         }
 
         if (response.ok) {
+            lastUploadedItemId = data.item_id != null ? Number(data.item_id) : null;
             showClassificationResult(data);
-            loadCloset(); // Refresh closet
+            loadCloset();
+            showToast('Item added to your closet');
         } else {
-            alert('Upload failed: ' + formatApiError(data.detail));
+            showToast('Upload failed: ' + formatApiError(data.detail));
         }
     } catch (error) {
-        alert('Upload failed: ' + error.message);
+        showToast('Upload failed: ' + error.message);
     } finally {
         uploadBtn.disabled = false;
         uploadBtn.textContent = 'Upload & Classify';
@@ -777,7 +1260,8 @@ function showClassificationResult(data) {
             <span class="result-value">${escapeHtml((c.colors || []).join(', '))}</span>
         </div>
     `;
-    
+    window.ClosetUpload?.showBulkSuggestion?.(c);
+
     document.getElementById('upload-preview').classList.add('hidden');
     resultDiv.classList.remove('hidden');
 }
@@ -788,6 +1272,14 @@ function resetUpload() {
     document.getElementById('upload-area').classList.remove('hidden');
     document.getElementById('upload-preview').classList.add('hidden');
     document.getElementById('classification-result').classList.add('hidden');
+    document.getElementById('bulk-suggest-banner')?.classList.add('hidden');
+    document.getElementById('upload-photo-wishlist-panel')?.classList.add('hidden');
+    ['photo-wish-name', 'photo-wish-price', 'photo-wish-url', 'photo-wish-notes'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    const intentEl = document.getElementById('photo-wish-intent');
+    if (intentEl) intentEl.value = 'want';
 }
 
 // Load closet items
@@ -795,9 +1287,12 @@ async function loadCloset() {
     const grid = document.getElementById('closet-grid');
     if (!grid) return;
 
-    grid.innerHTML = '<div class="loading">Loading your closet...</div>';
+    if (!closetVisualSearchMode) {
+        grid.innerHTML = '<div class="loading">Loading your closet...</div>';
+    }
 
     const category = document.getElementById('category-filter')?.value || '';
+    syncStatusSelectFromFilterKeys();
     const status = document.getElementById('status-filter')?.value || '';
     const rotation = document.getElementById('rotation-filter')?.value || '';
     const sortBy = document.getElementById('sort-by')?.value || 'recent';
@@ -821,28 +1316,48 @@ async function loadCloset() {
 
         const data = await apiFetch(path);
         let items = Array.isArray(data.items) ? data.items : [];
+        const totalBeforeClient = items.length;
 
-        if (rotation === 'favorites') {
-            items = items.filter((item) => item.is_favorite);
-        } else if (rotation) {
+        items = applyClosetClientFilters(items);
+
+        if (rotation) {
             items = items.filter((item) => (item.rotation_category || 'new') === rotation);
         }
 
+        if (closetColorFilter) {
+            items = items.filter((item) =>
+                (item.colors || []).some((c) => c === closetColorFilter)
+            );
+        }
+
         items = sortItems(items, sortBy);
+        updateClosetLocationBadge();
+        updateClosetStudioMeta(items.length, totalBeforeClient);
+
+        applyClosetViewClasses();
+        const layout = readClosetLayout();
 
         if (items.length === 0) {
-            grid.innerHTML =
-                '<div class="empty-state"><p>Your closet is empty.</p><p class="hint-text">Add items from the Add tab, or clear filters above.</p></div>';
+            grid.classList.add('is-empty-stage');
+            grid.innerHTML = renderClosetEmptyState();
+            document.getElementById('closet-empty-add')?.addEventListener('click', () => showTab('upload'));
+            document.getElementById('closet-empty-clear')?.addEventListener('click', clearAllClosetFilters);
+            if (closetSelectedItemId) closeClosetDetailPane();
             return;
         }
 
-        grid.innerHTML = items.map((item) => createClothingCard(item)).join('');
+        grid.classList.remove('is-empty-stage');
+        if (layout === 'rails') {
+            grid.innerHTML = renderClosetRails(items);
+        } else {
+            grid.innerHTML = items.map((item) => createClothingCard(item)).join('');
+        }
 
-        grid.querySelectorAll('.clothing-card').forEach((card) => {
-            card.addEventListener('click', () => {
-                showItemModal(Number(card.dataset.itemId));
-            });
-        });
+        if (closetSelectedItemId) {
+            highlightClosetCard(closetSelectedItemId);
+        }
+
+        bindClosetCardInteractions(grid);
     } catch (error) {
         console.error('Error loading closet:', error);
         const msg = error instanceof Error ? error.message : 'Failed to load closet';
@@ -851,42 +1366,94 @@ async function loadCloset() {
     }
 }
 
+function renderClosetRails(items) {
+    const order = ['Top', 'Bottom', 'Dress', 'Footwear', 'Accessory', 'Other'];
+    const buckets = new Map();
+    items.forEach((item) => {
+        const key = item.category || 'Other';
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(item);
+    });
+    const keys = [...buckets.keys()].sort((a, b) => {
+        const ai = order.indexOf(a);
+        const bi = order.indexOf(b);
+        const ar = ai === -1 ? order.length : ai;
+        const br = bi === -1 ? order.length : bi;
+        if (ar !== br) return ar - br;
+        return a.localeCompare(b);
+    });
+    return keys
+        .map((key) => {
+            const sectionItems = buckets.get(key) || [];
+            const cards = sectionItems
+                .map((item) => {
+                    const id = Number(item.id);
+                    const thumb = closetItemImageUrl(item);
+                    const bulk =
+                        item.is_bulk && item.quantity
+                            ? `<span class="rail-bulk">×${Number(item.quantity)}</span>`
+                            : '';
+                    return `<button type="button" class="rail-card" data-item-id="${id}">
+                        ${thumb ? `<img src="${thumb}" alt="">` : ''}
+                        <span class="rail-card-title">${escapeHtml(item.subcategory)}</span>
+                        ${bulk}
+                        ${cardQuickActionsMarkup(item)}
+                    </button>`;
+                })
+                .join('');
+            return `<section class="closet-rail-section"><h3 class="closet-rail-heading">${escapeHtml(key)}</h3><div class="closet-rail-track">${cards}</div></section>`;
+        })
+        .join('');
+}
+
 function sortItems(items, sortBy) {
     const sorted = [...items];
-    
-    switch(sortBy) {
-        case 'last-worn':
+    const key = ClosetWebUtils.normalizeClosetSortKey(sortBy);
+
+    switch (key) {
+        case 'last_worn':
             return sorted.sort((a, b) => {
                 if (!a.last_worn) return -1;
                 if (!b.last_worn) return 1;
                 return new Date(a.last_worn) - new Date(b.last_worn);
             });
-        
-        case 'most-worn':
+
+        case 'most_worn':
             return sorted.sort((a, b) => (b.times_worn || 0) - (a.times_worn || 0));
-        
-        case 'least-worn':
+
+        case 'least_worn':
             return sorted.sort((a, b) => (a.times_worn || 0) - (b.times_worn || 0));
-        
-        case 'best-cpw':
+
+        case 'neglected':
             return sorted.sort((a, b) => {
-                const cpwA = a.cost_per_wear || 999999;
-                const cpwB = b.cost_per_wear || 999999;
+                const aa = a.last_worn ?? '';
+                const bb = b.last_worn ?? '';
+                if (aa === '' && bb === '') return 0;
+                if (aa === '') return -1;
+                if (bb === '') return 1;
+                return aa.localeCompare(bb);
+            });
+
+        case 'cpw':
+            return sorted.sort((a, b) => {
+                const cpwA = a.cost_per_wear ?? null;
+                const cpwB = b.cost_per_wear ?? null;
+                if (cpwA === null && cpwB === null) return 0;
+                if (cpwA === null) return 1;
+                if (cpwB === null) return -1;
                 return cpwA - cpwB;
             });
-        
+
         case 'freshness':
             return sorted.sort((a, b) => {
                 const fA = a.freshness_score || 1.0;
                 const fB = b.freshness_score || 1.0;
                 return fB - fA;
             });
-        
+
         case 'recent':
         default:
-            return sorted.sort((a, b) => {
-                return new Date(b.date_added) - new Date(a.date_added);
-            });
+            return sorted.sort((a, b) => new Date(b.date_added) - new Date(a.date_added));
     }
 }
 
@@ -925,6 +1492,12 @@ function createClothingCard(item) {
     } else if (rotationCategory === 'neglected') {
         rotationBadge = '<span class="rotation-badge rotation-neglected">😴 Neglected</span>';
     }
+    if (item.packed_for_trip) {
+        rotationBadge += '<span class="rotation-badge">🧳 Packed</span>';
+    }
+    if (item.lent_to) {
+        rotationBadge += '<span class="rotation-badge rotation-neglected">On loan</span>';
+    }
     
     // Cost per wear
     const cpwBadge = item.cost_per_wear 
@@ -954,6 +1527,7 @@ function createClothingCard(item) {
                 <img src="${closetItemImageUrl(item)}" alt="${escapeHtml(item.subcategory)}" class="clothing-card-image">
                 ${favoriteIcon}
                 ${rotationBadge}
+                ${cardQuickActionsMarkup(item)}
             </div>
             <div class="clothing-card-content">
                 <h3 class="clothing-card-title">${escapeHtml(item.subcategory)}</h3>
@@ -990,14 +1564,230 @@ function createClothingCard(item) {
     `;
 }
 
-// Item Modal
-// Item Modal
-async function showItemModal(itemId) {
-    if (window.ClosetItemDetail) {
-        await window.ClosetItemDetail.open(itemId);
+// Shared in-app dialogs (replace confirm())
+let _confirmResolver = null;
+
+function openAppModal(id) {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.classList.add('active');
+}
+
+function closeAppModal(id) {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.remove('active');
+    modal.classList.add('hidden');
+}
+
+function finishConfirmDialog(result) {
+    closeAppModal('app-confirm-modal');
+    if (_confirmResolver) {
+        _confirmResolver(result);
+        _confirmResolver = null;
+    }
+}
+
+function showConfirmDialog({
+    title = 'Confirm',
+    message = '',
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
+    danger = false,
+} = {}) {
+    const modal = document.getElementById('app-confirm-modal');
+    if (!modal) return Promise.resolve(window.confirm(message || title));
+    const titleEl = document.getElementById('app-confirm-title');
+    const msgEl = document.getElementById('app-confirm-message');
+    const okBtn = document.getElementById('app-confirm-ok');
+    const cancelBtn = document.getElementById('app-confirm-cancel');
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = message;
+    if (okBtn) {
+        okBtn.textContent = confirmText;
+        okBtn.className = danger ? 'btn btn-danger' : 'btn btn-primary';
+    }
+    if (cancelBtn) cancelBtn.textContent = cancelText;
+    return new Promise((resolve) => {
+        _confirmResolver = resolve;
+        openAppModal('app-confirm-modal');
+    });
+}
+
+function initAppDialogs() {
+    document.getElementById('app-confirm-cancel')?.addEventListener('click', () => finishConfirmDialog(false));
+    document.getElementById('app-confirm-ok')?.addEventListener('click', () => finishConfirmDialog(true));
+    document.getElementById('app-confirm-modal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'app-confirm-modal') finishConfirmDialog(false);
+    });
+
+    let wornItemId = null;
+    document.querySelectorAll('.item-worn-close').forEach((el) => {
+        el.addEventListener('click', () => {
+            wornItemId = null;
+            closeAppModal('item-worn-modal');
+        });
+    });
+    document.getElementById('item-worn-form')?.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        if (!wornItemId) return;
+        const occasion = document.getElementById('item-worn-occasion-input')?.value.trim() || null;
+        try {
+            await apiFetch(`/item/${wornItemId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ worn: true, occasion }),
+            });
+            closeAppModal('item-worn-modal');
+            closeModal();
+            loadCloset();
+            showToast('✓ Marked as worn!');
+        } catch {
+            showToast('Failed to update item');
+        } finally {
+            wornItemId = null;
+        }
+    });
+    window._openMarkWornModal = (itemId) => {
+        wornItemId = itemId;
+        const input = document.getElementById('item-worn-occasion-input');
+        if (input) input.value = '';
+        openAppModal('item-worn-modal');
+    };
+
+    let laundryItemId = null;
+    document.querySelectorAll('.laundry-add-close').forEach((el) => {
+        el.addEventListener('click', () => {
+            laundryItemId = null;
+            closeAppModal('laundry-add-modal');
+        });
+    });
+    document.getElementById('laundry-add-form')?.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        if (!laundryItemId) return;
+        const urgent = document.getElementById('laundry-add-urgent')?.checked;
+        const priority = urgent ? 'urgent' : 'normal';
+        try {
+            await apiFetch(`/laundry/add/${laundryItemId}?priority=${priority}`, { method: 'POST' });
+            closeAppModal('laundry-add-modal');
+            closeModal();
+            loadCloset();
+            showToast('🧺 Added to laundry queue!');
+        } catch (error) {
+            if (String(error.message || '').includes('already in')) {
+                showToast('Item is already in laundry queue');
+            } else {
+                showToast('Failed to add to laundry');
+            }
+        } finally {
+            laundryItemId = null;
+        }
+    });
+    window._openLaundryAddModal = (itemId) => {
+        laundryItemId = itemId;
+        const urgent = document.getElementById('laundry-add-urgent');
+        if (urgent) urgent.checked = false;
+        openAppModal('laundry-add-modal');
+    };
+}
+
+function cardQuickActionsMarkup(item) {
+    const itemId = Number(item.id) || 0;
+    const favActive = item.is_favorite ? ' active' : '';
+    const favIcon = item.is_favorite ? '⭐' : '☆';
+    return `<div class="card-quick-actions">
+        <button type="button" class="card-quick-btn" data-quick="clean" data-item-id="${itemId}" title="Mark clean" aria-label="Mark clean">💧</button>
+        <button type="button" class="card-quick-btn${favActive}" data-quick="favorite" data-item-id="${itemId}" title="Favorite" aria-label="Favorite">${favIcon}</button>
+        <button type="button" class="card-quick-btn card-quick-danger" data-quick="delete" data-item-id="${itemId}" title="Delete" aria-label="Delete">🗑</button>
+    </div>`;
+}
+
+async function quickMarkClean(itemId) {
+    try {
+        await apiFetch(`/item/${itemId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ washed: true }),
+        });
+        await apiFetch(`/item/${itemId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ laundry_state: 'clean' }),
+        });
+        showToast('✨ Marked as clean!');
+        loadCloset();
+        if (closetSelectedItemId === itemId) {
+            window.ClosetItemDetail?.refresh?.();
+        }
+    } catch (error) {
+        showToast(error.message || 'Failed to update item');
+    }
+}
+
+async function quickFavorite(itemId) {
+    try {
+        await apiFetch(`/item/${itemId}/favorite`, { method: 'PUT' });
+        showToast('⭐ Favorite updated!');
+        loadCloset();
+        if (closetSelectedItemId === itemId) {
+            window.ClosetItemDetail?.refresh?.();
+        }
+    } catch (error) {
+        showToast(error.message || 'Failed to toggle favorite');
+    }
+}
+
+async function handleCardQuickAction(action, itemId) {
+    if (!itemId) return;
+    if (action === 'clean') {
+        await quickMarkClean(itemId);
         return;
     }
-    alert('Item detail module failed to load.');
+    if (action === 'favorite') {
+        await quickFavorite(itemId);
+        return;
+    }
+    if (action === 'delete') {
+        await deleteItem(itemId, { fromCard: true });
+    }
+}
+
+function bindClosetCardInteractions(root) {
+    if (!root) return;
+    root.querySelectorAll('.clothing-card, .rail-card').forEach((card) => {
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('.card-quick-actions') || e.target.closest('[data-quick]')) return;
+            showItemModal(Number(card.dataset.itemId));
+        });
+    });
+    root.querySelectorAll('[data-quick]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleCardQuickAction(btn.dataset.quick, Number(btn.dataset.itemId));
+        });
+    });
+}
+
+// Item Modal
+async function showItemModal(itemId) {
+    localStorage.setItem('closet_web_item_detail_visited', '1');
+    if (!window.ClosetItemDetail) {
+        showToast('Item detail module failed to load.');
+        return;
+    }
+    closetSelectedItemId = itemId;
+    highlightClosetCard(itemId);
+    const usePane = isDesktopCloset();
+    if (usePane) {
+        document.getElementById('closet-detail-pane')?.classList.remove('hidden');
+        document.getElementById('closet-tab')?.classList.add('closet-has-detail');
+    } else {
+        closeClosetDetailPane();
+    }
+    await window.ClosetItemDetail.open(itemId, usePane ? { mount: 'pane' } : {});
+    window.ClosetFeatures?.loadOnboardingBanner?.();
 }
 
 // Modal close (defer until DOM is ready; script runs at end of body but guard anyway)
@@ -1010,35 +1800,35 @@ function initItemModal() {
             closeModal();
         }
     });
+    document.querySelector('.closet-detail-close')?.addEventListener('click', () => {
+        closeClosetDetailPane();
+        closeModal();
+    });
 }
 
 function closeModal() {
     document.getElementById('item-modal').classList.remove('active');
     document.getElementById('item-modal').classList.add('hidden');
+    closeClosetDetailPane();
 }
 
 // Item actions
 async function markAsWorn(itemId) {
-    // Could add occasion/rating prompt here
-    const occasion = prompt('What occasion? (optional)');
-    
+    if (typeof window._openMarkWornModal === 'function') {
+        window._openMarkWornModal(itemId);
+        return;
+    }
     try {
-        await fetch(`${API_BASE}/item/${itemId}/status`, {
+        await apiFetch(`/item/${itemId}/status`, {
             method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ 
-                worn: true,
-                occasion: occasion || null
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ worn: true }),
         });
         closeModal();
         loadCloset();
         showToast('✓ Marked as worn!');
-    } catch (error) {
-        alert('Failed to update item');
+    } catch {
+        showToast('Failed to update item');
     }
 }
 
@@ -1056,7 +1846,7 @@ async function markAsWashed(itemId) {
         loadCloset();
         showToast('✨ Marked as clean!');
     } catch (error) {
-        alert('Failed to update item');
+        showToast('Failed to update item');
     }
 }
 
@@ -1079,7 +1869,7 @@ async function handleWearAgainDecision(itemId, canWearAgain) {
             showToast('🧺 Added to laundry queue');
         }
     } catch (error) {
-        alert('Failed to update item');
+        showToast('Failed to update item');
     }
 }
 
@@ -1098,81 +1888,160 @@ async function toggleFavorite(itemId) {
         loadCloset();
         showToast('⭐ Favorite updated!');
     } catch (error) {
-        alert('Failed to toggle favorite');
+        showToast('Failed to toggle favorite');
     }
 }
 
 async function addToLaundry(itemId) {
-    const priority = confirm('Is this urgent?') ? 'urgent' : 'normal';
-    
+    if (typeof window._openLaundryAddModal === 'function') {
+        window._openLaundryAddModal(itemId);
+        return;
+    }
     try {
-        await fetch(`${API_BASE}/laundry/add/${itemId}?priority=${priority}`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
+        await apiFetch(`/laundry/add/${itemId}?priority=normal`, { method: 'POST' });
         closeModal();
         loadCloset();
         showToast('🧺 Added to laundry queue!');
     } catch (error) {
-        if (error.message.includes('already in')) {
-            alert('Item is already in laundry queue');
+        if (String(error.message || '').includes('already in')) {
+            showToast('Item is already in laundry queue');
         } else {
-            alert('Failed to add to laundry');
+            showToast('Failed to add to laundry');
         }
     }
 }
 
-// Toast notification helper
-function showToast(message) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    
-    setTimeout(() => toast.classList.add('show'), 100);
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 2500);
+// Toast notification helper (delegates to ClosetWebUtils)
+function showToast(message, type) {
+    ClosetWebUtils.showToast(message, type);
 }
 
-async function deleteItem(itemId) {
-    if (!confirm('Are you sure you want to delete this item?')) return;
-    
+async function deleteItem(itemId, options = {}) {
+    const ok = await showConfirmDialog({
+        title: 'Delete item',
+        message: 'Remove this from your closet? This cannot be undone.',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        danger: true,
+    });
+    if (!ok) return;
+
     try {
-        await fetch(`${API_BASE}/item/${itemId}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-        closeModal();
+        await apiFetch(`/item/${itemId}`, { method: 'DELETE' });
+        if (!options.fromCard) {
+            closeModal();
+        } else if (closetSelectedItemId === itemId) {
+            closeClosetDetailPane();
+            closeModal();
+        }
         loadCloset();
+        showToast('Item deleted');
     } catch (error) {
-        alert('Failed to delete item');
+        showToast(error.message || 'Failed to delete item');
     }
+}
+
+function roundTempC(c) {
+    if (c == null || Number.isNaN(Number(c))) return '—';
+    return `${Math.round(Number(c))}°C`;
+}
+
+function formatWeatherHeadline(w) {
+    if (!w) return '';
+    const temp = roundTempC(w.apparent_temperature_c ?? w.temperature_c);
+    const place = w.location_name ? `${w.location_name} · ` : '';
+    const summary = w.summary || w.condition || '';
+    return `${place}${temp} · ${summary}`.replace(/\s·\s$/, '').trim();
+}
+
+function formatWeatherDetail(w) {
+    if (!w) return 'Turn on weather sync to bias outfits toward today.';
+    const pieces = [
+        `${roundTempC(w.min_temp_c)}–${roundTempC(w.max_temp_c)}`,
+        `${w.precipitation_probability ?? 0}% rain`,
+        `${Math.round(w.wind_speed_kmh ?? 0)} km/h wind`,
+        w.derived_season,
+    ].filter(Boolean);
+    return pieces.join(' · ');
+}
+
+function renderWeatherBanner(banner, weather, weatherOn) {
+    if (!banner) return;
+    if (!weatherOn) {
+        banner.classList.add('hidden');
+        banner.textContent = '';
+        return;
+    }
+    if (!weather) {
+        banner.classList.remove('hidden');
+        banner.innerHTML = '<span class="weather-banner-headline">Weather not synced</span><span class="weather-banner-detail">Turn on sync to bias outfits toward today.</span>';
+        return;
+    }
+    banner.classList.remove('hidden');
+    const headline = formatWeatherHeadline(weather);
+    const detail = formatWeatherDetail(weather);
+    banner.innerHTML = `<span class="weather-banner-headline">${escapeHtml(headline)}</span><span class="weather-banner-detail">${escapeHtml(detail)}</span>`;
 }
 
 // Generate outfits
 async function generateOutfits(opts = {}) {
     const container = document.getElementById('outfits-container');
     container.innerHTML = '<div class="loading">Generating outfits...</div>';
-    
+
     const occasion = document.getElementById('occasion-filter').value;
     const season = document.getElementById('season-filter').value;
     const vibeEl = document.getElementById('vibe-filter');
     const vibe = vibeEl ? vibeEl.value : '';
-    const includePacked = document.getElementById('include-packed-toggle')?.checked;
+    const outfitSource =
+        document.querySelector('input[name="outfit-source"]:checked')?.value || 'home';
     const weatherBanner = document.getElementById('outfit-weather-banner');
 
     const params = new URLSearchParams();
     if (occasion) params.append('occasion', occasion);
     if (season) params.append('season', season);
     if (vibe) params.append('vibe', vibe);
-    if (includePacked) params.append('include_packed', 'true');
     if (opts.forceSeed) params.append('seed', String(Date.now()));
+
+    const locSel = document.getElementById('outfits-location-filter');
+    const locId = locSel?.value ? Number(locSel.value) : null;
+    if (locId) params.append('closet_location_id', String(locId));
+
+    try {
+        const closetData = await apiFetch('/closet');
+        let scoped = (closetData.items || []).filter((item) => {
+            if (item.lent_to) return false;
+            if (item.washed === false) return false;
+            if (item.status === 'wishlist') return false;
+            if (item.is_bulk && (item.clean_count ?? 0) <= 0) return false;
+            return true;
+        });
+        if (locId) {
+            scoped = scoped.filter((item) => item.closet_location_id === locId);
+        }
+        const packedIds = scoped.filter((item) => item.packed_for_trip).map((item) => item.id);
+        const homeIds = scoped.filter((item) => !item.packed_for_trip).map((item) => item.id);
+        updateOutfitSourceCounts(homeIds.length, packedIds.length);
+
+        if (outfitSource === 'packed') {
+            if (!packedIds.length) {
+                setOutfitsContainerEmpty(container, {
+                    variant: 'outfits',
+                    title: 'Travel bag is empty',
+                    message: 'Pack a few clean items first, then Travel bag can suggest outfits.',
+                    ctaTab: 'pack',
+                    ctaLabel: 'Open pack mode',
+                });
+                return;
+            }
+            params.append('include_packed', 'true');
+            if (homeIds.length) params.append('exclude_item_ids', homeIds.join(','));
+        } else if (packedIds.length) {
+            params.append('exclude_item_ids', packedIds.join(','));
+        }
+    } catch (e) {
+        container.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+        return;
+    }
 
     const weatherOn = window.ClosetFeatures?.isWeatherSyncEnabled?.();
     if (weatherOn && window.ClosetFeatures?.getWeatherCoords) {
@@ -1181,45 +2050,38 @@ async function generateOutfits(opts = {}) {
             params.append('lat', String(lat));
             params.append('lon', String(lon));
         } catch (e) {
-            if (weatherBanner) {
-                weatherBanner.classList.remove('hidden');
-                weatherBanner.textContent = e.message || 'Weather unavailable';
-            }
+            renderWeatherBanner(weatherBanner, null, true);
+            const detailEl = weatherBanner?.querySelector('.weather-banner-detail');
+            if (detailEl) detailEl.textContent = e.message || 'Weather unavailable';
         }
     }
 
     try {
         const data = await apiFetch(`/outfits/recommend?${params}`);
 
-        if (weatherBanner) {
-            if (data.weather) {
-                const w = data.weather;
-                weatherBanner.classList.remove('hidden');
-                weatherBanner.textContent = [
-                    w.location_name,
-                    w.summary || w.condition,
-                    w.temperature_c != null ? `${Math.round(w.temperature_c)}°C` : '',
-                ]
-                    .filter(Boolean)
-                    .join(' · ');
-            } else {
-                weatherBanner.classList.add('hidden');
-                weatherBanner.textContent = '';
-            }
-        }
+        renderWeatherBanner(weatherBanner, data.weather, weatherOn);
 
         if (!data.outfits.length) {
-            container.innerHTML = '<div class="empty-state">No outfit combinations found. Try adding more items or changing filters!</div>';
+            setOutfitsContainerEmpty(container, {
+                variant: 'outfits',
+                title: 'No outfits yet',
+                message: 'Try different filters or add more clean items to your closet.',
+                ctaTab: 'closet',
+                ctaLabel: 'Browse closet',
+            });
             return;
         }
         
+        container.classList.add('outfits-container--has-results');
         container.innerHTML = data.outfits.map((outfit, index) => createOutfitCard(outfit, index)).join('');
+        bindOutfitPlanButtons();
     } catch (error) {
         container.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
     }
 }
 
 function createOutfitCard(outfit, index) {
+    const itemIds = (outfit.items || []).map((i) => Number(i.id)).filter(Boolean);
     const items = (outfit.items || []).map(item => `
         <div class="outfit-item">
             <img src="${closetItemImageUrl(item)}" alt="${escapeHtml(item.subcategory)}">
@@ -1238,8 +2100,49 @@ function createOutfitCard(outfit, index) {
             <div class="outfit-items">
                 ${items}
             </div>
+            <div class="outfit-card-actions">
+                <button type="button" class="btn btn-secondary btn-sm" data-plan-outfit="${escapeHtml(itemIds.join(','))}">Plan this look</button>
+            </div>
         </div>
     `;
+}
+
+function updateOutfitSourceCounts(homeCount, packedCount) {
+    const homeSpan = document.querySelector('input[name="outfit-source"][value="home"]')?.closest('.source-chip')?.querySelector('span');
+    const packedSpan = document.querySelector('input[name="outfit-source"][value="packed"]')?.closest('.source-chip')?.querySelector('span');
+    if (homeSpan) homeSpan.textContent = `Home closet (${homeCount})`;
+    if (packedSpan) packedSpan.textContent = `Travel bag (${packedCount})`;
+}
+
+function bindOutfitPlanButtons() {
+    document.querySelectorAll('[data-plan-outfit]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const ids = btn.dataset.planOutfit.split(',').map(Number).filter(Boolean);
+            if (!ids.length) return;
+            if (window.ClosetFeatures?.planWithOutfitItems) {
+                window.ClosetFeatures.planWithOutfitItems(ids);
+            } else {
+                showTab('planning');
+            }
+        });
+    });
+}
+
+function renderCategoryBars(byCategory) {
+    const entries = Object.entries(byCategory || {});
+    if (!entries.length) return '<p class="hint-text">No category data yet.</p>';
+    const max = Math.max(...entries.map(([, c]) => Number(c) || 0), 1);
+    return `<ul class="stat-bars">${entries
+        .map(([cat, count]) => {
+            const n = Number(count) || 0;
+            const pct = Math.round((n / max) * 100);
+            return `<li class="stat-bar-row">
+                <span class="stat-bar-label">${escapeHtml(cat)}</span>
+                <span class="stat-bar-track"><span class="stat-bar-fill" style="width:${pct}%"></span></span>
+                <span class="stat-bar-value">${n}</span>
+            </li>`;
+        })
+        .join('')}</ul>`;
 }
 
 // Load statistics
@@ -1259,8 +2162,15 @@ async function loadStats() {
             const insights = await apiFetch('/closet/insights');
             const gaps = insights.gaps || [];
             if (gaps.length) {
-                insightsHtml = `<div class="stat-card stat-card--wide"><h3>Wardrobe gaps</h3><ul class="stat-list">${gaps
-                    .map((g) => `<li><span>${escapeHtml(g.label || g.id)}</span><span>${escapeHtml(g.detail || '')}</span></li>`)
+                insightsHtml = `<div class="stat-card stat-card--wide"><h3>Capsule gaps</h3><ul class="stat-list stat-list--gaps">${gaps
+                    .map((g) => {
+                        const seed = ClosetWebUtils.gapWishlistSeed(g.id);
+                        const title = g.title || g.label || g.id;
+                        return `<li class="gap-row">
+                            <div class="gap-row-text"><strong>${escapeHtml(title)}</strong><span class="hint-text">${escapeHtml(g.detail || '')}</span></div>
+                            <button type="button" class="btn btn-secondary btn-sm" data-gap-wishlist="${escapeHtml(g.id)}" data-gap-title="${escapeHtml(title)}" data-gap-detail="${escapeHtml(g.detail || '')}" data-gap-category="${escapeHtml(seed.category)}" data-gap-subcategory="${escapeHtml(seed.subcategory)}">Add wishlist target</button>
+                        </li>`;
+                    })
                     .join('')}</ul></div>`;
             }
         } catch {
@@ -1294,17 +2204,25 @@ async function loadStats() {
                 <h3>Recently Added (7 days)</h3>
                 <div class="stat-number">${stats.recently_added}</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card stat-card--wide">
                 <h3>By Category</h3>
-                <ul class="stat-list">
-                    ${Object.entries(stats.by_category || {}).map(([cat, count]) =>
-                        `<li><span>${escapeHtml(cat)}</span><span>${Number(count) || 0}</span></li>`
-                    ).join('')}
-                </ul>
+                ${renderCategoryBars(stats.by_category)}
             </div>
             ${cpwHtml}
             ${insightsHtml}
         `;
+        container.querySelectorAll('[data-gap-wishlist]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                window.ClosetApp?.navigateToWishlistPrefill?.({
+                    openAdd: true,
+                    name: btn.dataset.gapTitle || '',
+                    category: btn.dataset.gapCategory || 'Other',
+                    subcategory: btn.dataset.gapSubcategory || 'Wishlist',
+                    intent: 'want',
+                    notes: btn.dataset.gapDetail || '',
+                });
+            });
+        });
     } catch (error) {
         container.innerHTML = '<div class="empty-state">Failed to load statistics</div>';
     }
@@ -1442,7 +2360,7 @@ async function updateLaundryStatus(queueId, status) {
             loadCloset(); // Refresh closet too
         }
     } catch (error) {
-        alert('Failed to update laundry status');
+        showToast('Failed to update laundry status');
     }
 }
 
@@ -1532,8 +2450,34 @@ async function planOutfitWith(itemId) {
 }
 
 async function considerDonating(itemId) {
-    if (confirm('Mark this item for donation? You can still change your mind later.')) {
-        // TODO: Implement donation marking feature
-        showToast('📦 Item marked for donation');
+    const ok = await showConfirmDialog({
+        title: 'Tag for donation?',
+        message: 'You can remove the donate tag when editing the item.',
+        confirmText: 'Tag item',
+        cancelText: 'Cancel',
+    });
+    if (!ok) return;
+    try {
+        const item = await apiFetch(`/item/${itemId}`);
+        const tags = [...(item.user_tags || [])];
+        if (!tags.includes('donate')) tags.push('donate');
+        await apiFetch(`/item/${itemId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_tags: tags.slice(0, 20) }),
+        });
+        showToast('Tagged for donation');
+        loadCloset();
+        if (window.ClosetItemDetail) {
+            await window.ClosetItemDetail.open(itemId);
+        }
+    } catch (e) {
+        showToast(e.message || 'Could not tag item');
     }
 }
+
+// Exposed for insight cards and feature modules
+window.createInsightCard = createInsightCard;
+window.considerDonating = considerDonating;
+window.planOutfitWith = planOutfitWith;
+window.showItemModal = showItemModal;

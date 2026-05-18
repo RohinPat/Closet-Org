@@ -8,12 +8,12 @@
     --color-accent: #7c4dff;
     --color-accent-hover: #6847e8;
     --color-accent-2: #6366f1;
-    --color-accent-soft: rgba(124, 77, 255, 0.12);
+    --color-accent-soft: rgba(124, 77, 255, 0.14);
     --gradient-accent: linear-gradient(135deg, #a371ff 0%, #7c4dff 45%, #5b6cff 100%);
 
-    --color-success: #10b981;
-    --color-warning: #f59e0b;
-    --color-danger: #ef4444;
+    --color-success: #30d158;
+    --color-warning: #ff9f0a;
+    --color-danger: #ff453a;
 
     /* Semantic tags / chips (light) */
     --tag-cool-bg: #e8eefa;
@@ -22,8 +22,8 @@
     --tag-warm-fg: #7c4a12;
     --tag-accent-bg: #efe8ff;
     --tag-accent-fg: #4c1d95;
-    --tag-neutral-bg: #eef2f7;
-    --tag-neutral-fg: #334155;
+    --tag-neutral-bg: #ede9e4;
+    --tag-neutral-fg: #44403c;
 
     /* Status surfaces (light) — always pair with text label in UI */
     --status-clean-bg: #d8f5e8;
@@ -35,17 +35,47 @@
     --status-wear-bg: #f8efd8;
     --status-wear-fg: #92400e;
 
+    /* Surfaces (mirror mobile surface.*) */
+    --surface-overlay: rgba(255, 255, 255, 0.62);
+    --surface-solid: #ffffff;
+    --surface-input: rgba(255, 255, 255, 0.78);
+    --hairline: rgba(40, 38, 35, 0.12);
+    --divider: rgba(40, 38, 35, 0.08);
+    --thumb-bg: #ede9e4;
+
     /* Progress tracks (unified) */
     --progress-track-height: 8px;
     --progress-track-radius: 9999px;
+
+    /* Layout shell */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-pill: 9999px;
+    --focus-ring: 0 0 0 3px rgba(124, 77, 255, 0.32);
+    --sidebar-width: 216px;
+    --content-max: 1320px;
+    --shell-gutter: 1.25rem;
+    --header-height: 4rem;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-theme='dark'] {
     color-scheme: dark;
+    --focus-ring: 0 0 0 3px rgba(167, 139, 250, 0.38);
     --color-accent: #a78bfa;
     --color-accent-hover: #c4b5fd;
     --color-accent-2: #818cf8;
-    --color-accent-soft: rgba(167, 139, 250, 0.2);
+    --color-accent-soft: rgba(167, 139, 250, 0.22);
     --gradient-accent: linear-gradient(135deg, #c4b5fd 0%, #a78bfa 45%, #7c3aed 100%);
 
     --tag-cool-bg: rgba(129, 140, 248, 0.22);
@@ -65,4 +95,11 @@
     --status-laundry-fg: #c7d2fe;
     --status-wear-bg: rgba(251, 191, 36, 0.18);
     --status-wear-fg: #fcd34d;
+
+    --surface-overlay: rgba(20, 20, 30, 0.35);
+    --surface-solid: #1a1a24;
+    --surface-input: rgba(255, 255, 255, 0.06);
+    --hairline: rgba(255, 255, 255, 0.1);
+    --divider: rgba(255, 255, 255, 0.06);
+    --thumb-bg: #23232e;
 }

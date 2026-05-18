@@ -1,0 +1,473 @@
+/**
+ * UI polish pass — addresses audit from Studio Closet feedback.
+ * Typography, dark surfaces, viewport empty states, feed/stylist/onboarding.
+ */
+
+/* ─── Typography (Inter ships 400/600/700 only — stop faking 500) ─── */
+body,
+input,
+select,
+textarea,
+button,
+h1, h2, h3, h4,
+.feed-studio-heading,
+.closet-studio-heading,
+.onboarding-tour-title,
+.app-sidebar-title {
+    font-family: var(--font-sans);
+}
+
+body,
+input,
+select,
+textarea,
+button {
+    font-weight: 400;
+}
+
+.btn,
+.cmd-btn,
+.filter-chip,
+.sidebar-nav-btn,
+.care-subnav-btn,
+label,
+.section-label,
+.filter-section-toggle {
+    font-weight: 600;
+}
+
+h1, h2, h3,
+.closet-studio-heading,
+.feed-studio-heading,
+.onboarding-tour-title {
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+/* ─── Ambient depth (mobile orbs, very subtle) ─── */
+.app-main {
+    position: relative;
+}
+
+.app-main::before {
+    content: '';
+    position: fixed;
+    width: 42vmin;
+    height: 42vmin;
+    top: 8%;
+    right: -8%;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--color-accent-soft) 0%, transparent 70%);
+    opacity: 0.45;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.main .container,
+.closet-studio,
+.feed-studio {
+    position: relative;
+    z-index: 1;
+}
+
+/* ─── Sidebar: readable brand + spaced icons ─── */
+@media (min-width: 768px) {
+    .app-sidebar {
+        width: 88px;
+        padding: var(--space-5) var(--space-2) var(--space-4);
+    }
+
+    :root {
+        --sidebar-width: 88px;
+    }
+
+    .app-sidebar-brand {
+        flex-direction: column;
+        gap: 0.35rem;
+        padding-bottom: var(--space-4);
+    }
+
+    .app-sidebar-title {
+        font-size: 0.625rem;
+        width: auto;
+        height: auto;
+        border: none;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: var(--text-muted);
+        overflow: visible;
+    }
+
+    .app-sidebar-title::before {
+        content: none;
+    }
+
+    .app-sidebar-mark {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--hairline);
+        background: var(--card-bg);
+        color: var(--primary-color);
+    }
+
+    .app-sidebar-mark .ui-icon {
+        width: 1.25rem;
+        height: 1.25rem;
+    }
+
+    .app-sidebar-nav {
+        flex: 1;
+        justify-content: center;
+        gap: 0.65rem;
+        padding: var(--space-2) 0;
+    }
+
+    .sidebar-help-btn {
+        font-size: inherit;
+        margin-top: auto;
+    }
+
+    .sidebar-help-btn::after {
+        content: none;
+    }
+
+    .sidebar-help-icon {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        line-height: 1;
+    }
+
+    .sidebar-nav-btn {
+        width: 100%;
+        min-height: 3.25rem;
+        height: auto;
+        padding: 0.45rem 0.25rem;
+        gap: 0.2rem;
+        flex-direction: column;
+    }
+
+    .sidebar-nav-label {
+        position: static;
+        width: auto;
+        height: auto;
+        margin: 0;
+        clip: auto;
+        overflow: visible;
+        font-size: 0.625rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: inherit;
+        opacity: 0.85;
+    }
+
+    .sidebar-nav-btn.active .sidebar-nav-label {
+        color: var(--primary-color);
+        opacity: 1;
+    }
+}
+
+/* ─── Dark mode: inputs & secondary buttons must read clearly ─── */
+[data-theme='dark'] .form-input,
+[data-theme='dark'] .search-input,
+[data-theme='dark'] .filter-select,
+[data-theme='dark'] .cmd-select,
+[data-theme='dark'] textarea.form-input {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
+    color: #f5f5f4;
+}
+
+[data-theme='dark'] .form-input::placeholder,
+[data-theme='dark'] textarea.form-input::placeholder,
+[data-theme='dark'] .closet-search-field input::placeholder {
+    color: rgba(255, 255, 255, 0.42);
+}
+
+[data-theme='dark'] .btn-secondary,
+[data-theme='dark'] .cmd-btn:not(.cmd-btn--refine):not(.cmd-btn--ghost) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: #fafaf9;
+}
+
+[data-theme='dark'] .cmd-btn--ghost {
+    color: rgba(255, 255, 255, 0.72);
+}
+
+[data-theme='dark'] .cmd-btn--ghost:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
+[data-theme='dark'] .closet-search-field {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+[data-theme='dark'] .cmd-icon-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
+    color: #f5f5f4;
+}
+
+/* ─── Closet: empty state fills stage ─── */
+.closet-studio {
+    min-height: calc(100vh - 5rem);
+}
+
+.closet-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 14rem);
+}
+
+.closet-grid {
+    flex: 1;
+}
+
+.closet-grid.is-empty-stage,
+.closet-grid:has(> .empty-state--closet) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: min(70vh, calc(100vh - 16rem));
+    width: 100%;
+}
+
+.closet-grid.is-empty-stage .empty-state--closet,
+.closet-grid:has(> .empty-state--closet) .empty-state--closet {
+    max-width: 22rem;
+    padding: var(--space-8);
+}
+
+.empty-state--closet h3,
+.empty-state--closet > p:first-of-type {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* ─── Feed studio ─── */
+.tab-content--feed {
+    max-width: none;
+}
+
+.tab-content--feed.active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    min-height: calc(100vh - 5rem);
+}
+
+.feed-studio {
+    width: min(100%, 40rem);
+    max-width: 40rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0 0 var(--space-8);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-height: calc(100vh - 6rem);
+    text-align: left;
+}
+
+.feed-studio-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--divider);
+    flex-shrink: 0;
+}
+
+.feed-studio-heading {
+    margin: 0;
+    font-size: 1.625rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+.feed-studio-meta {
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.feed-post-btn {
+    flex-shrink: 0;
+    min-height: 2.75rem;
+    padding: 0 1.25rem;
+    font-weight: 600;
+}
+
+.feed-container {
+    flex: 1;
+    width: 100%;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    align-items: stretch;
+    justify-content: flex-start;
+}
+
+.fit-card {
+    width: 100%;
+    margin: 0;
+}
+
+.feed-load-more {
+    width: 100%;
+    max-width: 100%;
+}
+
+.feed-stage-placeholder,
+.feed-container > .loading,
+.feed-container > .empty-state,
+.feed-container > .feed-skeleton {
+    flex: 1;
+    min-height: min(60vh, calc(100vh - 14rem));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.feed-stage-placeholder-text {
+    margin: 0;
+    font-size: 0.9375rem;
+    color: var(--text-muted);
+}
+
+.feed-container > .empty-state {
+    max-width: 24rem;
+    text-align: center;
+}
+
+.feed-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    width: 100%;
+    min-height: 40vh;
+    padding: var(--space-4) 0;
+}
+
+.feed-skeleton-card {
+    height: 280px;
+    width: 100%;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--hairline);
+    background: linear-gradient(
+        90deg,
+        var(--thumb-bg) 0%,
+        color-mix(in srgb, var(--thumb-bg) 50%, var(--card-bg)) 50%,
+        var(--thumb-bg) 100%
+    );
+    background-size: 200% 100%;
+    animation: ui-shimmer 1.2s ease-in-out infinite;
+}
+
+[data-theme='dark'] .feed-skeleton-card {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.06) 0%,
+        rgba(255, 255, 255, 0.12) 50%,
+        rgba(255, 255, 255, 0.06) 100%
+    );
+    background-size: 200% 100%;
+}
+
+@keyframes ui-shimmer {
+    0% {
+        background-position: 100% 0;
+    }
+    100% {
+        background-position: -100% 0;
+    }
+}
+
+/* ─── AI stylist card ─── */
+.ai-stylist-panel {
+    padding: 0 !important;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--card-bg);
+}
+
+.ai-stylist-card-head {
+    padding: var(--space-4) var(--space-4) var(--space-3);
+    border-bottom: 1px solid var(--divider);
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--color-accent-soft) 40%, transparent) 0%,
+        transparent 100%
+    );
+}
+
+.ai-stylist-card-head h3 {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.ai-stylist-card-head p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.ai-stylist-compose-wrap {
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.ai-stylist-compose-wrap textarea {
+    min-height: 4.5rem;
+    resize: vertical;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+}
+
+.ai-stylist-toggle-row {
+    display: none;
+}
+
+.ai-stylist-pin-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.ai-stylist-results {
+    padding: 0 var(--space-4) var(--space-4);
+}
+
+/* ─── Loading text (fallback) ─── */
+.loading {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    text-align: center;
+    padding: var(--space-8);
+}

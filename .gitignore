@@ -69,6 +69,9 @@ backend/.secret_key
 # Private ops notes (IPs, deploy commands, secret locations) — see docs/ADMIN_LOCAL.md.example
 docs/ADMIN_LOCAL.md
 
+# Frontend (Vitest)
+frontend/node_modules/
+
 # Expo / React Native
 mobile/node_modules/
 mobile/.expo/

@@ -8,12 +8,75 @@
     <link href="/frontend/fonts/inter.css" rel="stylesheet">
 </head>
 <body>
+    <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+        <symbol id="icon-hanger" viewBox="0 0 24 24"><path d="M12 3a2 2 0 1 1 0 4"/><path d="M7 14h10l-4-4"/><path d="M5 21h14l-2-7H7l-2 7z"/></symbol>
+        <symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+        <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+        <symbol id="icon-layers" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></symbol>
+        <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z"/></symbol>
+        <symbol id="icon-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+        <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+        <symbol id="icon-layout" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+        <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+    </svg>
+
+    <div id="onboarding-carousel" class="onboarding-tour" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="onboarding-tour-title">
+        <div class="onboarding-tour-scrim" id="onboarding-tour-scrim" aria-hidden="true"></div>
+        <div class="onboarding-tour-spotlight" id="onboarding-tour-spotlight" hidden aria-hidden="true"></div>
+        <div class="onboarding-tour-card" id="onboarding-tour-card" role="document">
+            <button type="button" class="onboarding-tour-close" id="onboarding-carousel-close" aria-label="Close tour">&times;</button>
+            <div class="onboarding-tour-card-body">
+                <p class="onboarding-tour-kicker" id="onboarding-tour-kicker">Welcome</p>
+                <h2 id="onboarding-tour-title" class="onboarding-tour-title">Quick tour</h2>
+                <p id="onboarding-tour-body" class="onboarding-tour-text"></p>
+                <div class="onboarding-tour-goto-row" id="onboarding-tour-goto-row" hidden></div>
+                <p id="onboarding-tour-step" class="onboarding-tour-step" aria-live="polite"></p>
+            </div>
+            <footer class="onboarding-tour-footer">
+                <button type="button" class="btn btn-secondary" id="onboarding-carousel-skip">Close</button>
+                <button type="button" class="btn btn-primary" id="onboarding-carousel-next">Show me around</button>
+            </footer>
+        </div>
+    </div>
+
+    <div class="app-shell">
+    <aside class="app-sidebar" id="app-sidebar" aria-label="Primary navigation">
+        <div class="app-sidebar-brand">
+            <span class="app-sidebar-mark" aria-hidden="true"><svg class="ui-icon"><use href="#icon-hanger"/></svg></span>
+            <span class="app-sidebar-title">Closet</span>
+        </div>
+        <nav class="app-sidebar-nav">
+            <button type="button" class="sidebar-nav-btn nav-btn nav-btn--feed hidden" data-tab="feed">
+                <span class="sidebar-nav-icon" aria-hidden="true"><svg class="ui-icon"><use href="#icon-users"/></svg></span>
+                <span class="sidebar-nav-label">Feed</span>
+            </button>
+            <button type="button" class="sidebar-nav-btn nav-btn active" data-tab="closet">
+                <span class="sidebar-nav-icon" aria-hidden="true"><svg class="ui-icon"><use href="#icon-hanger"/></svg></span>
+                <span class="sidebar-nav-label">Closet</span>
+            </button>
+            <button type="button" class="sidebar-nav-btn nav-btn" data-tab="upload">
+                <span class="sidebar-nav-icon" aria-hidden="true"><svg class="ui-icon"><use href="#icon-plus"/></svg></span>
+                <span class="sidebar-nav-label">Add</span>
+            </button>
+            <button type="button" class="sidebar-nav-btn nav-btn" data-tab="outfits">
+                <span class="sidebar-nav-icon" aria-hidden="true"><svg class="ui-icon"><use href="#icon-layers"/></svg></span>
+                <span class="sidebar-nav-label">Outfits</span>
+            </button>
+            <button type="button" class="sidebar-nav-btn nav-btn" data-tab="profile">
+                <span class="sidebar-nav-icon" aria-hidden="true"><svg class="ui-icon"><use href="#icon-user"/></svg></span>
+                <span class="sidebar-nav-label">Profile</span>
+            </button>
+        </nav>
+        <button type="button" class="sidebar-help-btn" id="shortcuts-help-btn" title="Keyboard shortcuts" aria-label="Keyboard shortcuts"><span class="sidebar-help-icon" aria-hidden="true">?</span></button>
+    </aside>
+
+    <div class="app-main">
     <header class="header">
         <div class="container">
             <div class="header-content">
                 <h1 class="logo">Closet-Org</h1>
                 <nav class="nav" aria-label="Main">
-                    <button type="button" class="nav-btn nav-btn--feed hidden" id="nav-feed" data-tab="feed">Feed</button>
+                    <button type="button" class="nav-btn nav-btn--feed hidden" data-tab="feed">Feed</button>
                     <button type="button" class="nav-btn active" data-tab="closet">Closet</button>
                     <button type="button" class="nav-btn" data-tab="upload">Add</button>
                     <button type="button" class="nav-btn" data-tab="outfits">Outfits</button>
@@ -45,20 +108,83 @@
     <main class="main">
         <div class="container">
             <section id="closet-tab" class="tab-content active">
-                <div class="section-header">
-                    <h2>My Closet</h2>
-                    <div class="closet-toolbar">
-                        <label class="visually-hidden" for="closet-search">Search closet</label>
-                        <input type="search" id="closet-search" class="search-input" placeholder="Search items…" autocomplete="off">
-                        <button type="button" class="btn btn-secondary btn-sm" id="fit-check-btn">Fit check</button>
-                        <button type="button" class="btn btn-secondary btn-sm" id="visual-search-btn">Visual search</button>
-                        <select id="closet-location-filter" class="filter-select" aria-label="Closet location">
-                            <option value="">All locations</option>
-                        </select>
-                    </div>
-                    <div class="closet-filter-bar">
-                        <div class="filter-chip-rows">
-                            <div class="filter-chip-row" role="group" aria-label="Category">
+                <div id="onboarding-banner" class="onboarding-banner hidden" role="status"></div>
+                <div id="fit-check-results" class="fit-check-results glass-card hidden"></div>
+                <div class="closet-studio">
+                    <header class="closet-studio-head">
+                        <div class="closet-studio-title-row">
+                            <div>
+                                <h2 class="closet-studio-heading">Your <span class="closet-studio-heading-accent">Closet</span></h2>
+                                <p id="closet-studio-meta" class="closet-studio-meta" aria-live="polite"></p>
+                            </div>
+                        <button type="button" id="closet-studio-clear" class="closet-studio-clear hidden">Clear filters</button>
+                        </div>
+                        <div class="closet-command-bar">
+                            <label class="closet-search-field">
+                                <svg class="ui-icon" aria-hidden="true"><use href="#icon-search"/></svg>
+                                <input type="search" id="closet-search" placeholder="Search category, color, brand…" autocomplete="off">
+                            </label>
+                            <div class="closet-command-tools">
+                                <button type="button" id="closet-filter-open" class="cmd-btn cmd-btn--refine" aria-expanded="false">Refine</button>
+                                <select id="sort-by" class="cmd-select" aria-label="Sort closet by">
+                                    <option value="recent">Recently added</option>
+                                    <option value="most_worn">Most worn</option>
+                                    <option value="neglected">Neglected</option>
+                                    <option value="cpw">Best CPW</option>
+                                    <option value="last_worn">Last worn</option>
+                                    <option value="least_worn">Least worn</option>
+                                    <option value="freshness">Freshness</option>
+                                </select>
+                                <button type="button" class="cmd-icon-btn" id="closet-layout-btn" title="Grid or rails" aria-label="Layout"><svg class="ui-icon"><use href="#icon-layout"/></svg></button>
+                                <button type="button" class="cmd-icon-btn" id="closet-density-btn" title="Grid density" aria-label="Density"><svg class="ui-icon"><use href="#icon-grid"/></svg></button>
+                                <button type="button" class="cmd-btn cmd-btn--ghost" id="fit-check-btn">Fit check</button>
+                                <button type="button" class="cmd-btn cmd-btn--ghost" id="visual-search-btn">Photo search</button>
+                            </div>
+                        </div>
+                    </header>
+                    <select id="closet-location-filter" class="closet-location-sync" tabindex="-1" aria-hidden="true"><option value="">All locations</option></select>
+                    <div id="closet-filter-drawer" class="closet-filter-drawer" aria-hidden="true">
+                        <button type="button" class="closet-filter-drawer-backdrop" id="closet-filter-backdrop" aria-label="Close filters"></button>
+                        <aside class="closet-filter-drawer-panel closet-filter-rail" id="closet-filter-rail" aria-label="Closet filters">
+                            <div class="closet-filter-drawer-head">
+                                <h3>Refine</h3>
+                                <button type="button" class="closet-filter-drawer-close" id="closet-filter-close" aria-label="Close">&times;</button>
+                            </div>
+                            <div class="closet-filter-drawer-body">
+                                <div class="closet-filter-bar">
+                                <div class="filter-chip-rows">
+                                <div class="filter-chip-section" data-filter-section="closets">
+                                <button type="button" class="filter-section-toggle" aria-expanded="true" aria-controls="filter-section-closets">
+                                <span>Closet location</span><span class="filter-section-chevron" aria-hidden="true">▼</span>
+                                </button>
+                                <div id="filter-section-closets" class="filter-section-body">
+                                <label class="visually-hidden" for="closet-location-filter-rail">Closet location</label>
+                                <select id="closet-location-filter-rail" class="filter-select closet-location-select" aria-label="Closet location">
+                                <option value="">All locations</option>
+                                </select>
+                                </div>
+                                </div>
+                                <div class="filter-chip-section" data-filter-section="status">
+                                <button type="button" class="filter-section-toggle" aria-expanded="true" aria-controls="filter-section-status">
+                                <span>Status</span><span class="filter-section-chevron" aria-hidden="true">▼</span>
+                                </button>
+                                <div id="filter-section-status" class="filter-section-body">
+                                <div class="filter-chip-row" role="group" aria-label="Status">
+                                <span class="filter-chip-label">Status</span>
+                                <button type="button" class="filter-chip filter-chip--toggle" data-filter-key="clean">Clean</button>
+                                <button type="button" class="filter-chip filter-chip--toggle" data-filter-key="wash">Needs wash</button>
+                                <button type="button" class="filter-chip filter-chip--toggle" data-filter-key="favorites">Favorites</button>
+                                <button type="button" class="filter-chip filter-chip--toggle" data-filter-key="lent">On loan</button>
+                                <button type="button" class="filter-chip filter-chip--toggle" data-filter-key="packed">Packed</button>
+                                </div>
+                                </div>
+                                </div>
+                                <div class="filter-chip-section" data-filter-section="categories">
+                                <button type="button" class="filter-section-toggle" aria-expanded="true" aria-controls="filter-section-categories">
+                                <span>Category &amp; rotation</span><span class="filter-section-chevron" aria-hidden="true">▼</span>
+                                </button>
+                                <div id="filter-section-categories" class="filter-section-body">
+                                <div class="filter-chip-row" role="group" aria-label="Category">
                                 <span class="filter-chip-label">Category</span>
                                 <button type="button" class="filter-chip active" data-chip-group="category" data-value="">All</button>
                                 <button type="button" class="filter-chip" data-chip-group="category" data-value="Top">Tops</button>
@@ -66,141 +192,296 @@
                                 <button type="button" class="filter-chip" data-chip-group="category" data-value="Dress">Dresses</button>
                                 <button type="button" class="filter-chip" data-chip-group="category" data-value="Footwear">Footwear</button>
                                 <button type="button" class="filter-chip" data-chip-group="category" data-value="Accessory">Accessories</button>
-                            </div>
-                            <div class="filter-chip-row" role="group" aria-label="Laundry status">
-                                <span class="filter-chip-label">Status</span>
-                                <button type="button" class="filter-chip active" data-chip-group="status" data-value="">All items</button>
-                                <button type="button" class="filter-chip" data-chip-group="status" data-value="clean">Clean</button>
-                                <button type="button" class="filter-chip" data-chip-group="status" data-value="dirty">Needs washing</button>
-                            </div>
-                            <div class="filter-chip-row" role="group" aria-label="Rotation">
+                                </div>
+                                <div class="filter-chip-row" role="group" aria-label="Rotation">
                                 <span class="filter-chip-label">Rotation</span>
                                 <button type="button" class="filter-chip active" data-chip-group="rotation" data-value="">All</button>
-                                <button type="button" class="filter-chip" data-chip-group="rotation" data-value="favorites">Favorites</button>
                                 <button type="button" class="filter-chip" data-chip-group="rotation" data-value="high">High</button>
                                 <button type="button" class="filter-chip" data-chip-group="rotation" data-value="medium">Medium</button>
                                 <button type="button" class="filter-chip" data-chip-group="rotation" data-value="low">Low</button>
                                 <button type="button" class="filter-chip" data-chip-group="rotation" data-value="neglected">Neglected</button>
-                            </div>
-                        </div>
-                        <div class="filter-bar-actions">
-                            <label class="visually-hidden" for="sort-by">Sort closet by</label>
-                            <select id="sort-by" class="filter-select filter-select--sort" aria-label="Sort closet by">
-                                <option value="recent">Recently added</option>
-                                <option value="last-worn">Last worn (oldest first)</option>
-                                <option value="most-worn">Most worn</option>
-                                <option value="least-worn">Least worn</option>
-                                <option value="best-cpw">Best value</option>
-                                <option value="freshness">Freshness score</option>
-                            </select>
-                            <button type="button" class="btn-filter-more" id="closet-filter-more" aria-expanded="false" aria-controls="closet-filter-panel">More filters</button>
-                        </div>
-                        <div id="closet-filter-panel" class="filter-advanced-panel hidden" role="region" aria-label="All closet filters">
-                            <div class="filters">
+                                </div>
+                                </div>
+                                </div>
+                                </div>
+                                <div class="filter-bar-actions">
+                                <button type="button" class="btn btn-secondary btn-sm" id="closet-clear-filters">Clear all</button>
+                                <button type="button" class="btn-filter-more" id="closet-filter-more" aria-expanded="false" aria-controls="closet-filter-panel">More filters</button>
+                                </div>
+                                <div class="filter-chip-section color-filter-section" data-filter-section="colors">
+                                <button type="button" class="filter-section-toggle" aria-expanded="true" aria-controls="filter-section-colors">
+                                <span>Color</span><span class="filter-section-chevron" aria-hidden="true">▼</span>
+                                </button>
+                                <div id="filter-section-colors" class="filter-section-body">
+                                <div class="filter-chip-row" role="group" aria-label="Color">
+                                <button type="button" class="filter-chip color-chip active" data-color="">All</button>
+                                <button type="button" class="filter-chip color-chip" data-color="Black" style="--chip-swatch:#1a1a1a">Black</button>
+                                <button type="button" class="filter-chip color-chip" data-color="White" style="--chip-swatch:#f3f3f3">White</button>
+                                <button type="button" class="filter-chip color-chip" data-color="Gray" style="--chip-swatch:#909090">Gray</button>
+                                <button type="button" class="filter-chip color-chip" data-color="Blue" style="--chip-swatch:#2846c8">Blue</button>
+                                <button type="button" class="filter-chip color-chip" data-color="Navy" style="--chip-swatch:#141e50">Navy</button>
+                                <button type="button" class="filter-chip color-chip" data-color="Green" style="--chip-swatch:#2c8c3c">Green</button>
+                                <button type="button" class="filter-chip color-chip" data-color="Red" style="--chip-swatch:#c8201e">Red</button>
+                                <button type="button" class="filter-chip color-chip" data-color="Brown" style="--chip-swatch:#784b28">Brown</button>
+                                <button type="button" class="filter-chip color-chip" data-color="Beige" style="--chip-swatch:#dcc8aa">Beige</button>
+                                </div>
+                                </div>
+                                </div>
+                                <div id="closet-filter-panel" class="filter-advanced-panel hidden" role="region" aria-label="All closet filters">
+                                <div class="filters">
                                 <select id="category-filter" class="filter-select" aria-label="Category">
-                                    <option value="">All Categories</option>
-                                    <option value="Top">Tops</option>
-                                    <option value="Bottom">Bottoms</option>
-                                    <option value="Dress">Dresses</option>
-                                    <option value="Footwear">Footwear</option>
-                                    <option value="Accessory">Accessories</option>
+                                <option value="">All Categories</option>
+                                <option value="Top">Tops</option>
+                                <option value="Bottom">Bottoms</option>
+                                <option value="Dress">Dresses</option>
+                                <option value="Footwear">Footwear</option>
+                                <option value="Accessory">Accessories</option>
                                 </select>
                                 <select id="status-filter" class="filter-select" aria-label="Status">
-                                    <option value="">All Items</option>
-                                    <option value="clean">Clean</option>
-                                    <option value="dirty">Needs Washing</option>
+                                <option value="">All Items</option>
+                                <option value="clean">Clean</option>
+                                <option value="dirty">Needs Washing</option>
                                 </select>
                                 <select id="rotation-filter" class="filter-select" aria-label="Rotation">
-                                    <option value="">All Rotation</option>
-                                    <option value="favorites">Favorites</option>
-                                    <option value="high">High Rotation</option>
-                                    <option value="medium">Medium Rotation</option>
-                                    <option value="low">Low Rotation</option>
-                                    <option value="neglected">Neglected</option>
+                                <option value="">All Rotation</option>
+                                <option value="high">High Rotation</option>
+                                <option value="medium">Medium Rotation</option>
+                                <option value="low">Low Rotation</option>
+                                <option value="neglected">Neglected</option>
                                 </select>
+                                </div>
+                                </div>
+                                </div>
                             </div>
-                        </div>
+                            <div class="closet-filter-drawer-foot">
+                                <button type="button" class="btn btn-primary" id="closet-filter-apply">Show results</button>
+                            </div>
+                        </aside>
+                    </div>
+                    <div id="visual-search-strip" class="visual-search-strip hidden" role="status">
+                    <span id="visual-search-strip-label">Visual search results</span>
+                    <button type="button" class="btn btn-secondary btn-sm" id="visual-search-clear">Clear &amp; show all</button>
+                    </div>
+                    <p id="closet-location-badge" class="closet-location-badge hidden" role="status"></p>
+                    <div class="closet-body">
+                    <div id="closet-grid" class="closet-grid"><div class="loading">Loading your closet...</div></div>
+                    <aside id="closet-detail-pane" class="closet-detail-pane hidden" aria-label="Item detail">
+                    <button type="button" class="closet-detail-close" aria-label="Close item detail">&times;</button>
+                    <div id="closet-detail-body" class="closet-detail-body"></div>
+                    </aside>
                     </div>
                 </div>
-                <div id="closet-grid" class="closet-grid"><div class="loading">Loading your closet...</div></div>
             </section>
 
             <section id="upload-tab" class="tab-content">
                 <div class="upload-section">
                     <h2>Add clothing</h2>
-                    <p class="subtitle">Upload a photo — AI classifies category, color, and style</p>
-                    <div class="upload-area" id="upload-area">
-                        <p class="upload-text">Drag & drop or click to browse</p>
-                        <input type="file" id="file-input" accept="image/*" hidden>
-                        <button type="button" class="btn btn-primary" id="choose-image-btn">Choose image</button>
+                    <div class="upload-mode-bar" role="tablist" aria-label="Add mode">
+                        <button type="button" class="upload-mode-btn active" data-upload-mode="photo">Photo</button>
+                        <button type="button" class="upload-mode-btn" data-upload-mode="bulk">Bulk</button>
+                        <button type="button" class="upload-mode-btn" data-upload-mode="import">Import</button>
+                        <button type="button" class="upload-mode-btn" data-upload-mode="wishlist">Wishlist</button>
                     </div>
-                    <div id="upload-preview" class="upload-preview hidden">
-                        <img id="preview-image" src="" alt="Preview">
-                        <button class="btn btn-primary" id="upload-btn">Upload & classify</button>
-                        <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
+
+                    <div id="upload-mode-photo" class="upload-mode-pane active">
+                        <p class="subtitle">Upload a photo — AI classifies category, color, and style</p>
+                        <div class="upload-area" id="upload-area">
+                            <p class="upload-text">Drag & drop or click to browse</p>
+                            <input type="file" id="file-input" accept="image/*" hidden>
+                            <button type="button" class="btn btn-primary" id="choose-image-btn">Choose image</button>
+                        </div>
+                        <div id="upload-preview" class="upload-preview hidden">
+                            <img id="preview-image" src="" alt="Preview">
+                            <div class="upload-preview-actions">
+                                <button class="btn btn-primary" id="upload-btn">Upload &amp; classify</button>
+                                <button type="button" class="btn btn-secondary" id="upload-wishlist-toggle-btn">Save to wishlist</button>
+                                <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
+                            </div>
+                            <div id="upload-photo-wishlist-panel" class="glass-card upload-photo-wishlist hidden">
+                                <h3>Wishlist target</h3>
+                                <label class="form-group">Name<input type="text" id="photo-wish-name" class="form-input" maxlength="120" placeholder="Item name"></label>
+                                <label class="form-group">Intent
+                                    <select id="photo-wish-intent" class="form-input">
+                                        <option value="want">Want</option>
+                                        <option value="saving">Saving for</option>
+                                        <option value="sale_watch">Sale watch</option>
+                                        <option value="gift">Gift idea</option>
+                                    </select>
+                                </label>
+                                <div class="wishlist-form-row">
+                                    <label class="form-group">Price<input type="number" id="photo-wish-price" class="form-input" min="0" step="0.01"></label>
+                                    <label class="form-group">Link<input type="url" id="photo-wish-url" class="form-input" maxlength="500" placeholder="https://…"></label>
+                                </div>
+                                <label class="form-group">Notes<textarea id="photo-wish-notes" class="form-input" rows="2" maxlength="500"></textarea></label>
+                                <button type="button" class="btn btn-primary" id="photo-wish-save-btn">Save to wishlist</button>
+                            </div>
+                        </div>
+                        <div id="classification-result" class="classification-result hidden">
+                            <h3>Classification complete</h3>
+                            <div class="result-details"></div>
+                            <div id="bulk-suggest-banner" class="bulk-suggest-banner hidden"></div>
+                            <button class="btn btn-primary" id="view-closet-btn" type="button">View in closet</button>
+                            <button class="btn btn-secondary" id="add-another-btn" type="button">Add another</button>
+                        </div>
                     </div>
-                    <div id="classification-result" class="classification-result hidden">
-                        <h3>Classification complete</h3>
-                        <div class="result-details"></div>
-                        <button class="btn btn-primary" id="add-another-btn">Add another</button>
+
+                    <div id="upload-mode-bulk" class="upload-mode-pane hidden">
+                        <p class="subtitle">Track interchangeable basics by count (socks, underwear, tees)</p>
+                        <form id="bulk-item-form" class="glass-card">
+                            <label class="form-group">Name<input type="text" id="bulk-name" class="form-input" placeholder="White crew socks" required maxlength="120"></label>
+                            <label class="form-group">Type
+                                <select id="bulk-subcategory" class="form-input">
+                                    <option value="Footwear">Footwear</option>
+                                    <option value="Top">Top</option>
+                                    <option value="Bottom">Bottom</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </label>
+                            <label class="form-group">Quantity<input type="number" id="bulk-qty" class="form-input" min="1" max="999" value="6" required></label>
+                            <label class="form-group">Reference photo (optional)<input type="file" id="bulk-photo-input" accept="image/*"></label>
+                            <div class="bulk-quick-presets">
+                                <button type="button" class="btn btn-secondary btn-sm" data-bulk-preset="socks">Socks ×6</button>
+                                <button type="button" class="btn btn-secondary btn-sm" data-bulk-preset="underwear">Underwear ×5</button>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Save bulk item</button>
+                        </form>
+                        <div id="bulk-result" class="upload-result hidden"></div>
+                    </div>
+
+                    <div id="upload-mode-import" class="upload-mode-pane hidden">
+                        <div class="import-subnav">
+                            <button type="button" class="import-subnav-btn active" data-import-pane="csv">CSV paste</button>
+                            <button type="button" class="import-subnav-btn" data-import-pane="manual">Manual row</button>
+                        </div>
+                        <div id="import-pane-csv" class="import-pane active glass-card">
+                            <p class="hint-text">Paste spreadsheet rows: name, category, subcategory, colors, quantity…</p>
+                            <textarea id="csv-import-text" class="form-input" rows="8" placeholder="name,category,subcategory,colors&#10;White tee,Top,T-Shirt,White"></textarea>
+                            <button type="button" class="btn btn-primary" id="csv-import-btn">Import CSV</button>
+                            <div id="csv-import-result" class="upload-result hidden"></div>
+                        </div>
+                        <div id="import-pane-manual" class="import-pane hidden glass-card">
+                            <form id="manual-import-form">
+                                <label class="form-group">Title<input type="text" id="manual-title" class="form-input" required maxlength="120"></label>
+                                <label class="form-group">Subcategory<input type="text" id="manual-subcategory" class="form-input" value="Other" maxlength="40"></label>
+                                <label class="form-group">Colors <span class="hint-text">(comma-separated)</span><input type="text" id="manual-colors" class="form-input" placeholder="Black, White"></label>
+                                <label class="form-group">Description<textarea id="manual-description" class="form-input" rows="2" maxlength="2000"></textarea></label>
+                                <label class="form-group">Tags <span class="hint-text">(comma-separated)</span><input type="text" id="manual-tags" class="form-input"></label>
+                                <button type="submit" class="btn btn-primary">Add to closet</button>
+                            </form>
+                            <div id="manual-import-result" class="upload-result hidden"></div>
+                        </div>
+                    </div>
+
+                    <div id="upload-mode-wishlist" class="upload-mode-pane hidden">
+                        <p class="subtitle">Track items you want to buy</p>
+                        <form id="upload-wishlist-form" class="glass-card">
+                            <label class="form-group">Photos <span class="hint-text">(optional, up to 4)</span><input type="file" id="upload-wish-photos" class="form-input" accept="image/*" multiple></label>
+                            <div id="upload-wish-photo-preview" class="wishlist-photo-preview hidden"></div>
+                            <label class="form-group">Name<input type="text" id="upload-wish-name" class="form-input" required maxlength="120"></label>
+                            <label class="form-group">Intent
+                                <select id="upload-wish-intent" class="form-input">
+                                    <option value="want">Want</option>
+                                    <option value="saving">Saving for</option>
+                                    <option value="sale_watch">Sale watch</option>
+                                    <option value="gift">Gift idea</option>
+                                </select>
+                            </label>
+                            <label class="form-group">Target price<input type="number" id="upload-wish-price" class="form-input" min="0" step="0.01" placeholder="Optional"></label>
+                            <label class="form-group">Link<input type="url" id="upload-wish-url" class="form-input" placeholder="https://…" maxlength="500"></label>
+                            <label class="form-group">Notes<textarea id="upload-wish-notes" class="form-input" rows="2" maxlength="500"></textarea></label>
+                            <button type="submit" class="btn btn-primary">Add to wishlist</button>
+                        </form>
+                        <div id="upload-wishlist-result" class="upload-result hidden"></div>
                     </div>
                 </div>
             </section>
 
             <section id="outfits-tab" class="tab-content">
-                <div class="section-header">
-                    <h2>Outfits</h2>
-                    <div class="outfit-filters">
-                        <select id="occasion-filter" class="filter-select" aria-label="Occasion">
-                            <option value="">Any occasion</option>
-                            <option value="work">Work</option>
-                            <option value="casual">Casual</option>
-                            <option value="gym">Gym</option>
-                            <option value="date">Date night</option>
-                            <option value="party">Party</option>
-                        </select>
-                        <select id="season-filter" class="filter-select" aria-label="Season">
-                            <option value="">Any season</option>
-                            <option value="Spring">Spring</option>
-                            <option value="Summer">Summer</option>
-                            <option value="Fall">Fall</option>
-                            <option value="Winter">Winter</option>
-                        </select>
-                        <select id="vibe-filter" class="filter-select" aria-label="Vibe">
-                            <option value="">Any vibe</option>
-                            <option value="clean_prep">Clean prep</option>
-                            <option value="streetwear">Streetwear</option>
-                            <option value="cozy">Cozy</option>
-                            <option value="minimal">Minimal</option>
-                            <option value="bold">Bold</option>
-                            <option value="athleisure">Athleisure</option>
-                        </select>
-                        <label class="toggle-row"><input type="checkbox" id="weather-sync-toggle"><span>Weather-aware</span></label>
-                        <label class="toggle-row"><input type="checkbox" id="include-packed-toggle"><span>Include packed</span></label>
-                        <button type="button" class="btn btn-primary" id="generate-outfits-btn">Generate</button>
-                        <button type="button" class="btn btn-secondary" id="reshuffle-outfits-btn">Reshuffle</button>
+                <div class="outfits-layout">
+                    <aside class="outfits-sidebar" aria-label="Outfit controls">
+                        <div class="outfits-sidebar-head">
+                            <h2 class="outfits-sidebar-title">Outfits</h2>
+                        </div>
+                        <div id="ai-stylist-panel" class="glass-card ai-stylist-panel"></div>
+                        <div id="outfit-filters-panel" class="outfit-filters-panel glass-card">
+                            <p class="outfits-filter-label">Classic generator</p>
+                            <div class="outfit-filters">
+                                <select id="occasion-filter" class="filter-select" aria-label="Occasion">
+                                    <option value="">Any occasion</option>
+                                    <option value="work">Work</option>
+                                    <option value="casual">Casual</option>
+                                    <option value="gym">Gym</option>
+                                    <option value="date">Date night</option>
+                                    <option value="party">Party</option>
+                                </select>
+                                <select id="season-filter" class="filter-select" aria-label="Season">
+                                    <option value="">Any season</option>
+                                    <option value="Spring">Spring</option>
+                                    <option value="Summer">Summer</option>
+                                    <option value="Fall">Fall</option>
+                                    <option value="Winter">Winter</option>
+                                </select>
+                                <select id="vibe-filter" class="filter-select" aria-label="Vibe">
+                                    <option value="">Any vibe</option>
+                                    <option value="clean_prep">Clean prep</option>
+                                    <option value="streetwear">Streetwear</option>
+                                    <option value="cozy">Cozy</option>
+                                    <option value="minimal">Minimal</option>
+                                    <option value="bold">Bold</option>
+                                    <option value="athleisure">Athleisure</option>
+                                </select>
+                                <select id="outfits-location-filter" class="filter-select" aria-label="Closet location for outfits">
+                                    <option value="">All locations</option>
+                                </select>
+                                <div class="outfit-source-bar" role="group" aria-label="Outfit source">
+                                    <label class="source-chip active"><input type="radio" name="outfit-source" value="home" checked><span>Home closet</span></label>
+                                    <label class="source-chip"><input type="radio" name="outfit-source" value="packed"><span>Travel bag</span></label>
+                                </div>
+                                <label class="toggle-row outfits-weather-toggle-row"><input type="checkbox" id="weather-sync-toggle"><span>Weather-aware</span></label>
+                                <div class="outfit-filter-actions">
+                                    <button type="button" class="btn btn-primary" id="generate-outfits-btn">Generate</button>
+                                    <button type="button" class="btn btn-secondary" id="reshuffle-outfits-btn">Reshuffle</button>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+                    <div class="outfits-main">
+                        <div class="outfits-main-toolbar">
+                            <h2 class="outfits-main-title">Outfits</h2>
+                            <button type="button" class="btn btn-secondary btn-sm outfits-options-btn" id="outfits-options-open" aria-haspopup="dialog" aria-controls="outfits-options-sheet" aria-label="Outfit options">
+                                <span aria-hidden="true">⋯</span>
+                            </button>
+                        </div>
+                        <div id="outfit-weather-banner" class="weather-banner hidden" role="status"></div>
+                        <div id="outfits-container" class="outfits-container">
+                            <div class="empty-state outfits-empty-hint"><p>Generate outfits from your clean closet, or ask the AI stylist.</p></div>
+                        </div>
+                        <div class="planned-outfits-section">
+                            <div class="section-header section-header--compact">
+                                <h3>Upcoming plans</h3>
+                                <button type="button" class="btn btn-secondary btn-sm" id="planning-quick-btn">Plan outfit</button>
+                            </div>
+                            <div id="outfits-planned-list" class="outfits-planned-list"><p class="hint-text">Loading plans…</p></div>
+                        </div>
                     </div>
-                </div>
-                <div id="outfit-weather-banner" class="weather-banner hidden" role="status"></div>
-                <div id="outfits-container" class="outfits-container">
-                    <div class="empty-state"><p>Generate outfits from your clean closet.</p></div>
-                </div>
-                <div id="ai-stylist-panel" class="glass-card ai-stylist-panel"></div>
-                <div class="planned-outfits-section">
-                    <div class="section-header section-header--compact">
-                        <h3>Upcoming plans</h3>
-                        <button type="button" class="btn btn-secondary btn-sm" id="planning-quick-btn">Plan outfit</button>
-                    </div>
-                    <div id="outfits-planned-list" class="hub-list"><p class="hint-text">Loading plans…</p></div>
                 </div>
             </section>
 
-            <section id="feed-tab" class="tab-content">
-                <div class="subview-header">
-                    <h2>Feed</h2>
-                    <button type="button" class="btn btn-primary btn-sm" id="feed-create-fit-btn">Post fit</button>
+            <section id="feed-tab" class="tab-content tab-content--feed">
+                <div class="feed-studio">
+                    <header class="feed-studio-head">
+                        <div>
+                            <h2 class="feed-studio-heading">Feed</h2>
+                            <p class="feed-studio-meta">Fits from people you follow</p>
+                        </div>
+                        <button type="button" class="btn btn-primary feed-post-btn" id="feed-create-fit-btn">Post fit</button>
+                    </header>
+                    <div id="feed-container" class="feed-container" aria-live="polite">
+                        <div class="feed-stage-placeholder">
+                            <p class="feed-stage-placeholder-text">Loading your feed…</p>
+                        </div>
+                    </div>
                 </div>
-                <div id="feed-container" class="feed-container"><div class="loading">Loading feed…</div></div>
             </section>
 
             <section id="care-tab" class="tab-content">
@@ -242,6 +523,7 @@
                             <div>
                                 <h3 id="profile-username">Username</h3>
                                 <p class="profile-email" id="profile-email">email@example.com</p>
+                                <p class="hint-text profile-meta">Member since <span id="profile-created">—</span> · Last login <span id="profile-last-login">—</span></p>
                                 <p class="hint-text" id="profile-stats-line"></p>
                             </div>
                         </div>
@@ -278,13 +560,44 @@
 
             <section id="wishlist-tab" class="tab-content">
                 <button type="button" class="btn-back" data-back-tab="profile">← Profile</button>
-                <div class="subview-header"><h2>Wishlist</h2><button type="button" class="btn btn-primary btn-sm" id="wishlist-add-btn">Add</button></div>
+                <div class="subview-header"><h2>Wishlist</h2></div>
+                <form id="wishlist-add-form" class="glass-card wishlist-add-form">
+                    <label class="form-group">Photos <span class="hint-text">(optional, up to 4)</span><input type="file" id="wishlist-photos-input" class="form-input" accept="image/*" multiple></label>
+                    <div id="wishlist-photo-preview" class="wishlist-photo-preview hidden"></div>
+                    <label class="form-group">Name<input type="text" id="wishlist-name-input" class="form-input" required maxlength="120" placeholder="Item name"></label>
+                    <div class="wishlist-form-row">
+                        <label class="form-group">Category
+                            <select id="wishlist-category-input" class="form-input">
+                                <option value="Top">Top</option>
+                                <option value="Bottom">Bottom</option>
+                                <option value="Dress">Dress</option>
+                                <option value="Footwear">Footwear</option>
+                                <option value="Accessory">Accessory</option>
+                                <option value="Other" selected>Other</option>
+                            </select>
+                        </label>
+                        <label class="form-group">Intent
+                            <select id="wishlist-intent-input" class="form-input">
+                                <option value="want">Want</option>
+                                <option value="saving">Saving</option>
+                                <option value="sale_watch">Sale watch</option>
+                                <option value="gift">Gift</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="wishlist-form-row">
+                        <label class="form-group">Price<input type="number" id="wishlist-price-input" class="form-input" min="0" step="0.01"></label>
+                        <label class="form-group">Link<input type="url" id="wishlist-url-input" class="form-input" maxlength="500" placeholder="https://…"></label>
+                    </div>
+                    <label class="form-group">Notes<textarea id="wishlist-notes-input" class="form-input" rows="2" maxlength="500" placeholder="Why you want it, sizing notes…"></textarea></label>
+                    <button type="submit" class="btn btn-primary btn-sm">Add to wishlist</button>
+                </form>
                 <div id="wishlist-container" class="hub-list"><div class="loading">Loading…</div></div>
             </section>
 
             <section id="pack-tab" class="tab-content">
                 <button type="button" class="btn-back" data-back-tab="profile">← Profile</button>
-                <div class="subview-header"><h2>Pack mode</h2><button type="button" class="btn btn-secondary btn-sm" id="pack-new-trip-btn">New trip</button></div>
+                <div class="subview-header"><h2>Pack mode</h2><div class="subview-header-actions"><button type="button" class="btn btn-secondary btn-sm" id="pack-edit-trip-btn">Edit trip</button><button type="button" class="btn btn-secondary btn-sm" id="pack-new-trip-btn">New trip</button></div></div>
                 <div id="pack-container"><div class="loading">Loading…</div></div>
             </section>
 
@@ -317,28 +630,272 @@
                 <h2>Post a fit</h2>
                 <form id="create-fit-form" class="glass-card create-fit-form">
                     <label class="form-group">Photo<input type="file" id="fit-photo-input" accept="image/*" required></label>
-                    <label class="form-group">Caption<textarea id="fit-caption-input" class="form-input" rows="2" maxlength="500"></textarea></label>
-                    <label class="form-group">Item IDs<input type="text" id="fit-item-ids-input" class="form-input" placeholder="12, 45"></label>
+                    <div id="fit-photo-preview" class="fit-photo-preview hidden"></div>
+                    <label class="form-group">Caption<textarea id="fit-caption-input" class="form-input" rows="2" maxlength="2000" placeholder="What are you wearing?"></textarea></label>
+                    <details class="form-group trip-details">
+                        <summary>Trip details (optional)</summary>
+                        <input type="text" id="fit-trip-name" class="form-input" placeholder="Trip name">
+                        <input type="text" id="fit-trip-destination" class="form-input" placeholder="Destination">
+                        <div class="trip-date-row">
+                            <input type="date" id="fit-trip-start" class="form-input" aria-label="Trip start">
+                            <input type="date" id="fit-trip-end" class="form-input" aria-label="Trip end">
+                        </div>
+                    </details>
+                    <div class="form-group">
+                        <span class="form-label">Tag items from your closet</span>
+                        <p class="hint-text">Tap items worn in this fit (optional).</p>
+                        <div id="create-fit-picker" class="create-fit-picker"><div class="loading">Loading closet…</div></div>
+                    </div>
                     <button type="submit" class="btn btn-primary">Post</button>
                 </form>
             </section>
         </div>
     </main>
+    </div><!-- .app-main -->
+    </div><!-- .app-shell -->
+
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <div id="shortcuts-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+        <div class="modal-content modal-content--narrow">
+            <span class="modal-close shortcuts-modal-close" role="button" tabindex="0" aria-label="Close">&times;</span>
+            <h2 id="shortcuts-modal-title">Keyboard shortcuts</h2>
+            <ul class="shortcuts-list">
+                <li><kbd>/</kbd> Focus closet search</li>
+                <li><kbd>Esc</kbd> Close modals</li>
+                <li><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> Move selection in closet grid</li>
+                <li><kbd>Enter</kbd> Open selected closet item</li>
+                <li><kbd>?</kbd> Show this help</li>
+            </ul>
+        </div>
+    </div>
+
+    <div id="location-form-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="location-form-title">
+        <div class="modal-content modal-content--narrow">
+            <span class="modal-close location-form-close" role="button" tabindex="0" aria-label="Close">&times;</span>
+            <h2 id="location-form-title">Add location</h2>
+            <form id="location-form">
+                <label class="form-group">Name<input type="text" id="location-form-name" class="form-input" required maxlength="80" placeholder="Home closet"></label>
+                <label class="form-group">Kind
+                    <select id="location-form-kind" class="form-input">
+                        <option value="home">Home</option>
+                        <option value="office">Office</option>
+                        <option value="storage">Storage</option>
+                        <option value="travel">Travel</option>
+                        <option value="other" selected>Other</option>
+                    </select>
+                </label>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary location-form-close">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="app-confirm-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="app-confirm-title">
+        <div class="modal-content modal-content--narrow">
+            <h2 id="app-confirm-title">Confirm</h2>
+            <p id="app-confirm-message" class="hint-text"></p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="app-confirm-cancel">Cancel</button>
+                <button type="button" class="btn btn-danger" id="app-confirm-ok">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="item-lend-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="item-lend-title">
+        <div class="modal-content modal-content--narrow">
+            <span class="modal-close item-lend-close" role="button" tabindex="0" aria-label="Close">&times;</span>
+            <h2 id="item-lend-title">Lend out</h2>
+            <form id="item-lend-form">
+                <label class="form-group">Borrower name<input type="text" id="item-lend-name" class="form-input" required maxlength="120" placeholder="Who's borrowing it?"></label>
+                <label class="form-group">Return by <span class="hint-text">(optional, YYYY-MM-DD)</span><input type="text" id="item-lend-until" class="form-input" placeholder="2026-06-01" pattern="\d{4}-\d{2}-\d{2}"></label>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary item-lend-close">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Lend</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="item-promote-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="item-promote-title">
+        <div class="modal-content modal-content--narrow">
+            <span class="modal-close item-promote-close" role="button" tabindex="0" aria-label="Close">&times;</span>
+            <h2 id="item-promote-title">Promote to individual items</h2>
+            <p id="item-promote-hint" class="hint-text"></p>
+            <form id="item-promote-form">
+                <label class="form-group">How many clean copies?<input type="number" id="item-promote-count" class="form-input" min="1" value="1" required></label>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary item-promote-close">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Promote</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="item-edit-tags-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="item-edit-tags-title">
+        <div class="modal-content modal-content--narrow">
+            <span class="modal-close item-edit-tags-close" role="button" tabindex="0" aria-label="Close">&times;</span>
+            <h2 id="item-edit-tags-title">Edit tags</h2>
+            <div id="item-edit-tags-body" class="item-edit-tags-body"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary item-edit-tags-close">Cancel</button>
+                <button type="button" class="btn btn-primary" id="item-edit-tags-save">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="item-worn-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="item-worn-title">
+        <div class="modal-content modal-content--narrow">
+            <span class="modal-close item-worn-close" role="button" tabindex="0" aria-label="Close">&times;</span>
+            <h2 id="item-worn-title">Mark as worn</h2>
+            <form id="item-worn-form">
+                <label class="form-group">Occasion <span class="hint-text">(optional)</span><input type="text" id="item-worn-occasion-input" class="form-input" maxlength="120" placeholder="Work, dinner…"></label>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary item-worn-close">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Mark worn</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="laundry-add-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="laundry-add-title">
+        <div class="modal-content modal-content--narrow">
+            <span class="modal-close laundry-add-close" role="button" tabindex="0" aria-label="Close">&times;</span>
+            <h2 id="laundry-add-title">Add to laundry</h2>
+            <form id="laundry-add-form">
+                <label class="toggle-row"><input type="checkbox" id="laundry-add-urgent"><span>Mark as urgent</span></label>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary laundry-add-close">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add to queue</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="location-form-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="location-form-title">
+        <div class="modal-content modal-content--narrow">
+            <span class="modal-close location-form-close" role="button" tabindex="0" aria-label="Close">&times;</span>
+            <h2 id="location-form-title">Add closet location</h2>
+            <form id="location-form">
+                <label class="form-group">Name<input type="text" id="location-form-name" class="form-input" required maxlength="80" placeholder="Home closet"></label>
+                <label class="form-group">Kind
+                    <select id="location-form-kind" class="form-input">
+                        <option value="home">Home</option>
+                        <option value="office">Office</option>
+                        <option value="storage">Storage</option>
+                        <option value="travel">Travel</option>
+                        <option value="other" selected>Other</option>
+                    </select>
+                </label>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary location-form-close">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <div id="item-modal" class="modal hidden">
         <div class="modal-content modal-content--wide"><span class="modal-close">&times;</span><div id="modal-body"></div></div>
     </div>
-    <div id="fit-modal" class="modal hidden">
-        <div class="modal-content"><span class="modal-close fit-modal-close">&times;</span><div id="fit-modal-body"></div></div>
+    <div id="fit-modal" class="modal modal--fit hidden" role="dialog" aria-modal="true" aria-labelledby="fit-modal-title">
+        <div class="modal-content modal-content--fit"><span class="modal-close fit-modal-close" role="button" tabindex="0" aria-label="Close">&times;</span><h2 id="fit-modal-title" class="visually-hidden">Fit detail</h2><div id="fit-modal-body"></div></div>
+    </div>
+    <div id="outfits-options-sheet" class="bottom-sheet hidden" role="dialog" aria-modal="true" aria-labelledby="outfits-options-title" aria-hidden="true">
+        <button type="button" class="bottom-sheet-backdrop" id="outfits-options-backdrop" aria-label="Close outfit options"></button>
+        <div class="bottom-sheet-panel">
+            <div class="bottom-sheet-handle" aria-hidden="true"></div>
+            <header class="bottom-sheet-header">
+                <h2 id="outfits-options-title">Outfit options</h2>
+                <button type="button" class="bottom-sheet-close" id="outfits-options-close" aria-label="Close">&times;</button>
+            </header>
+            <p class="hint-text bottom-sheet-hint">These apply to outfit suggestions on this tab.</p>
+            <div class="bottom-sheet-body">
+                <label class="toggle-row extras-menu-row">
+                    <span class="extras-menu-icon" aria-hidden="true">☀️</span>
+                    <span class="extras-menu-text">
+                        <span class="extras-menu-label">Weather-aware outfits</span>
+                        <span class="extras-menu-caption" id="outfits-options-weather-caption">Off — suggestions ignore the forecast.</span>
+                    </span>
+                    <input type="checkbox" id="outfits-options-weather" aria-label="Use weather in outfit suggestions">
+                </label>
+                <label class="toggle-row extras-menu-row">
+                    <span class="extras-menu-icon" aria-hidden="true">✨</span>
+                    <span class="extras-menu-text">
+                        <span class="extras-menu-label">AI stylist</span>
+                        <span class="extras-menu-caption" id="outfits-options-ai-caption">Classic filters on the main screen.</span>
+                    </span>
+                    <input type="checkbox" id="outfits-options-ai" aria-label="Use AI stylist on the main outfit screen">
+                </label>
+            </div>
+        </div>
+    </div>
+    <div id="public-profile-modal" class="modal hidden">
+        <div class="modal-content"><span class="modal-close public-profile-close">&times;</span><div id="public-profile-body"></div></div>
+    </div>
+    <div id="confirm-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div class="modal-content modal-content--narrow">
+            <h2 id="confirm-modal-title">Confirm</h2>
+            <p id="confirm-modal-message" class="hint-text"></p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="confirm-modal-cancel">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" id="confirm-modal-ok">Confirm</button>
+            </div>
+        </div>
+    </div>
+    <div id="trip-form-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="trip-form-modal-title">
+        <div class="modal-content modal-content--narrow">
+            <span class="modal-close trip-form-modal-close" role="button" tabindex="0" aria-label="Close">&times;</span>
+            <h2 id="trip-form-modal-title">New trip</h2>
+            <form id="trip-form-modal-form" class="trip-form-modal-form">
+                <label class="form-group">Trip name<input type="text" id="trip-form-name" class="form-input" required maxlength="120" placeholder="Lisbon, April 2026"></label>
+                <label class="form-group">Destination<input type="text" id="trip-form-destination" class="form-input" maxlength="120" placeholder="City or region"></label>
+                <div class="trip-date-row">
+                    <label class="form-group">Start<input type="date" id="trip-form-start" class="form-input"></label>
+                    <label class="form-group">End<input type="date" id="trip-form-end" class="form-input"></label>
+                </div>
+                <fieldset class="form-group trip-activities-fieldset">
+                    <legend class="section-label">Planned activities</legend>
+                    <div id="trip-form-activities" class="chip-row"></div>
+                </fieldset>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary btn-sm trip-form-modal-close">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Save trip</button>
+                </div>
+            </form>
+        </div>
     </div>
     <input type="file" id="fit-check-input" accept="image/*" hidden>
     <input type="file" id="avatar-input" accept="image/*" hidden>
 
     <input type="file" id="visual-search-input" accept="image/*" hidden>
 
+    <nav class="mobile-tab-bar" aria-label="Mobile navigation">
+        <button type="button" class="nav-btn nav-btn--feed hidden" data-tab="feed" aria-label="Feed">
+            <span class="mobile-tab-icon"><svg class="ui-icon"><use href="#icon-users"/></svg></span><span class="mobile-tab-label">Feed</span>
+        </button>
+        <button type="button" class="nav-btn active" data-tab="closet" aria-label="Closet">
+            <span class="mobile-tab-icon"><svg class="ui-icon"><use href="#icon-hanger"/></svg></span><span class="mobile-tab-label">Closet</span>
+        </button>
+        <button type="button" class="nav-btn" data-tab="upload" aria-label="Add">
+            <span class="mobile-tab-icon"><svg class="ui-icon"><use href="#icon-plus"/></svg></span><span class="mobile-tab-label">Add</span>
+        </button>
+        <button type="button" class="nav-btn" data-tab="outfits" aria-label="Outfits">
+            <span class="mobile-tab-icon"><svg class="ui-icon"><use href="#icon-layers"/></svg></span><span class="mobile-tab-label">Outfits</span>
+        </button>
+        <button type="button" class="nav-btn" data-tab="profile" aria-label="Profile">
+            <span class="mobile-tab-icon"><svg class="ui-icon"><use href="#icon-user"/></svg></span><span class="mobile-tab-label">Profile</span>
+        </button>
+    </nav>
+
+    <script src="/frontend/lib/web-utils.js"></script>
+    <script src="/frontend/onboarding-carousel.js"></script>
     <script src="/frontend/script.js"></script>
     <script src="/frontend/app-features.js"></script>
     <script src="/frontend/item-detail.js"></script>
     <script src="/frontend/app-features-upgrade.js"></script>
+    <script src="/frontend/upload-features.js"></script>
 </body>
 </html>

@@ -6,20 +6,26 @@
     <title>Register - Closet-Org</title>
     <link rel="stylesheet" href="/frontend/auth.css">
     <link href="/frontend/fonts/inter.css" rel="stylesheet">
+    <script>
+        (function () {
+            var pref = 'light';
+            try {
+                var u = JSON.parse(localStorage.getItem('user') || '{}');
+                pref = u.theme_preference || localStorage.getItem('closet_theme') || 'light';
+            } catch (e) {}
+            if (pref === 'system') {
+                pref = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-theme', pref === 'dark' ? 'dark' : 'light');
+        })();
+    </script>
 </head>
-<body>
+<body class="auth-page">
     <div class="auth-container">
-        <!-- Background Elements -->
-        <div class="bg-gradient"></div>
-        <div class="bg-circle circle-1"></div>
-        <div class="bg-circle circle-2"></div>
-        <div class="bg-circle circle-3"></div>
-        
-        <!-- Auth Card -->
         <div class="auth-card">
             <div class="auth-header">
                 <div class="logo">
-                    <span class="logo-icon">👕</span>
+                    <span class="logo-mark" aria-hidden="true"><svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a2 2 0 1 1 0 4"/><path d="M7 14h10l-4-4"/><path d="M5 21h14l-2-7H7l-2 7z"/></svg></span>
                     <h1>Closet-Org</h1>
                 </div>
                 <p class="tagline">Organize your wardrobe with AI</p>
@@ -31,9 +37,7 @@
                 
                 <div class="form-group">
                     <label for="full_name">Full Name</label>
-                    <div class="input-wrapper">
-                        <span class="input-icon">👤</span>
-                        <input 
+                    <div class="input-wrapper">                        <input 
                             type="text" 
                             id="full_name" 
                             name="full_name" 
@@ -44,9 +48,7 @@
                 
                 <div class="form-group">
                     <label for="username">Username</label>
-                    <div class="input-wrapper">
-                        <span class="input-icon">@</span>
-                        <input 
+                    <div class="input-wrapper">                        <input 
                             type="text" 
                             id="username" 
                             name="username" 
@@ -62,9 +64,7 @@
                 
                 <div class="form-group">
                     <label for="email">Email</label>
-                    <div class="input-wrapper">
-                        <span class="input-icon">📧</span>
-                        <input 
+                    <div class="input-wrapper">                        <input 
                             type="email" 
                             id="email" 
                             name="email" 
@@ -76,9 +76,7 @@
                 
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <div class="input-wrapper">
-                        <span class="input-icon">🔒</span>
-                        <input 
+                    <div class="input-wrapper">                        <input 
                             type="password" 
                             id="password" 
                             name="password" 
@@ -91,9 +89,7 @@
                 
                 <div class="form-group">
                     <label for="confirm_password">Confirm Password</label>
-                    <div class="input-wrapper">
-                        <span class="input-icon">🔒</span>
-                        <input 
+                    <div class="input-wrapper">                        <input 
                             type="password" 
                             id="confirm_password" 
                             name="confirm_password" 
@@ -138,6 +134,7 @@
         </div>
     </div>
     
+    <script src="/frontend/lib/web-utils.js"></script>
     <script src="/frontend/auth.js"></script>
 </body>
 </html>

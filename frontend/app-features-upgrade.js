@@ -4,22 +4,154 @@
 (function () {
     const REACTIONS = ['🔥', '❤️', '👏', '🧊', '✨', '👀'];
     const AI_STYLIST_KEY = 'closet_web_ai_stylist';
-    let packActiveTripId = null;
+    let stylistPinItemId = null;
+    let stylistGroundingItems = [];
 
     function app() {
         return window.ClosetApp;
     }
 
     function esc(s) {
-        return app().escapeHtml(s);
+        const a = app();
+        return a ? a.escapeHtml(s) : String(s ?? '');
     }
 
     function img(item) {
-        return app().closetItemImageUrl(item);
+        const a = app();
+        return a ? a.closetItemImageUrl(item) : '';
     }
 
     async function api(path, options) {
-        return app().apiFetch(path, options);
+        const a = app();
+        if (!a) throw new Error('App is not ready yet');
+        return a.apiFetch(path, options);
+    }
+
+    function syncOutfitsAiFilterMode() {
+        const enabled = localStorage.getItem(AI_STYLIST_KEY) !== '0';
+        const filtersPanel = document.getElementById('outfit-filters-panel');
+        const tab = document.getElementById('outfits-tab');
+        if (filtersPanel) {
+            filtersPanel.classList.toggle('outfit-filters-panel--hidden', enabled);
+        }
+        tab?.classList.toggle('outfits-tab--ai-mode', enabled);
+    }
+
+    function renderStylistPinChips() {
+        const row = document.getElementById('ai-stylist-pin-chips');
+        if (!row) return;
+        if (!stylistGroundingItems.length) {
+            row.innerHTML = '';
+            row.classList.add('hidden');
+            return;
+        }
+        row.classList.remove('hidden');
+        const chips = [
+            `<button type="button" class="stylist-pin-chip${stylistPinItemId == null ? ' active' : ''}" data-pin-id="">No specific item</button>`,
+            ...stylistGroundingItems.map((item) => {
+                const id = Number(item.id);
+                const u = img(item);
+                const active = stylistPinItemId === id ? ' active' : '';
+                const thumb = u
+                    ? `<img class="stylist-pin-thumb" src="${u}" alt="">`
+                    : '<span class="stylist-pin-thumb stylist-pin-thumb--empty"></span>';
+                return `<button type="button" class="stylist-pin-chip${active}" data-pin-id="${id}" title="${esc(item.subcategory)}">${thumb}<span>${esc(item.subcategory)}</span></button>`;
+            }),
+        ];
+        row.innerHTML = chips.join('');
+        row.querySelectorAll('.stylist-pin-chip').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const raw = btn.dataset.pinId;
+                stylistPinItemId = raw ? Number(raw) : null;
+                renderStylistPinChips();
+            });
+        });
+    }
+
+    function updateOutfitsOptionsCaptions() {
+        const weatherCaption = document.getElementById('outfits-options-weather-caption');
+        const aiCaption = document.getElementById('outfits-options-ai-caption');
+        const weatherOn = document.getElementById('weather-sync-toggle')?.checked;
+        const aiOn = document.getElementById('ai-stylist-enabled')?.checked;
+        if (weatherCaption) {
+            weatherCaption.textContent = weatherOn
+                ? 'On — forecast loads with your next suggestion.'
+                : 'Off — suggestions ignore the forecast.';
+        }
+        if (aiCaption) {
+            aiCaption.textContent = aiOn
+                ? 'Stylist replaces occasion / season / vibe filters on the main screen.'
+                : 'Classic filters and scored outfits on the main screen.';
+        }
+    }
+
+    function syncOutfitsOptionsFromSidebar() {
+        const weatherMain = document.getElementById('weather-sync-toggle');
+        const weatherSheet = document.getElementById('outfits-options-weather');
+        const aiMain = document.getElementById('ai-stylist-enabled');
+        const aiSheet = document.getElementById('outfits-options-ai');
+        if (weatherSheet && weatherMain) weatherSheet.checked = weatherMain.checked;
+        if (aiSheet && aiMain) aiSheet.checked = aiMain.checked;
+        updateOutfitsOptionsCaptions();
+    }
+
+    function openOutfitsOptionsSheet() {
+        const sheet = document.getElementById('outfits-options-sheet');
+        if (!sheet) return;
+        syncOutfitsOptionsFromSidebar();
+        sheet.classList.remove('hidden');
+        sheet.classList.add('active');
+        sheet.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('bottom-sheet-open');
+    }
+
+    function closeOutfitsOptionsSheet() {
+        const sheet = document.getElementById('outfits-options-sheet');
+        if (!sheet) return;
+        sheet.classList.add('hidden');
+        sheet.classList.remove('active');
+        sheet.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('bottom-sheet-open');
+    }
+
+    function initOutfitsOptionsSheet() {
+        const openBtn = document.getElementById('outfits-options-open');
+        if (!openBtn || openBtn.dataset.bound) return;
+        openBtn.dataset.bound = '1';
+
+        document.getElementById('outfits-options-close')?.addEventListener('click', closeOutfitsOptionsSheet);
+        document.getElementById('outfits-options-backdrop')?.addEventListener('click', closeOutfitsOptionsSheet);
+
+        document.getElementById('outfits-options-weather')?.addEventListener('change', (e) => {
+            const on = e.target.checked;
+            const main = document.getElementById('weather-sync-toggle');
+            if (main) {
+                main.checked = on;
+                main.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            updateOutfitsOptionsCaptions();
+        });
+
+        document.getElementById('outfits-options-ai')?.addEventListener('change', (e) => {
+            const on = e.target.checked;
+            const main = document.getElementById('ai-stylist-enabled');
+            if (main) {
+                main.checked = on;
+                main.dispatchEvent(new Event('change', { bubbles: true }));
+            } else {
+                localStorage.setItem(AI_STYLIST_KEY, on ? '1' : '0');
+                syncOutfitsAiFilterMode();
+            }
+            updateOutfitsOptionsCaptions();
+        });
+
+        openBtn.addEventListener('click', openOutfitsOptionsSheet);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && document.getElementById('outfits-options-sheet')?.classList.contains('active')) {
+                closeOutfitsOptionsSheet();
+            }
+        });
     }
 
     function initAiStylist() {
@@ -27,24 +159,54 @@
         if (!panel) return;
         const enabled = localStorage.getItem(AI_STYLIST_KEY) !== '0';
         panel.innerHTML = `
-            <label class="toggle-row">
-                <input type="checkbox" id="ai-stylist-enabled" ${enabled ? 'checked' : ''}>
-                <span>AI stylist</span>
-            </label>
-            <div id="ai-stylist-body" class="${enabled ? '' : 'hidden'}">
-                <textarea id="ai-stylist-input" class="form-input" rows="2" maxlength="500" placeholder="e.g. Something polished for a rainy work day"></textarea>
-                <button type="button" class="btn btn-primary btn-sm" id="ai-stylist-submit">Ask stylist</button>
-                <div id="ai-stylist-results"></div>
+            <div class="ai-stylist-card-head">
+                <h3>AI Stylist</h3>
+                <p>Describe the occasion, weather, or mood — we only use items in your closet.</p>
             </div>
-        `;
+            <label class="toggle-row ai-stylist-toggle-row ai-stylist-toggle">
+                <input type="checkbox" id="ai-stylist-enabled" ${enabled ? 'checked' : ''}>
+                <span>Enable stylist</span>
+            </label>
+            <div id="ai-stylist-body" class="ai-stylist-compose-wrap ai-stylist-body ${enabled ? '' : 'hidden'}">
+                <textarea id="ai-stylist-input" class="form-input" rows="3" maxlength="500" placeholder="e.g. Casual Friday in the office, rainy and cool…"></textarea>
+                <p class="ai-stylist-pin-label">Optional: pin one item</p>
+                <div id="ai-stylist-pin-chips" class="stylist-pin-chips hidden" role="group" aria-label="Pin item for stylist"></div>
+                <button type="button" class="btn btn-primary" id="ai-stylist-submit">Get outfit ideas</button>
+                <div id="ai-stylist-results" class="ai-stylist-results"></div>
+            </div>
+        `.replace(/div/g, 'div');
         const toggle = document.getElementById('ai-stylist-enabled');
         const body = document.getElementById('ai-stylist-body');
         toggle?.addEventListener('change', () => {
             const on = toggle.checked;
             localStorage.setItem(AI_STYLIST_KEY, on ? '1' : '0');
             body?.classList.toggle('hidden', !on);
+            syncOutfitsAiFilterMode();
+            const sheetAi = document.getElementById('outfits-options-ai');
+            if (sheetAi) sheetAi.checked = on;
+            updateOutfitsOptionsCaptions();
         });
         document.getElementById('ai-stylist-submit')?.addEventListener('click', runAiStylist);
+        document.getElementById('ai-stylist-input')?.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' && !ev.shiftKey) {
+                ev.preventDefault();
+                runAiStylist();
+            }
+        });
+        syncOutfitsAiFilterMode();
+        populateAiStylistPinOptions();
+    }
+
+    async function populateAiStylistPinOptions() {
+        try {
+            const { items } = await api('/closet');
+            stylistGroundingItems = items
+                .filter((i) => i.status !== 'wishlist' && !i.lent_to && i.washed !== false)
+                .slice(0, 16);
+            renderStylistPinChips();
+        } catch {
+            stylistGroundingItems = [];
+        }
     }
 
     async function runAiStylist() {
@@ -56,10 +218,30 @@
         out.innerHTML = '<p class="hint-text">Thinking…</p>';
         const payload = {
             message,
-            include_packed: document.getElementById('include-packed-toggle')?.checked || false,
         };
-        const locSel = document.getElementById('closet-location-filter');
+        const locSel = document.getElementById('outfits-location-filter') || document.getElementById('closet-location-filter');
         if (locSel?.value) payload.closet_location_id = Number(locSel.value);
+        if (stylistPinItemId) payload.pin_item_ids = [stylistPinItemId];
+        const outfitSource =
+            document.querySelector('input[name="outfit-source"]:checked')?.value || 'home';
+        try {
+            const closetData = await api('/closet');
+            let scoped = (closetData.items || []).filter(
+                (item) => !item.lent_to && item.washed !== false && item.status !== 'wishlist'
+            );
+            const locId = payload.closet_location_id;
+            if (locId) scoped = scoped.filter((item) => item.closet_location_id === locId);
+            const packedIds = scoped.filter((item) => item.packed_for_trip).map((item) => item.id);
+            const homeIds = scoped.filter((item) => !item.packed_for_trip).map((item) => item.id);
+            if (outfitSource === 'packed') {
+                payload.include_packed = true;
+                if (homeIds.length) payload.exclude_item_ids = homeIds;
+            } else if (packedIds.length) {
+                payload.exclude_item_ids = packedIds;
+            }
+        } catch {
+            /* optional pool split */
+        }
         if (window.ClosetFeatures?.isWeatherSyncEnabled?.()) {
             try {
                 const { lat, lon } = await window.ClosetFeatures.getWeatherCoords();
@@ -112,7 +294,7 @@
                         });
                         app().showToast('Thanks for the feedback');
                     } catch (e) {
-                        alert(e.message);
+                        app().showToast(e.message || 'Feedback failed');
                     }
                 });
             });
@@ -135,6 +317,7 @@
             app().showTab('closet');
             const grid = document.getElementById('closet-grid');
             if (grid) grid.innerHTML = '<div class="loading">Visual search…</div>';
+            app().setVisualSearchMode?.(true, 'Visual search — loading matches…');
             try {
                 const data = await api('/closet/visual-search?limit=24', {
                     method: 'POST',
@@ -143,8 +326,13 @@
                 const matches = data.matches || [];
                 if (!matches.length) {
                     grid.innerHTML = '<div class="empty-state"><p>No close matches in your closet.</p></div>';
+                    app().setVisualSearchMode?.(true, 'Visual search — no matches');
                     return;
                 }
+                app().setVisualSearchMode?.(
+                    true,
+                    `Visual search — ${matches.length} match${matches.length === 1 ? '' : 'es'}`
+                );
                 grid.innerHTML = matches
                     .map((m) => {
                         const it = m.item;
@@ -180,12 +368,16 @@
             ]);
             let html = '';
             if (insights.gaps?.length) {
-                html += '<h3>Wardrobe gaps</h3><ul class="stat-list">';
+                html += '<h3>Capsule gaps</h3><ul class="stat-list stat-list--gaps">';
                 html += insights.gaps
-                    .map(
-                        (g) =>
-                            `<li><span>${esc(g.title)}</span><span class="hint-text">${esc(g.detail)}</span></li>`
-                    )
+                    .map((g) => {
+                        const seed = ClosetWebUtils.gapWishlistSeed(g.id);
+                        const title = g.title || g.label || g.id;
+                        return `<li class="gap-row">
+                            <div class="gap-row-text"><strong>${esc(title)}</strong><span class="hint-text">${esc(g.detail || '')}</span></div>
+                            <button type="button" class="btn btn-secondary btn-sm" data-gap-wishlist="1" data-gap-title="${esc(title)}" data-gap-detail="${esc(g.detail || '')}" data-gap-category="${esc(seed.category)}" data-gap-subcategory="${esc(seed.subcategory)}">Add wishlist target</button>
+                        </li>`;
+                    })
                     .join('');
                 html += '</ul>';
             }
@@ -226,22 +418,53 @@
                 html = '<div class="empty-state"><p>Your wardrobe looks balanced.</p></div>';
             }
             container.innerHTML = html;
+            container.querySelectorAll('[data-gap-wishlist]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    app()?.navigateToWishlistPrefill?.({
+                        openAdd: true,
+                        name: btn.dataset.gapTitle || '',
+                        category: btn.dataset.gapCategory || 'Other',
+                        subcategory: btn.dataset.gapSubcategory || 'Wishlist',
+                        intent: 'want',
+                        notes: btn.dataset.gapDetail || '',
+                    });
+                });
+            });
         } catch (e) {
             container.innerHTML = `<div class="empty-state">${esc(e.message)}</div>`;
         }
     }
 
-    async function initClosetLocationFilter() {
-        const sel = document.getElementById('closet-location-filter');
-        if (!sel) return;
+    async function initOutfitsLocationFilter() {
+        const selectors = [
+            document.getElementById('closet-location-filter'),
+            document.getElementById('closet-location-filter-rail'),
+            document.getElementById('outfits-location-filter'),
+        ].filter(Boolean);
+        if (!selectors.length) return;
         try {
-            const { locations } = await api('/closet/locations');
-            sel.innerHTML =
+            const [{ locations }, settings] = await Promise.all([
+                api('/closet/locations'),
+                api('/settings'),
+            ]);
+            const opts =
                 '<option value="">All locations</option>' +
                 (locations || [])
                     .map((l) => `<option value="${Number(l.id)}">${esc(l.name)}</option>`)
                     .join('');
-            sel.addEventListener('change', () => app().loadCloset());
+            const defaultId = settings.default_closet_location_id;
+            selectors.forEach((sel) => {
+                sel.innerHTML = opts;
+                if (defaultId && sel.id === 'outfits-location-filter') {
+                    sel.value = String(defaultId);
+                }
+                if (!sel.dataset.bound) {
+                    sel.dataset.bound = '1';
+                    sel.addEventListener('change', () => {
+                        if (sel.id === 'closet-location-filter') app().loadCloset();
+                    });
+                }
+            });
         } catch {
             /* optional */
         }
@@ -257,10 +480,11 @@
             modal.classList.remove('hidden');
             modal.classList.add('active');
             try {
-                const [{ post }, commentsRes] = await Promise.all([
+                const [postRes, commentsRes] = await Promise.all([
                     api(`/fits/${postId}`),
                     api(`/fits/${postId}/comments`),
                 ]);
+                const post = postRes.post || postRes;
                 const src = app().safeUrl(post.image_path);
                 const items = (post.items || [])
                     .map((i) => `<span class="badge">${esc(i.subcategory)}</span>`)
@@ -276,11 +500,13 @@
                         (c) => `<div class="comment-row"><strong>@${esc(c.author?.username || '')}</strong> ${esc(c.body)}</div>`
                     )
                     .join('');
+                const isOwn = post.user_id === app()?.currentUser?.id;
                 body.innerHTML = `
                     ${src ? `<img class="modal-image" src="${src}" alt="">` : ''}
                     ${post.caption ? `<p>${esc(post.caption)}</p>` : ''}
                     <div class="clothing-card-meta">${items}</div>
                     <div class="reaction-bar">${reactions}</div>
+                    ${isOwn ? '<button type="button" class="btn btn-danger btn-sm" id="fit-delete-btn">Delete fit</button>' : ''}
                     <form id="fit-comment-form" class="fit-comment-form">
                         <input class="form-input" id="fit-comment-input" placeholder="Comment" maxlength="500">
                         <button type="submit" class="btn btn-primary btn-sm">Post</button>
@@ -296,6 +522,24 @@
                         });
                         enhancedFitModal(postId);
                     });
+                });
+                document.getElementById('fit-delete-btn')?.addEventListener('click', async () => {
+                    const ok = app()?.showConfirmDialog
+                        ? await app().showConfirmDialog({
+                              title: 'Delete fit',
+                              message: 'Remove this post from your profile and the feed?',
+                              confirmText: 'Delete',
+                              cancelText: 'Cancel',
+                              danger: true,
+                          })
+                        : window.confirm('Delete this fit?');
+                    if (!ok) return;
+                    await api(`/fits/${postId}`, { method: 'DELETE' });
+                    modal.classList.add('hidden');
+                    modal.classList.remove('active');
+                    window.ClosetFeatures?.loadFeed?.();
+                    window.ClosetFeatures?.loadProfileHub?.();
+                    app().showToast('Fit deleted');
                 });
                 document.getElementById('fit-comment-form')?.addEventListener('submit', async (ev) => {
                     ev.preventDefault();
@@ -314,104 +558,16 @@
         };
     }
 
-    function patchPackMode() {
-        const orig = window.ClosetFeatures?.loadPackMode;
-        if (!orig) return;
-        window.ClosetFeatures.loadPackMode = async function () {
-            const el = document.getElementById('pack-container');
-            if (!el) return;
-            el.innerHTML = '<div class="loading">Loading…</div>';
-            try {
-                const [{ trips }, { items }] = await Promise.all([
-                    api('/trips'),
-                    api('/closet?status=clean'),
-                ]);
-                if (trips.length && packActiveTripId == null) {
-                    packActiveTripId = Number(trips[0].id);
-                }
-                const tripOpts = trips
-                    .map(
-                        (t) =>
-                            `<option value="${Number(t.id)}" ${packActiveTripId === Number(t.id) ? 'selected' : ''}>${esc(t.name)}</option>`
-                    )
-                    .join('');
-                let html = `<label class="form-group">Active trip<select id="pack-trip-select" class="form-input">${tripOpts || '<option value="">No trips</option>'}</select></label>`;
-                html += `<div class="pack-bulk-actions">
-                    <button type="button" class="btn btn-secondary btn-sm" id="pack-all-btn">Pack all shown</button>
-                    <button type="button" class="btn btn-secondary btn-sm" id="unpack-all-btn">Unpack all</button>
-                </div>`;
-                const packed = items.filter((i) => i.packed_for_trip);
-                html += `<p class="hint-text">${packed.length} packed.</p>`;
-                html += '<div class="pack-grid">';
-                html += items
-                    .slice(0, 100)
-                    .map((item) => {
-                        const id = Number(item.id);
-                        const checked = item.packed_for_trip ? 'checked' : '';
-                        const thumb = img(item);
-                        return `<label class="pack-item"><input type="checkbox" data-pack-item="${id}" ${checked}>${thumb ? `<img src="${thumb}" alt="">` : ''}<span>${esc(item.subcategory)}</span></label>`;
-                    })
-                    .join('');
-                html += '</div>';
-                el.innerHTML = html;
-                document.getElementById('pack-trip-select')?.addEventListener('change', (e) => {
-                    packActiveTripId = Number(e.target.value) || null;
-                });
-                el.querySelectorAll('[data-pack-item]').forEach((cb) => {
-                    cb.addEventListener('change', async () => {
-                        const tripId = packActiveTripId || Number(document.getElementById('pack-trip-select')?.value);
-                        if (!tripId) {
-                            alert('Select a trip first');
-                            cb.checked = !cb.checked;
-                            return;
-                        }
-                        await api(`/trips/${tripId}/packed`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                item_id: Number(cb.dataset.packItem),
-                                packed: cb.checked,
-                            }),
-                        });
-                    });
-                });
-                document.getElementById('pack-all-btn')?.addEventListener('click', async () => {
-                    const ids = [...el.querySelectorAll('[data-pack-item]')].map((c) =>
-                        Number(c.dataset.packItem)
-                    );
-                    await api('/closet/packed', {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ packed_for_trip: true, item_ids: ids }),
-                    });
-                    patchPackMode();
-                    app().loadCloset();
-                });
-                document.getElementById('unpack-all-btn')?.addEventListener('click', async () => {
-                    const ids = [...el.querySelectorAll('[data-pack-item]')].map((c) =>
-                        Number(c.dataset.packItem)
-                    );
-                    await api('/closet/packed', {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ packed_for_trip: false, item_ids: ids }),
-                    });
-                    patchPackMode();
-                    app().loadCloset();
-                });
-            } catch (e) {
-                el.innerHTML = `<p>${esc(e.message)}</p>`;
-            }
-        };
-    }
-
     window.ClosetUpgrade = {
+        syncOutfitsAiFilterMode,
+        updateOutfitsOptionsCaptions,
+        populateAiStylistPins: populateAiStylistPinOptions,
         init() {
             initAiStylist();
+            initOutfitsOptionsSheet();
             initVisualSearch();
-            initClosetLocationFilter();
+            initOutfitsLocationFilter();
             patchFitModal();
-            patchPackMode();
             if (window.ClosetFeatures) {
                 window.ClosetFeatures.loadFullInsights = loadFullInsights;
             }

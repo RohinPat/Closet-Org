@@ -13,10 +13,10 @@
     --accent: #d946ef;
     --success: var(--color-success);
     --warning: var(--color-warning);
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --bg: #f8fafc;
-    --bg-secondary: #f1f5f9;
+    --text-primary: #1c1917;
+    --text-secondary: rgba(40, 38, 35, 0.72);
+    --bg: #faf8f5;
+    --bg-secondary: #f3f1ed;
     --bg-dark: #0f172a;
     --border: #e2e8f0;
     /* Wardrobe-quiet hero: two indigo–violet stops (no pink) */

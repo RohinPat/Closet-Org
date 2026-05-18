@@ -3,98 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Closet-Org</title>
+    <title>Sign in — Closet</title>
     <link rel="stylesheet" href="/frontend/auth.css">
     <link href="/frontend/fonts/inter.css" rel="stylesheet">
+    <script>
+        (function () {
+            var pref = 'light';
+            try {
+                var u = JSON.parse(localStorage.getItem('user') || '{}');
+                pref = u.theme_preference || localStorage.getItem('closet_theme') || 'light';
+            } catch (e) {}
+            if (pref === 'system') {
+                pref = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-theme', pref === 'dark' ? 'dark' : 'light');
+        })();
+    </script>
 </head>
-<body>
-    <div class="auth-container">
-        <!-- Background Elements -->
-        <div class="bg-gradient"></div>
-        <div class="bg-circle circle-1"></div>
-        <div class="bg-circle circle-2"></div>
-        <div class="bg-circle circle-3"></div>
-        
-        <!-- Auth Card -->
-        <div class="auth-card">
-            <div class="auth-header">
-                <div class="logo">
-                    <span class="logo-icon">👕</span>
-                    <h1>Closet-Org</h1>
-                </div>
-                <p class="tagline">Organize your wardrobe with AI</p>
+<body class="auth-page auth-page--split">
+    <div class="auth-split" aria-label="Sign in">
+        <aside class="auth-hero-panel" aria-hidden="true">
+            <div class="auth-hero-inner">
+                <p class="auth-hero-brand">Closet</p>
+                <h1 class="auth-hero-title">Your wardrobe,<br>organized.</h1>
+                <p class="auth-hero-lead">Catalog pieces with AI, plan outfits, and keep laundry on track — all in one place.</p>
+                <ul class="auth-hero-features">
+                    <li>
+                        <span class="auth-hero-icon" aria-hidden="true">
+                            <svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a2 2 0 1 1 0 4"/><path d="M7 14h10l-4-4"/><path d="M5 21h14l-2-7H7l-2 7z"/></svg>
+                        </span>
+                        Smart tagging for every piece
+                    </li>
+                    <li>
+                        <span class="auth-hero-icon" aria-hidden="true">
+                            <svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                        </span>
+                        Outfit planning and laundry
+                    </li>
+                    <li>
+                        <span class="auth-hero-icon" aria-hidden="true">
+                            <svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        </span>
+                        Share looks when you want
+                    </li>
+                </ul>
             </div>
-            
-            <form id="login-form" class="auth-form">
-                <h2>Welcome Back</h2>
-                <p class="form-subtitle">Sign in to access your virtual closet</p>
-                
-                <div class="form-group">
-                    <label for="username">Username or email</label>
-                    <div class="input-wrapper">
-                        <span class="input-icon">👤</span>
-                        <input 
-                            type="text" 
-                            id="username" 
-                            name="username" 
-                            placeholder="Username or email"
-                            autocomplete="username"
-                            required
-                        >
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <div class="input-wrapper">
-                        <span class="input-icon">🔒</span>
-                        <input 
-                            type="password" 
-                            id="password" 
-                            name="password" 
-                            placeholder="Enter your password"
-                            required
-                        >
-                    </div>
-                </div>
-                
-                <div id="error-message" class="error-message hidden"></div>
-                
-                <button type="submit" class="btn btn-primary" id="login-btn">
-                    <span class="btn-text">Sign In</span>
-                    <span class="btn-loader hidden">
-                        <div class="spinner"></div>
+        </aside>
+
+        <main class="auth-form-panel">
+            <div class="auth-form-inner">
+                <header class="auth-form-brand">
+                    <span class="logo-mark" aria-hidden="true">
+                        <svg class="ui-icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a2 2 0 1 1 0 4"/><path d="M7 14h10l-4-4"/><path d="M5 21h14l-2-7H7l-2 7z"/></svg>
                     </span>
-                </button>
-                
-                <div class="form-footer">
-                    <p><a href="/frontend/forgot-password.html" class="link">Forgot password?</a></p>
-                    <p>Don't have an account? <a href="/frontend/register.html" class="link">Sign up</a></p>
-                </div>
-            </form>
-        </div>
-        
-        <!-- Features Section -->
-        <div class="features-section">
-            <div class="feature-item">
-                <div class="feature-icon">🤖</div>
-                <h3>AI-Powered</h3>
-                <p>Automatic clothing classification</p>
+                    <span class="auth-form-brand-name">Closet</span>
+                </header>
+
+                <form id="login-form" class="auth-form">
+                    <h2>Welcome Back</h2>
+                    <p class="form-subtitle">Sign in to continue to your closet</p>
+
+                    <div class="form-group">
+                        <label for="username">Email or username</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="username" name="username" placeholder="you@email.com" autocomplete="username" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="form-label-row">
+                            <label for="password">Password</label>
+                            <a href="/frontend/forgot-password.html" class="link link--subtle">Forgot?</a>
+                        </div>
+                        <div class="input-wrapper input-wrapper--password">
+                            <input type="password" id="password" name="password" placeholder="Enter your password" autocomplete="current-password" required>
+                            <button type="button" class="input-toggle" id="password-toggle" aria-label="Show password" aria-pressed="false">
+                                <span class="input-toggle-icons" aria-hidden="true">
+                                    <svg class="ui-icon icon-show" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    <svg class="ui-icon icon-hide hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="error-message" class="error-message hidden" role="alert"></div>
+
+                    <button type="submit" class="btn btn-primary" id="login-btn">
+                        <span class="btn-text">Sign in</span>
+                        <span class="btn-loader hidden"><div class="spinner"></div></span>
+                    </button>
+
+                    <p class="auth-switch">
+                        Don't have an account?
+                        <a href="/frontend/register.html" class="link">Create one</a>
+                    </p>
+                </form>
             </div>
-            <div class="feature-item">
-                <div class="feature-icon">👔</div>
-                <h3>Smart Outfits</h3>
-                <p>Get personalized recommendations</p>
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">📊</div>
-                <h3>Analytics</h3>
-                <p>Track your wardrobe stats</p>
-            </div>
-        </div>
+        </main>
     </div>
-    
+    <script src="/frontend/lib/web-utils.js"></script>
     <script src="/frontend/auth.js"></script>
 </body>
 </html>
-

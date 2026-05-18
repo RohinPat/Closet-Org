@@ -1,41 +1,8 @@
 // Authentication JavaScript
 
 const API_URL = window.location.origin;
+const { formatAuthError, errorMessageFromCaught } = window.ClosetWebUtils;
 let sessionCheckAbort = null;
-
-function formatAuthError(detail) {
-    if (detail === null || detail === undefined) return '';
-    if (typeof detail === 'string') return detail;
-    if (Array.isArray(detail)) {
-        return detail
-            .map((entry) => {
-                if (typeof entry === 'string') return entry;
-                if (!entry || typeof entry !== 'object') return '';
-                const field = Array.isArray(entry.loc)
-                    ? entry.loc.filter((part) => part !== 'body').join(' · ')
-                    : '';
-                const msg =
-                    (typeof entry.msg === 'string' && entry.msg) ||
-                    (typeof entry.message === 'string' && entry.message) ||
-                    '';
-                if (field && msg) return `${field}: ${msg}`;
-                return msg;
-            })
-            .filter(Boolean)
-            .join(' ');
-    }
-    if (typeof detail === 'object') {
-        if (typeof detail.msg === 'string') return detail.msg;
-        if (typeof detail.message === 'string') return detail.message;
-        if (typeof detail.detail === 'string') return detail.detail;
-    }
-    return '';
-}
-
-function errorMessageFromCaught(error) {
-    if (error instanceof Error && error.message) return error.message;
-    return formatAuthError(error) || 'Something went wrong. Please try again.';
-}
 
 // Utility functions
 function showError(message) {
@@ -64,6 +31,23 @@ function setLoading(button, isLoading) {
         btnLoader.classList.add('hidden');
         button.disabled = false;
     }
+}
+
+// Password visibility toggle (login)
+const passwordToggle = document.getElementById('password-toggle');
+if (passwordToggle) {
+    passwordToggle.addEventListener('click', () => {
+        const input = document.getElementById('password');
+        const showIcon = passwordToggle.querySelector('.icon-show');
+        const hideIcon = passwordToggle.querySelector('.icon-hide');
+        if (!input) return;
+        const visible = input.type === 'text';
+        input.type = visible ? 'password' : 'text';
+        passwordToggle.setAttribute('aria-label', visible ? 'Show password' : 'Hide password');
+        passwordToggle.setAttribute('aria-pressed', visible ? 'false' : 'true');
+        showIcon?.classList.toggle('hidden', !visible);
+        hideIcon?.classList.toggle('hidden', visible);
+    });
 }
 
 // Login form handler
@@ -220,7 +204,7 @@ if (forgotForm) {
             if (data.dev_reset_token) {
                 msg += '\n\nRedirecting to reset page with your dev token…';
             }
-            alert(msg);
+            ClosetWebUtils.showToast(msg, 'success');
             if (data.dev_reset_token) {
                 window.location.href =
                     '/frontend/reset-password.html?token=' +
@@ -264,7 +248,7 @@ if (resetForm) {
             if (!response.ok) {
                 throw new Error(formatAuthError(data.detail) || 'Reset failed');
             }
-            alert(data.message || 'Password updated.');
+            ClosetWebUtils.showToast(data.message || 'Password updated.', 'success');
             window.location.href = '/frontend/login.html';
         } catch (error) {
             showError(errorMessageFromCaught(error));
