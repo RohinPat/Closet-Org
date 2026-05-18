@@ -57,10 +57,24 @@ function safeUrl(value) {
     const s = String(value).trim();
     if (s === '') return '';
     if (/^https?:\/\//i.test(s)) return escapeHtml(s);
-    if (s.startsWith('/') || s.startsWith('./') || s.startsWith('uploads/')) {
+    if (s.startsWith('/uploads/')) return escapeHtml(s);
+    if (s.startsWith('uploads/')) {
+        return escapeHtml('/' + s.replace(/^\/+/, ''));
+    }
+    // DB stores absolute paths (e.g. /opt/closet-org/uploads/item_abc.webp).
+    const base = s.split(/[/\\]/).pop();
+    if (base && /^item_[^/\\]+\.(webp|png|jpe?g|gif)$/i.test(base)) {
+        return escapeHtml('/uploads/' + encodeURIComponent(base));
+    }
+    if (s.startsWith('/') || s.startsWith('./')) {
         return escapeHtml(s);
     }
     return '';
+}
+
+function closetItemImageUrl(item) {
+    if (!item) return '';
+    return safeUrl(item.thumbnail_path || item.image_path);
 }
 
 // Initialize
@@ -769,7 +783,7 @@ function createClothingCard(item) {
     return `
         <div class="clothing-card" data-item-id="${itemId}">
             <div class="card-image-container">
-                <img src="${safeUrl(item.image_path)}" alt="${escapeHtml(item.subcategory)}" class="clothing-card-image">
+                <img src="${closetItemImageUrl(item)}" alt="${escapeHtml(item.subcategory)}" class="clothing-card-image">
                 ${favoriteIcon}
                 ${rotationBadge}
             </div>
@@ -881,7 +895,7 @@ async function showItemModal(itemId) {
         
         const safeItemId = Number(itemId) || 0;
         modalBody.innerHTML = `
-            <img src="${safeUrl(item.image_path)}" alt="${escapeHtml(item.subcategory)}" class="modal-image">
+            <img src="${closetItemImageUrl(item)}" alt="${escapeHtml(item.subcategory)}" class="modal-image">
 
             <div class="modal-header-section">
                 <h2>${escapeHtml(item.subcategory)}</h2>
@@ -1187,7 +1201,7 @@ async function generateOutfits() {
 function createOutfitCard(outfit, index) {
     const items = (outfit.items || []).map(item => `
         <div class="outfit-item">
-            <img src="${safeUrl(item.image_path)}" alt="${escapeHtml(item.subcategory)}">
+            <img src="${closetItemImageUrl(item)}" alt="${escapeHtml(item.subcategory)}">
             <div class="outfit-item-info">
                 <div class="outfit-item-category">${escapeHtml(item.subcategory)}</div>
             </div>
@@ -1339,7 +1353,7 @@ function createLaundryCard(item) {
 
     return `
         <div class="laundry-card">
-            <img src="${safeUrl(item.image_path)}" alt="${escapeHtml(item.subcategory)}">
+            <img src="${closetItemImageUrl(item)}" alt="${escapeHtml(item.subcategory)}">
             <div class="laundry-card-content">
                 <h4>${escapeHtml(item.subcategory)}</h4>
                 <p class="laundry-meta">
@@ -1436,7 +1450,7 @@ function createInsightCard(item) {
 
     return `
         <div class="insight-card" onclick="showItemModal(${itemId})">
-            <img src="${safeUrl(item.image_path)}" alt="${escapeHtml(item.subcategory)}">
+            <img src="${closetItemImageUrl(item)}" alt="${escapeHtml(item.subcategory)}">
             <div class="insight-overlay">
                 <div class="insight-badge">
                     ${item.times_worn === 0 ? '🆕 Never Worn' : `😴 ${escapeHtml(daysSince)}d ago`}
