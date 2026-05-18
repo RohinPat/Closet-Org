@@ -187,6 +187,8 @@ def client_ip(request: Request) -> str:
 
 def rate_limit(request: Request, route: str, *, limit: int, window: float) -> None:
     """Apply a route-scoped rate limit keyed by caller IP."""
+    if os.getenv("CLOSET_E2E") == "1":
+        return
     rate_limiter.check(
         f"{client_ip(request)}::{route}", limit=limit, window_seconds=window
     )

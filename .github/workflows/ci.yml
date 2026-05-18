@@ -95,6 +95,7 @@ jobs:
       - name: Start API and run Playwright website tests
         env:
           CLOSET_SECRET_KEY: ci-e2e-signing-secret-minimum-32-chars-xx
+          CLOSET_E2E: "1"
         run: |
           cd backend
           python -m uvicorn main:app --host 127.0.0.1 --port 8765 &

@@ -10,7 +10,7 @@ import uuid
 from typing import Any, Dict, Generator
 
 import pytest
-from playwright.sync_api import Browser, Page, sync_playwright
+from playwright.sync_api import Browser, Page, expect, sync_playwright
 
 
 def base_url() -> str:
@@ -81,6 +81,12 @@ def require_server() -> str:
 
 
 @pytest.fixture(scope="session")
+def session_account(require_server: str) -> Dict[str, Any]:
+    """One registered user for the whole E2E run (avoids auth rate limits)."""
+    return register_account()
+
+
+@pytest.fixture(scope="session")
 def browser_instance(require_server: str) -> Generator[Browser, None, None]:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -90,10 +96,36 @@ def browser_instance(require_server: str) -> Generator[Browser, None, None]:
 
 @pytest.fixture
 def page(browser_instance: Browser, require_server: str) -> Generator[Page, None, None]:
-    context = browser_instance.new_context()
+    context = browser_instance.new_context(viewport={"width": 1280, "height": 720})
     pg = context.new_page()
+    pg.add_init_script(
+        "localStorage.setItem('onboarding_carousel_v1', 'done');"
+    )
     yield pg
     context.close()
+
+
+def dismiss_onboarding(page: Page) -> None:
+    root = page.locator("#onboarding-carousel.is-active")
+    if root.count() and root.is_visible():
+        page.locator("#onboarding-carousel-skip").click()
+        expect(root).to_be_hidden(timeout=5_000)
+
+
+def login_via_ui(page: Page, base: str, username: str, password: str) -> None:
+    page.goto(f"{base}/frontend/login.html", wait_until="domcontentloaded")
+    page.fill("#username", username)
+    page.fill("#password", password)
+    page.click("#login-btn")
+    page.wait_for_url("**/app**", timeout=20_000)
+    dismiss_onboarding(page)
+
+
+def assert_app_shell(page: Page) -> None:
+    expect(page.locator(".header .logo, .app-brand, h1.logo").first).to_contain_text(
+        "Closet-Org"
+    )
+    expect(page.locator(".tab-content.active")).to_have_count(1)
 
 
 @pytest.fixture
