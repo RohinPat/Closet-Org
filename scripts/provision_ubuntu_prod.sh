@@ -64,12 +64,12 @@ python3 -m venv "${INSTALL_DIR}/.venv"
 source "${INSTALL_DIR}/.venv/bin/activate"
 pip install --upgrade pip
 pip install -r "${INSTALL_DIR}/requirements.txt"
-# Optional: background removal (falls back if missing)
-pip install rembg || true
+# rembg + CPU onnxruntime (no GPU wheels on typical ARM VPS)
+pip install onnxruntime rembg || pip install rembg || true
 deactivate
 
-mkdir -p "${INSTALL_DIR}/uploads"
-chown -R closet-org:closet-org "${INSTALL_DIR}/backend" "${INSTALL_DIR}/uploads" "${INSTALL_DIR}/.venv"
+mkdir -p "${INSTALL_DIR}/uploads" "${INSTALL_DIR}/.cache/huggingface" "${INSTALL_DIR}/.cache/torch"
+chown -R closet-org:closet-org "${INSTALL_DIR}"
 
 cat >/etc/closet-org.env <<EOF
 CLOSET_ENV=production
@@ -79,6 +79,9 @@ TRUST_PROXY_HEADERS=1
 UVICORN_RELOAD=0
 HOST=127.0.0.1
 PORT=8000
+HF_HOME=${INSTALL_DIR}/.cache/huggingface
+TORCH_HOME=${INSTALL_DIR}/.cache/torch
+XDG_CACHE_HOME=${INSTALL_DIR}/.cache
 EOF
 chmod 600 /etc/closet-org.env
 chown root:root /etc/closet-org.env

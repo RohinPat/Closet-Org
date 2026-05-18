@@ -2121,7 +2121,17 @@ async def upload_clothing(
 
         classifications = []
 
-
+        try:
+            classifier = get_classifier()
+        except Exception as exc:
+            logger.exception("Classifier init failed")
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "AI model failed to load (first upload may need a few minutes). "
+                    "Check server disk space and /opt/closet-org/.cache permissions."
+                ),
+            ) from exc
 
         for upload in files:
 
@@ -2129,9 +2139,7 @@ async def upload_clothing(
 
             saved_paths.append(str(saved))
 
-
-
-            classifications.append(get_classifier().classify(str(saved)))
+            classifications.append(classifier.classify(str(saved)))
 
 
 
