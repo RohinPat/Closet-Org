@@ -534,9 +534,34 @@ async function uploadClothing() {
             },
             body: formData
         });
-        
-        const data = await response.json();
-        
+
+        const bodyText = await response.text();
+        const contentType = response.headers.get('content-type') || '';
+        let data = {};
+        if (contentType.includes('application/json') && bodyText) {
+            try {
+                data = JSON.parse(bodyText);
+            } catch {
+                alert(
+                    'Upload failed: server returned invalid JSON (HTTP ' +
+                        response.status +
+                        ').'
+                );
+                return;
+            }
+        } else if (!response.ok) {
+            const snippet = bodyText.replace(/\s+/g, ' ').trim().slice(0, 120);
+            alert(
+                'Upload failed: HTTP ' +
+                    response.status +
+                    (snippet ? ' — ' + snippet : '') +
+                    (response.status === 504 || response.status === 502
+                        ? ' (server timed out — first upload can take several minutes; retry after fixing nginx timeouts)'
+                        : '')
+            );
+            return;
+        }
+
         if (response.ok) {
             showClassificationResult(data);
             loadCloset(); // Refresh closet
