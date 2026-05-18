@@ -1,0 +1,204 @@
+# Closet-Org — local admin / ops notes (template)
+
+Copy this file to `docs/ADMIN_LOCAL.md` (gitignored). Fill in your values.
+Do **not** commit `ADMIN_LOCAL.md` — it may contain IPs, hostnames, and secret locations.
+
+```bash
+cp docs/ADMIN_LOCAL.md.example docs/ADMIN_LOCAL.md
+```
+
+---
+
+## Your deployment summary
+
+| Item | Value |
+|------|--------|
+| Cloud | (e.g. Oracle Cloud Free — Ampere A1 Flex) |
+| Region | |
+| Public IP | |
+| API URL (current) | `http://YOUR_IP` or `https://api.yourdomain.com` |
+| Install path | `/opt/closet-org` |
+| Git remote | `https://github.com/YOU/Closet-Org.git` |
+| Play / App Store API URL | same as API URL (HTTPS for release) |
+
+---
+
+## SSH
+
+```powershell
+ssh -i C:\path\to\your-key.pem ubuntu@YOUR_PUBLIC_IP
+```
+
+User on Canonical Ubuntu images: **`ubuntu`**.
+
+---
+
+## Oracle Cloud — networking checklist
+
+### Security list (subnet)
+
+Ingress (minimum):
+
+| Source | Protocol | Port |
+|--------|----------|------|
+| Your IP or `0.0.0.0/0` | TCP | 22 |
+| `0.0.0.0/0` | TCP | 80 |
+| `0.0.0.0/0` | TCP | 443 |
+
+Do **not** expose port **8000** publicly; uvicorn listens on `127.0.0.1:8000` only.
+
+### Ephemeral public IP
+
+Instance → VNIC → primary private IP → assign **ephemeral public IP** if missing.
+
+### Instance iptables (Oracle Ubuntu images)
+
+Default INPUT chain often allows only **22**, then **REJECT** all. Add **80** and **443**:
+
+```bash
+sudo iptables -I INPUT 5 -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT 6 -p tcp --dport 443 -j ACCEPT
+sudo apt install -y iptables-persistent
+sudo netfilter-persistent save
+```
+
+---
+
+## Server layout
+
+| Path | Purpose |
+|------|---------|
+| `/opt/closet-org` | Git clone, venv, frontend |
+| `/opt/closet-org/backend` | FastAPI, `closet.db` |
+| `/opt/closet-org/uploads` | Uploaded images (writable by `closet-org`) |
+| `/opt/closet-org/.cache` | HF / torch caches |
+| `/opt/closet-org/.u2net` | rembg model weights |
+| `/etc/closet-org.env` | Production env (mode 600, root) |
+| `/etc/systemd/system/closet-org.service` | systemd unit |
+
+Runtime user: **`closet-org`**. Deploy/pull often as **`ubuntu`** or **`root`**, then fix ownership (below).
+
+---
+
+## `/etc/closet-org.env` (example)
+
+```env
+CLOSET_ENV=production
+CLOSET_SECRET_KEY=PASTE_FROM_python3_-c_import_secrets_print_secrets_token_urlsafe_48
+ALLOWED_ORIGINS=http://YOUR_PUBLIC_IP
+TRUST_PROXY_HEADERS=1
+UVICORN_RELOAD=0
+HOST=127.0.0.1
+PORT=8000
+HF_HOME=/opt/closet-org/.cache/huggingface
+TORCH_HOME=/opt/closet-org/.cache/torch
+XDG_CACHE_HOME=/opt/closet-org/.cache
+```
+
+**Backup `CLOSET_SECRET_KEY` offline** (password manager). Never commit it.
+
+---
+
+## nginx
+
+Config: `/etc/nginx/sites-available/closet-org`
+
+Required for long uploads / first CLIP classify:
+
+```nginx
+proxy_connect_timeout 600s;
+proxy_send_timeout 600s;
+proxy_read_timeout 600s;
+send_timeout 600s;
+client_max_body_size 25m;
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+HTTPS later: `sudo certbot --nginx -d api.yourdomain.com`
+
+---
+
+## Provision / reinstall
+
+Automated script (public repo): `scripts/provision_ubuntu_prod.sh`
+
+```bash
+export CLOSET_REPO_URL='https://github.com/YOU/Closet-Org.git'
+export PUBLIC_HOSTNAME='YOUR_IP_OR_DOMAIN'
+export SKIP_TLS=1   # omit when using certbot + domain
+
+sudo -E bash /path/to/provision_ubuntu_prod.sh
+```
+
+Manual reference: `docs/AWS_DEPLOYMENT.md` (same pattern on any Linux VPS).
+
+---
+
+## Deploy code updates
+
+```bash
+sudo git config --global --add safe.directory /opt/closet-org
+cd /opt/closet-org && sudo git pull
+
+sudo mkdir -p uploads .cache/huggingface .cache/torch .u2net
+sudo chown -R closet-org:closet-org backend uploads .venv .cache .u2net
+
+sudo systemctl restart closet-org
+```
+
+Static `frontend/` changes do not need a restart; use hard refresh in browser.
+
+---
+
+## Useful commands
+
+```bash
+sudo systemctl status closet-org
+journalctl -u closet-org -f
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1/
+ls -la /opt/closet-org/uploads/
+sudo grep CLOSET_SECRET_KEY /etc/closet-org.env   # do not paste in chat
+```
+
+---
+
+## Web frontend fixes (production)
+
+| Issue | Cause | Fix in repo |
+|-------|--------|-------------|
+| Choose Image dead | CSP blocks inline `onclick` | `choose-image-btn` + `script.js` listener |
+| Upload validation error | Form field must be `files` not `file` | `script.js` |
+| `Upload failed: [object Object]` | FastAPI `detail` is JSON array | `formatApiError()` |
+| HTML / not JSON on upload | nginx 504 timeout | `proxy_read_timeout 600s` |
+| Broken closet thumbnails | DB has `/opt/.../uploads/foo.webp`, `safeUrl` rejected | `closetItemImageUrl()` in `script.js` |
+
+---
+
+## Mobile / Play Store (next)
+
+- `EXPO_PUBLIC_API_URL` = API origin (no trailing slash, no `/api`)
+- `eas build --platform android --profile production`
+- Google Play one-time fee ~$25
+- Prefer **HTTPS + domain** before wide release
+
+---
+
+## Backups
+
+Snapshot EBS volume or copy:
+
+- `/opt/closet-org/backend/closet.db`
+- `/opt/closet-org/uploads/`
+
+---
+
+## Personal checklist
+
+- [ ] Domain + HTTPS
+- [ ] Play Console account
+- [ ] Privacy policy URL
+- [ ] Rotate `CLOSET_SECRET_KEY` if leaked

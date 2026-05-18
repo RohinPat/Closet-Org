@@ -36,6 +36,10 @@ Copy [`.env.example`](.env.example) to `.env`, fill in the values, and export th
 
 Threat model, headers, uploads, deployment checklist → **[PROJECT.md § Security](PROJECT.md#security)**.
 
+### Production ops (private notes)
+
+Server-specific commands (SSH, Oracle firewall, nginx timeouts, `git pull`, backups) live in **`docs/ADMIN_LOCAL.md`**, which is **gitignored**. Copy **[`docs/ADMIN_LOCAL.md.example`](docs/ADMIN_LOCAL.md.example)** to `docs/ADMIN_LOCAL.md` and fill in your values. Automated VPS setup: **`scripts/provision_ubuntu_prod.sh`** and **[`docs/AWS_DEPLOYMENT.md`](docs/AWS_DEPLOYMENT.md)**.
+
 ### Web frontend
 
 Open `http://localhost:8000`, register, then upload items, outfits, stats.
