@@ -74,10 +74,11 @@ curl -s http://127.0.0.1/healthz
 If `git pull` fails as `ubuntu`:
 
 ```bash
-sudo chown -R ubuntu:ubuntu /opt/closet-org/.git
+sudo chown -R ubuntu:ubuntu /opt/closet-org
 cd /opt/closet-org
 git pull origin main
 ls scripts/deploy_prod.sh
+sudo bash scripts/deploy_prod.sh
 ```
 
 Then re-run **Deploy production** on GitHub.

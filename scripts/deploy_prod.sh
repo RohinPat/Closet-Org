@@ -26,8 +26,8 @@ fi
 
 git config --global --add safe.directory "${INSTALL_DIR}" 2>/dev/null || true
 
-# ubuntu must own .git for fetch/pull (runtime chown sometimes leaves .git as closet-org)
-chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "${INSTALL_DIR}/.git"
+# ubuntu owns the repo tree so git pull can update tracked files (do not chown whole tree to closet-org)
+chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "${INSTALL_DIR}"
 
 echo "==> Fetch ${GIT_BRANCH}"
 sudo -u "${DEPLOY_USER}" git -C "${INSTALL_DIR}" fetch origin "${GIT_BRANCH}"
@@ -43,19 +43,18 @@ fi
 "${INSTALL_DIR}/.venv/bin/pip" install -q -r "${INSTALL_DIR}/requirements.txt"
 "${INSTALL_DIR}/.venv/bin/pip" install -q onnxruntime rembg 2>/dev/null || true
 
-echo "==> Runtime permissions"
+echo "==> Runtime permissions (writable paths only — keeps git pull working)"
 mkdir -p \
   "${INSTALL_DIR}/uploads" \
   "${INSTALL_DIR}/.cache/huggingface" \
   "${INSTALL_DIR}/.cache/torch" \
   "${INSTALL_DIR}/.u2net"
-chown -R closet-org:closet-org \
-  "${INSTALL_DIR}/backend" \
-  "${INSTALL_DIR}/uploads" \
-  "${INSTALL_DIR}/.venv" \
-  "${INSTALL_DIR}/.cache" \
-  "${INSTALL_DIR}/.u2net"
-chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "${INSTALL_DIR}/.git"
+for path in uploads .cache .u2net .venv; do
+  chown -R closet-org:closet-org "${INSTALL_DIR}/${path}"
+done
+if [[ -f "${INSTALL_DIR}/backend/closet.db" ]]; then
+  chown closet-org:closet-org "${INSTALL_DIR}/backend/closet.db"
+fi
 
 echo "==> Restart services"
 systemctl restart closet-org
