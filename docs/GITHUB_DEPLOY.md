@@ -76,6 +76,7 @@ curl -s http://127.0.0.1/healthz
 | Deploy job skipped | CI failed or push was not to `main` — fix tests or use **Run workflow** |
 | `Permission denied (publickey)` | Wrong `DEPLOY_SSH_KEY` or key not in `authorized_keys` — re-run setup script |
 | `sudo: a password is required` | Re-run `sudo bash scripts/setup_github_deploy.sh` for sudoers |
+| `deploy_prod.sh: command not found` | Server repo is behind `main` — run once: `cd /opt/closet-org && git pull` (as `ubuntu`), then re-run deploy |
 | `git pull` failed | Local changes on server — `cd /opt/closet-org && sudo git status`, stash or reset |
 | Health check fails | `journalctl -u closet-org -n 80` on server |
 
