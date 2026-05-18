@@ -417,11 +417,29 @@ function initClosetFilterUi() {
 function initUpload() {
     const fileInput = document.getElementById('file-input');
     const uploadArea = document.getElementById('upload-area');
+    const chooseImageBtn = document.getElementById('choose-image-btn');
     const uploadPreview = document.getElementById('upload-preview');
     const previewImage = document.getElementById('preview-image');
     const uploadBtn = document.getElementById('upload-btn');
     const cancelBtn = document.getElementById('cancel-btn');
     const addAnotherBtn = document.getElementById('add-another-btn');
+
+    const openFilePicker = () => fileInput?.click();
+
+    if (chooseImageBtn && fileInput) {
+        chooseImageBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openFilePicker();
+        });
+    }
+
+    if (uploadArea && fileInput) {
+        uploadArea.addEventListener('click', (e) => {
+            if (e.target.closest('#choose-image-btn')) return;
+            openFilePicker();
+        });
+    }
     
     // File input change
     fileInput.addEventListener('change', (e) => {
