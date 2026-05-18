@@ -77,9 +77,45 @@ function closetItemImageUrl(item) {
     return safeUrl(item.thumbnail_path || item.image_path);
 }
 
+async function apiFetch(path, options = {}) {
+    const headers = {
+        Accept: 'application/json',
+        ...(options.headers || {}),
+    };
+    if (authToken) {
+        headers.Authorization = `Bearer ${authToken}`;
+    }
+    const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    const text = await res.text();
+    let body = null;
+    try {
+        body = text ? JSON.parse(text) : null;
+    } catch {
+        body = text;
+    }
+    if (!res.ok) {
+        const detail =
+            body && typeof body === 'object' && body !== null && 'detail' in body
+                ? body.detail
+                : body;
+        throw new Error(formatApiError(detail));
+    }
+    return body;
+}
+
+async function refreshCurrentUser() {
+    currentUser = await apiFetch('/auth/me');
+    localStorage.setItem('user', JSON.stringify(currentUser));
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    checkAuthentication();
+    checkAuthentication().catch((err) => {
+        console.error('checkAuthentication failed:', err);
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
+        window.location.href = '/frontend/login.html';
+    });
 });
 
 // Authentication Check
@@ -104,11 +140,36 @@ async function checkAuthentication() {
         
         currentUser = await response.json();
         initializeApp();
+        if (currentUser.social_enabled !== false) {
+            showTab('feed');
+        }
     } catch (error) {
         console.error('Auth error:', error);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('user');
-        window.location.href = '/frontend/login.html';
+        const onApp = window.location.pathname === '/app' || window.location.pathname.endsWith('/app');
+        if (!onApp || !authToken) {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user');
+            window.location.href = '/frontend/login.html';
+            return;
+        }
+        showFatalAppError(
+            error.message || 'Could not start the app. Try a hard refresh or sign in again.'
+        );
+    }
+}
+
+function showFatalAppError(message) {
+    let banner = document.getElementById('app-fatal-error');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'app-fatal-error';
+        banner.className = 'error-message';
+        banner.style.margin = '1rem';
+        document.querySelector('.main .container')?.prepend(banner);
+    }
+    if (banner) {
+        banner.textContent = message;
+        banner.classList.remove('hidden');
     }
 }
 
@@ -123,41 +184,98 @@ function initializeApp() {
     initThemeToggle();
     initUserMenu();
     initProfile();
-    
-    // Load initial data
-    loadCloset();
-    
+
     initClosetFilterUi();
     initCareSubnav();
+    initItemModal();
 
-    document.getElementById('generate-outfits-btn').addEventListener('click', generateOutfits);
-    document.getElementById('refresh-laundry-btn').addEventListener('click', loadLaundry);
-    document.getElementById('refresh-insights-btn').addEventListener('click', loadInsights);
-    document.getElementById('neglect-days-filter').addEventListener('change', loadInsights);
+    window.ClosetApp = {
+        API_BASE,
+        authToken,
+        get currentUser() {
+            return currentUser;
+        },
+        escapeHtml,
+        safeUrl,
+        closetItemImageUrl,
+        formatApiError,
+        apiFetch,
+        showTab,
+        showCarePane,
+        activeCarePane,
+        loadCloset,
+        generateOutfits,
+        showToast,
+        updateUserDisplay,
+        refreshCurrentUser,
+        loadOutfitsPlannedPreview: () =>
+            window.ClosetFeatures?.loadOutfitsPlannedPreview?.(),
+    };
+
+    if (window.ClosetFeatures) {
+        window.ClosetFeatures.init();
+        window.ClosetFeatures.loadProfileHub();
+        window.ClosetFeatures.loadOutfitsPlannedPreview();
+    }
+
+    if (window.ClosetUpgrade) {
+        window.ClosetUpgrade.init();
+    }
+
+    loadCloset().catch((err) => console.error('loadCloset failed:', err));
+
+    document.getElementById('generate-outfits-btn')?.addEventListener('click', () => generateOutfits());
+    const reshuffleBtn = document.getElementById('reshuffle-outfits-btn');
+    if (reshuffleBtn) {
+        reshuffleBtn.addEventListener('click', () => generateOutfits({ forceSeed: true }));
+    }
+    document.getElementById('refresh-laundry-btn')?.addEventListener('click', loadLaundry);
+    document.getElementById('refresh-insights-btn')?.addEventListener('click', loadInsights);
+    document.getElementById('neglect-days-filter')?.addEventListener('change', loadInsights);
+
+    const searchInput = document.getElementById('closet-search');
+    if (searchInput) {
+        let searchTimer;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(loadCloset, 300);
+        });
+    }
+
 }
 
 // Update User Display
 function updateUserDisplay() {
+    if (!currentUser) return;
     const userName = document.getElementById('user-name');
     const userInitials = document.getElementById('user-initials');
     const profileInitials = document.getElementById('profile-initials');
-    
-    userName.textContent = currentUser.full_name || currentUser.username;
-    
-    const initials = (currentUser.full_name || currentUser.username)
+
+    const display = currentUser.full_name || currentUser.username || 'User';
+    if (userName) userName.textContent = display;
+
+    const initials = display
         .split(' ')
-        .map(n => n[0])
+        .map((n) => n[0])
         .join('')
         .toUpperCase()
         .substring(0, 2);
-    
-    userInitials.textContent = initials;
-    profileInitials.textContent = initials;
+
+    if (userInitials) userInitials.textContent = initials;
+    if (profileInitials) profileInitials.textContent = initials;
+
+    const feedBtn = document.getElementById('nav-feed');
+    const socialOn = currentUser.social_enabled !== false;
+    if (feedBtn) feedBtn.classList.toggle('hidden', !socialOn);
+    if (window.ClosetFeatures?.applySocialNav) {
+        window.ClosetFeatures.applySocialNav();
+    }
 }
 
 // Theme Toggle
 function initThemeToggle() {
     const themeToggle = document.getElementById('theme-toggle');
+    if (!themeToggle) return;
     const savedTheme = currentUser.theme_preference || 'light';
     
     // Apply saved theme
@@ -204,6 +322,7 @@ function initUserMenu() {
     const userProfileBtn = document.getElementById('user-profile-btn');
     const dropdownMenu = document.getElementById('dropdown-menu');
     const logoutBtn = document.getElementById('logout-btn');
+    if (!userProfileBtn || !dropdownMenu || !logoutBtn) return;
     
     userProfileBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -230,6 +349,7 @@ function initUserMenu() {
     
     // Profile menu item
     const profileMenuItem = dropdownMenu.querySelector('[data-tab="profile"]');
+    if (!profileMenuItem) return;
     profileMenuItem.addEventListener('click', (e) => {
         e.preventDefault();
         showTab('profile');
@@ -243,6 +363,7 @@ function initUserMenu() {
 // Profile Management
 function initProfile() {
     const profileForm = document.getElementById('profile-form');
+    if (!profileForm) return;
     
     // Load profile data
     loadProfileData();
@@ -289,31 +410,42 @@ function initProfile() {
 }
 
 function loadProfileData() {
-    // .textContent and .value sinks already neutralise HTML — no escapeHtml
-    // needed here, but keep that in mind when porting any of this to innerHTML.
-    document.getElementById('profile-username').textContent = currentUser.username || '';
-    document.getElementById('profile-email').textContent = currentUser.email || '';
-    document.getElementById('profile-full-name').value = currentUser.full_name || '';
-    document.getElementById('profile-bio').value = currentUser.bio || '';
-    
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+    const setValue = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+    };
+
+    setText('profile-username', currentUser.username || '');
+    setText('profile-email', currentUser.email || '');
+    setValue('profile-full-name', currentUser.full_name || '');
+    setValue('profile-bio', currentUser.bio || '');
+
     if (currentUser.created_at) {
-        document.getElementById('profile-created').textContent = 
+        setText(
+            'profile-created',
             new Date(currentUser.created_at).toLocaleDateString('en-US', {
                 year: 'numeric',
                 month: 'long',
-                day: 'numeric'
-            });
+                day: 'numeric',
+            })
+        );
     }
-    
+
     if (currentUser.last_login) {
-        document.getElementById('profile-last-login').textContent = 
+        setText(
+            'profile-last-login',
             new Date(currentUser.last_login).toLocaleDateString('en-US', {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
                 hour: '2-digit',
-                minute: '2-digit'
-            });
+                minute: '2-digit',
+            })
+        );
     }
 }
 
@@ -345,23 +477,33 @@ function initNavigation() {
     });
 }
 
-function showTab(tabName) {
+function showTab(tabName, options = {}) {
     currentTab = tabName;
     const tabs = document.querySelectorAll('.tab-content');
-    
-    tabs.forEach(tab => tab.classList.remove('active'));
+    tabs.forEach((tab) => tab.classList.remove('active'));
     const tabEl = document.getElementById(`${tabName}-tab`);
     if (tabEl) {
         tabEl.classList.add('active');
     }
-    
+
+    const mainTabs = ['feed', 'closet', 'upload', 'outfits', 'profile'];
+    document.querySelectorAll('.nav-btn').forEach((btn) => {
+        const isMain = mainTabs.includes(btn.dataset.tab);
+        if (!isMain) return;
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+
     if (tabName === 'closet') {
         loadCloset();
     } else if (tabName === 'care') {
         showCarePane(activeCarePane || 'laundry');
     } else if (tabName === 'profile') {
         loadProfileData();
+    } else if (tabName === 'outfits') {
+        window.ClosetFeatures?.loadOutfitsPlannedPreview?.();
     }
+
+    window.ClosetFeatures?.onTabShown?.(tabName, options);
 }
 
 function showCarePane(paneName) {
@@ -400,9 +542,13 @@ function setChipGroupActive(group, value) {
 }
 
 function syncChipsFromSelects() {
-    setChipGroupActive('category', document.getElementById('category-filter').value);
-    setChipGroupActive('status', document.getElementById('status-filter').value);
-    setChipGroupActive('rotation', document.getElementById('rotation-filter').value);
+    const category = document.getElementById('category-filter');
+    const status = document.getElementById('status-filter');
+    const rotation = document.getElementById('rotation-filter');
+    if (!category || !status || !rotation) return;
+    setChipGroupActive('category', category.value);
+    setChipGroupActive('status', status.value);
+    setChipGroupActive('rotation', rotation.value);
 }
 
 function initClosetFilterUi() {
@@ -412,10 +558,12 @@ function initClosetFilterUi() {
     };
 
     ['category-filter', 'status-filter', 'rotation-filter'].forEach((id) => {
-        document.getElementById(id).addEventListener('change', onSelectFiltersChange);
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', onSelectFiltersChange);
     });
 
-    document.getElementById('sort-by').addEventListener('change', loadCloset);
+    const sortEl = document.getElementById('sort-by');
+    if (sortEl) sortEl.addEventListener('change', loadCloset);
 
     document.querySelectorAll('.filter-chip').forEach((chip) => {
         chip.addEventListener('click', () => {
@@ -452,13 +600,14 @@ function initUpload() {
     const fileInput = document.getElementById('file-input');
     const uploadArea = document.getElementById('upload-area');
     const chooseImageBtn = document.getElementById('choose-image-btn');
-    const uploadPreview = document.getElementById('upload-preview');
-    const previewImage = document.getElementById('preview-image');
     const uploadBtn = document.getElementById('upload-btn');
     const cancelBtn = document.getElementById('cancel-btn');
     const addAnotherBtn = document.getElementById('add-another-btn');
+    if (!fileInput || !uploadArea || !uploadBtn || !cancelBtn || !addAnotherBtn) {
+        return;
+    }
 
-    const openFilePicker = () => fileInput?.click();
+    const openFilePicker = () => fileInput.click();
 
     if (chooseImageBtn && fileInput) {
         chooseImageBtn.addEventListener('click', (e) => {
@@ -595,7 +744,18 @@ function showClassificationResult(data) {
     const detailsDiv = resultDiv.querySelector('.result-details');
     
     const c = data.classification || {};
+    let dupHtml = '';
+    if (data.duplicate_hint) {
+        const hint = data.duplicate_hint;
+        const msg =
+            hint.message ||
+            (hint.item_id
+                ? `Similar to item #${hint.item_id}${hint.score != null ? ` (${Math.round(hint.score * 100)}%)` : ''}`
+                : 'Similar item detected');
+        dupHtml = `<div class="result-row warn-text"><span class="result-label">Duplicate check:</span><span class="result-value">${escapeHtml(msg)}</span></div>`;
+    }
     detailsDiv.innerHTML = `
+        ${dupHtml}
         <div class="result-row">
             <span class="result-label">Category:</span>
             <span class="result-value">${escapeHtml(c.category)}</span>
@@ -633,53 +793,61 @@ function resetUpload() {
 // Load closet items
 async function loadCloset() {
     const grid = document.getElementById('closet-grid');
+    if (!grid) return;
+
     grid.innerHTML = '<div class="loading">Loading your closet...</div>';
-    
-    const category = document.getElementById('category-filter').value;
-    const status = document.getElementById('status-filter').value;
-    const rotation = document.getElementById('rotation-filter').value;
-    const sortBy = document.getElementById('sort-by').value;
-    
+
+    const category = document.getElementById('category-filter')?.value || '';
+    const status = document.getElementById('status-filter')?.value || '';
+    const rotation = document.getElementById('rotation-filter')?.value || '';
+    const sortBy = document.getElementById('sort-by')?.value || 'recent';
+
     const params = new URLSearchParams();
     if (category) params.append('category', category);
     if (status) params.append('status', status);
-    
+    const searchEl = document.getElementById('closet-search');
+    const q = searchEl ? searchEl.value.trim() : '';
+    if (q) params.append('q', q);
+    const locSel = document.getElementById('closet-location-filter');
+    if (locSel && locSel.value) params.append('closet_location_id', locSel.value);
+
+    const query = params.toString();
+    const path = query ? `/closet?${query}` : '/closet';
+
     try {
-        const response = await fetch(`${API_BASE}/closet?${params}`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-        const data = await response.json();
-        
-        let items = data.items;
-        
-        // Client-side rotation filter
-        if (rotation === 'favorites') {
-            items = items.filter(item => item.is_favorite);
-        } else if (rotation) {
-            items = items.filter(item => (item.rotation_category || 'new') === rotation);
+        if (!authToken) {
+            throw new Error('Not signed in');
         }
-        
-        // Client-side sorting
+
+        const data = await apiFetch(path);
+        let items = Array.isArray(data.items) ? data.items : [];
+
+        if (rotation === 'favorites') {
+            items = items.filter((item) => item.is_favorite);
+        } else if (rotation) {
+            items = items.filter((item) => (item.rotation_category || 'new') === rotation);
+        }
+
         items = sortItems(items, sortBy);
-        
+
         if (items.length === 0) {
-            grid.innerHTML = '<div class="empty-state">No items found. Try different filters!</div>';
+            grid.innerHTML =
+                '<div class="empty-state"><p>Your closet is empty.</p><p class="hint-text">Add items from the Add tab, or clear filters above.</p></div>';
             return;
         }
-        
-        grid.innerHTML = items.map(item => createClothingCard(item)).join('');
-        
-        // Add click listeners
-        document.querySelectorAll('.clothing-card').forEach(card => {
+
+        grid.innerHTML = items.map((item) => createClothingCard(item)).join('');
+
+        grid.querySelectorAll('.clothing-card').forEach((card) => {
             card.addEventListener('click', () => {
-                showItemModal(parseInt(card.dataset.itemId));
+                showItemModal(Number(card.dataset.itemId));
             });
         });
     } catch (error) {
         console.error('Error loading closet:', error);
-        grid.innerHTML = '<div class="empty-state">Failed to load items</div>';
+        const msg = error instanceof Error ? error.message : 'Failed to load closet';
+        grid.innerHTML = `<div class="empty-state"><p>${escapeHtml(msg)}</p><button type="button" class="btn btn-secondary btn-sm" id="closet-retry-btn">Retry</button></div>`;
+        document.getElementById('closet-retry-btn')?.addEventListener('click', () => loadCloset());
     }
 }
 
@@ -823,205 +991,26 @@ function createClothingCard(item) {
 }
 
 // Item Modal
+// Item Modal
 async function showItemModal(itemId) {
-    try {
-        const response = await fetch(`${API_BASE}/item/${itemId}`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-        const item = await response.json();
-        
-        const modal = document.getElementById('item-modal');
-        const modalBody = document.getElementById('modal-body');
-        
-        const colorSwatches = (item.colors || []).map(color =>
-            `<div class="color-swatch" style="background-color: ${escapeHtml(color)}"></div>`
-        ).join('');
-        
-        // Calculate metrics
-        const wearCount = item.wear_again_count || 0;
-        const maxWear = item.max_wear_before_wash || 1;
-        const freshness = Math.round((item.freshness_score || 1.0) * 100);
-        const condition = Math.round((item.condition_score || 1.0) * 100);
-        const cpw = item.cost_per_wear ? `$${item.cost_per_wear}` : 'N/A';
-        const daysSince = item.days_since_worn !== null ? `${item.days_since_worn} days ago` : 'Not worn yet';
-        const daysOwned = item.days_owned !== null ? `${item.days_owned} days` : 'N/A';
-        
-        // Purchase info — purchase_location is user-controlled, must escape.
-        const purchaseInfo = item.purchase_price
-            ? `
-            <div class="modal-section">
-                <h3>💰 Value Tracking</h3>
-                <div class="metric-grid">
-                    <div class="metric">
-                        <span class="metric-label">Purchase Price</span>
-                        <span class="metric-value">$${escapeHtml(item.purchase_price)}</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Cost Per Wear</span>
-                        <span class="metric-value ${item.times_worn > 10 ? 'value-good' : 'value-improving'}">${escapeHtml(cpw)}</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Times Worn</span>
-                        <span class="metric-value">${Number(item.times_worn) || 0}x</span>
-                    </div>
-                    ${item.purchase_date ? `
-                    <div class="metric">
-                        <span class="metric-label">Owned For</span>
-                        <span class="metric-value">${escapeHtml(daysOwned)}</span>
-                    </div>
-                    ` : ''}
-                </div>
-                ${item.purchase_location ? `<p class="meta-info">📍 ${escapeHtml(item.purchase_location)}</p>` : ''}
-            </div>
-            ` : '';
-        
-        // Multi-wear status
-        const wearAgainSection = maxWear > 1 ? `
-            <div class="modal-section wear-again-section">
-                <h3>🔄 Multi-Wear Tracking</h3>
-                <div class="wear-progress">
-                    <div class="wear-progress-bar" role="progressbar" aria-valuenow="${Number(wearCount) || 0}" aria-valuemin="0" aria-valuemax="${Number(maxWear) || 1}" aria-label="Times worn since last wash, ${Number(wearCount) || 0} of ${Number(maxWear) || 1}">
-                        <div class="wear-progress-fill" style="width: ${(wearCount / maxWear) * 100}%"></div>
-                    </div>
-                    <p class="wear-status">Worn ${wearCount}/${maxWear} times since last wash</p>
-                </div>
-                ${wearCount > 0 ? `
-                    <p class="wear-hint">💡 You can wear this ${maxWear - wearCount} more time(s) before washing</p>
-                ` : ''}
-            </div>
-        ` : '';
-        
-        const safeItemId = Number(itemId) || 0;
-        modalBody.innerHTML = `
-            <img src="${closetItemImageUrl(item)}" alt="${escapeHtml(item.subcategory)}" class="modal-image">
-
-            <div class="modal-header-section">
-                <h2>${escapeHtml(item.subcategory)}</h2>
-                <button class="btn-favorite ${item.is_favorite ? 'active' : ''}" onclick="toggleFavorite(${safeItemId})">
-                    ${item.is_favorite ? '⭐ Favorite' : '☆ Add to Favorites'}
-                </button>
-            </div>
-
-            ${item.brand ? `<p class="item-brand-modal">${escapeHtml(item.brand)}</p>` : ''}
-
-            <div class="clothing-card-meta">
-                <span class="badge badge-category">${escapeHtml(item.category)}</span>
-                <span class="badge badge-season">${escapeHtml(item.season)}</span>
-                <span class="badge badge-style">${escapeHtml(item.style)}</span>
-                ${item.size ? `<span class="badge badge-size">Size: ${escapeHtml(item.size)}</span>` : ''}
-            </div>
-
-            <div class="color-swatches">${colorSwatches}</div>
-
-            <div class="modal-section">
-                <h3>📊 Current Status</h3>
-                <div class="status-grid">
-                    <div class="status-item">
-                        <span class="status-icon">${item.washed && wearCount === 0 ? '✓' : wearCount > 0 ? '🔄' : '⚠'}</span>
-                        <span class="status-text">
-                            ${item.washed && wearCount === 0 ? 'Clean & Ready' :
-                              wearCount > 0 ? `Worn ${Number(wearCount) || 0}x, can wear again` :
-                              'Needs Washing'}
-                        </span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-icon">📅</span>
-                        <span class="status-text">Last worn: ${escapeHtml(daysSince)}</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-icon">📍</span>
-                        <span class="status-text">${escapeHtml(item.physical_location || 'Closet')}</span>
-                    </div>
-                </div>
-            </div>
-
-            ${wearAgainSection}
-
-            <div class="modal-section">
-                <h3>💚 Freshness & Condition</h3>
-                <div class="score-bars">
-                    <div class="score-bar-container">
-                        <label>Freshness Score</label>
-                        <div class="score-bar" role="progressbar" aria-valuenow="${Number(freshness) || 0}" aria-valuemin="0" aria-valuemax="100" aria-label="Freshness score ${Number(freshness) || 0} percent">
-                            <div class="score-fill ${freshness >= 80 ? 'fresh-high' : freshness >= 60 ? 'fresh-medium' : 'fresh-low'}"
-                                 style="width: ${Number(freshness) || 0}%"></div>
-                        </div>
-                        <span class="score-value">${Number(freshness) || 0}%</span>
-                    </div>
-                    <div class="score-bar-container">
-                        <label>Condition Score</label>
-                        <div class="score-bar" role="progressbar" aria-valuenow="${Number(condition) || 0}" aria-valuemin="0" aria-valuemax="100" aria-label="Condition score ${Number(condition) || 0} percent">
-                            <div class="score-fill ${condition >= 80 ? 'fresh-high' : condition >= 60 ? 'fresh-medium' : 'fresh-low'}"
-                                 style="width: ${Number(condition) || 0}%"></div>
-                        </div>
-                        <span class="score-value">${Number(condition) || 0}%</span>
-                    </div>
-                </div>
-                ${freshness < 60 ? '<p class="score-hint">😴 You might be getting tired of this item. Consider giving it a 2-week break!</p>' : ''}
-            </div>
-
-            ${purchaseInfo}
-
-            ${item.notes ? `
-            <div class="modal-section">
-                <h3>📝 Notes</h3>
-                <p class="item-notes">${escapeHtml(item.notes)}</p>
-            </div>
-            ` : ''}
-            
-            <div class="modal-actions">
-                ${wearCount > 0 ? `
-                    <button class="btn btn-success" onclick="handleWearAgainDecision(${itemId}, true)">
-                        👍 Can Wear Again
-                    </button>
-                    <button class="btn btn-secondary" onclick="handleWearAgainDecision(${itemId}, false)">
-                        🧺 Send to Laundry
-                    </button>
-                ` : item.washed ? `
-                    <button class="btn btn-success" onclick="markAsWorn(${itemId})">
-                        👕 Mark as Worn Today
-                    </button>
-                ` : ''}
-                
-                ${!item.washed || wearCount >= maxWear ? `
-                    <button class="btn btn-primary" onclick="markAsWashed(${itemId})">
-                        ✨ Mark as Washed
-                    </button>
-                ` : ''}
-                
-                ${item.physical_location !== 'laundry' && (!item.washed || wearCount > 0) ? `
-                    <button class="btn btn-secondary" onclick="addToLaundry(${itemId})">
-                        🧺 Add to Laundry Queue
-                    </button>
-                ` : ''}
-                
-                <button class="btn btn-danger" onclick="deleteItem(${itemId})">
-                    🗑️ Delete Item
-                </button>
-            </div>
-        `;
-        
-        modal.classList.remove('hidden');
-        modal.classList.add('active');
-        
-    } catch (error) {
-        console.error('Error loading item:', error);
-        alert('Failed to load item details');
+    if (window.ClosetItemDetail) {
+        await window.ClosetItemDetail.open(itemId);
+        return;
     }
+    alert('Item detail module failed to load.');
 }
 
-// Modal close
-document.querySelector('.modal-close').addEventListener('click', () => {
-    closeModal();
-});
-
-document.getElementById('item-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'item-modal') {
+// Modal close (defer until DOM is ready; script runs at end of body but guard anyway)
+function initItemModal() {
+    document.querySelector('#item-modal .modal-close')?.addEventListener('click', () => {
         closeModal();
-    }
-});
+    });
+    document.getElementById('item-modal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'item-modal') {
+            closeModal();
+        }
+    });
+}
 
 function closeModal() {
     document.getElementById('item-modal').classList.remove('active');
@@ -1167,34 +1156,66 @@ async function deleteItem(itemId) {
 }
 
 // Generate outfits
-async function generateOutfits() {
+async function generateOutfits(opts = {}) {
     const container = document.getElementById('outfits-container');
     container.innerHTML = '<div class="loading">Generating outfits...</div>';
     
     const occasion = document.getElementById('occasion-filter').value;
     const season = document.getElementById('season-filter').value;
-    
+    const vibeEl = document.getElementById('vibe-filter');
+    const vibe = vibeEl ? vibeEl.value : '';
+    const includePacked = document.getElementById('include-packed-toggle')?.checked;
+    const weatherBanner = document.getElementById('outfit-weather-banner');
+
     const params = new URLSearchParams();
     if (occasion) params.append('occasion', occasion);
     if (season) params.append('season', season);
-    params.append('seed', String(Date.now()));
-    
-    try {
-        const response = await fetch(`${API_BASE}/outfits/recommend?${params}`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`
+    if (vibe) params.append('vibe', vibe);
+    if (includePacked) params.append('include_packed', 'true');
+    if (opts.forceSeed) params.append('seed', String(Date.now()));
+
+    const weatherOn = window.ClosetFeatures?.isWeatherSyncEnabled?.();
+    if (weatherOn && window.ClosetFeatures?.getWeatherCoords) {
+        try {
+            const { lat, lon } = await window.ClosetFeatures.getWeatherCoords();
+            params.append('lat', String(lat));
+            params.append('lon', String(lon));
+        } catch (e) {
+            if (weatherBanner) {
+                weatherBanner.classList.remove('hidden');
+                weatherBanner.textContent = e.message || 'Weather unavailable';
             }
-        });
-        const data = await response.json();
-        
-        if (data.outfits.length === 0) {
+        }
+    }
+
+    try {
+        const data = await apiFetch(`/outfits/recommend?${params}`);
+
+        if (weatherBanner) {
+            if (data.weather) {
+                const w = data.weather;
+                weatherBanner.classList.remove('hidden');
+                weatherBanner.textContent = [
+                    w.location_name,
+                    w.summary || w.condition,
+                    w.temperature_c != null ? `${Math.round(w.temperature_c)}°C` : '',
+                ]
+                    .filter(Boolean)
+                    .join(' · ');
+            } else {
+                weatherBanner.classList.add('hidden');
+                weatherBanner.textContent = '';
+            }
+        }
+
+        if (!data.outfits.length) {
             container.innerHTML = '<div class="empty-state">No outfit combinations found. Try adding more items or changing filters!</div>';
             return;
         }
         
         container.innerHTML = data.outfits.map((outfit, index) => createOutfitCard(outfit, index)).join('');
     } catch (error) {
-        container.innerHTML = '<div class="empty-state">Failed to generate outfits</div>';
+        container.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
     }
 }
 
@@ -1233,7 +1254,29 @@ async function loadStats() {
             }
         });
         const stats = await response.json();
-        
+        let insightsHtml = '';
+        try {
+            const insights = await apiFetch('/closet/insights');
+            const gaps = insights.gaps || [];
+            if (gaps.length) {
+                insightsHtml = `<div class="stat-card stat-card--wide"><h3>Wardrobe gaps</h3><ul class="stat-list">${gaps
+                    .map((g) => `<li><span>${escapeHtml(g.label || g.id)}</span><span>${escapeHtml(g.detail || '')}</span></li>`)
+                    .join('')}</ul></div>`;
+            }
+        } catch {
+            /* insights optional */
+        }
+
+        const cpwHtml =
+            stats.best_cpw && stats.best_cpw.length
+                ? `<div class="stat-card stat-card--wide"><h3>Best value (CPW)</h3><ul class="stat-list">${stats.best_cpw
+                      .map((row) => {
+                          const thumb = closetItemImageUrl(row);
+                          return `<li class="cpw-row">${thumb ? `<img class="cpw-thumb" src="${thumb}" alt="">` : ''}<span>${escapeHtml(row.subcategory)}</span><span>$${escapeHtml(row.cost_per_wear ?? '—')} · ${Number(row.times_worn) || 0} wears</span></li>`;
+                      })
+                      .join('')}</ul></div>`
+                : '';
+
         container.innerHTML = `
             <div class="stat-card">
                 <h3>Total Items</h3>
@@ -1259,6 +1302,8 @@ async function loadStats() {
                     ).join('')}
                 </ul>
             </div>
+            ${cpwHtml}
+            ${insightsHtml}
         `;
     } catch (error) {
         container.innerHTML = '<div class="empty-state">Failed to load statistics</div>';
@@ -1403,6 +1448,9 @@ async function updateLaundryStatus(queueId, status) {
 
 // Load insights
 async function loadInsights() {
+    if (window.ClosetFeatures?.loadFullInsights) {
+        return window.ClosetFeatures.loadFullInsights();
+    }
     const container = document.getElementById('insights-container');
     const days = document.getElementById('neglect-days-filter').value;
     container.innerHTML = '<div class="loading">Loading insights...</div>';
@@ -1476,8 +1524,11 @@ function createInsightCard(item) {
 }
 
 async function planOutfitWith(itemId) {
-    showToast('💡 Outfit planning coming soon!');
-    // TODO: Implement outfit planning feature
+    if (window.ClosetFeatures?.planWithItem) {
+        window.ClosetFeatures.planWithItem(itemId);
+    } else {
+        showTab('planning');
+    }
 }
 
 async function considerDonating(itemId) {

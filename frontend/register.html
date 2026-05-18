@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register - Closet-Org</title>
     <link rel="stylesheet" href="/frontend/auth.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="/frontend/fonts/inter.css" rel="stylesheet">
 </head>
 <body>
     <div class="auth-container">
@@ -50,7 +50,11 @@
                             type="text" 
                             id="username" 
                             name="username" 
-                            placeholder="Choose a username"
+                            placeholder="Choose a username (3+ characters)"
+                            minlength="3"
+                            maxlength="30"
+                            pattern="[a-zA-Z0-9_.\-]+"
+                            autocomplete="username"
                             required
                         >
                     </div>
@@ -82,7 +86,7 @@
                             required
                         >
                     </div>
-                    <small class="input-hint">Must be at least 6 characters long</small>
+                    <small class="input-hint">At least 10 characters; mix two of: upper, lower, digits, symbols (not your username)</small>
                 </div>
                 
                 <div class="form-group">

@@ -80,7 +80,7 @@ body {
 .nav-logo {
     font-size: 1.5rem;
     font-weight: 700;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
     display: flex;
     align-items: center;
     gap: 0.25rem;
@@ -510,7 +510,7 @@ body {
     line-height: 1.1;
     margin-bottom: 1.5rem;
     letter-spacing: -0.02em;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
 }
 
 .title-line {
@@ -669,7 +669,7 @@ body {
     font-size: 2rem;
     font-weight: 800;
     color: white;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
 }
 
 .stat-number::after { content: '+'; font-size: 1.5rem; }
@@ -741,7 +741,7 @@ body {
     font-size: clamp(2.5rem, 5vw, 4rem);
     font-weight: 900;
     margin-bottom: 1rem;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
     letter-spacing: -0.02em;
 }
 
@@ -799,7 +799,7 @@ body {
     font-size: 1.5rem;
     font-weight: 700;
     margin-bottom: 1rem;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
 }
 
 .feature-card p {
@@ -1216,7 +1216,7 @@ body {
     font-size: 1.75rem;
     font-weight: 700;
     margin-bottom: 0.75rem;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
 }
 
 .step-content p {
@@ -1471,7 +1471,7 @@ body {
     justify-content: center;
     font-size: 2rem;
     font-weight: 900;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
     transition: all 0.4s ease;
 }
 
@@ -1511,7 +1511,7 @@ body {
     font-size: 1.5rem;
     font-weight: 700;
     margin-bottom: 0.75rem;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
 }
 
 .tech-card p {
@@ -1557,7 +1557,7 @@ body {
     font-weight: 900;
     color: white;
     margin-bottom: 1rem;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
     letter-spacing: -0.02em;
 }
 
@@ -1609,7 +1609,7 @@ body {
     font-size: 1.5rem;
     font-weight: 700;
     margin-bottom: 1rem;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
 }
 
 .footer-brand p {

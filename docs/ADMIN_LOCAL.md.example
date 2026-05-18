@@ -139,14 +139,13 @@ Manual reference: `docs/AWS_DEPLOYMENT.md` (same pattern on any Linux VPS).
 
 ## Deploy code updates
 
+**Automatic (recommended):** GitHub Actions deploys on every green CI run to `main`.
+Setup once: **[GITHUB_DEPLOY.md](GITHUB_DEPLOY.md)** (secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`).
+
+**Manual:**
+
 ```bash
-sudo git config --global --add safe.directory /opt/closet-org
-cd /opt/closet-org && sudo git pull
-
-sudo mkdir -p uploads .cache/huggingface .cache/torch .u2net
-sudo chown -R closet-org:closet-org backend uploads .venv .cache .u2net
-
-sudo systemctl restart closet-org
+sudo bash /opt/closet-org/scripts/deploy_prod.sh
 ```
 
 Static `frontend/` changes do not need a restart; use hard refresh in browser.

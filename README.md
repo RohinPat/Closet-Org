@@ -40,7 +40,7 @@ Threat model, headers, uploads, deployment checklist → **[PROJECT.md § Securi
 
 ### Production ops (private notes)
 
-Server-specific commands (SSH, Oracle firewall, nginx timeouts, `git pull`, backups) live in **`docs/ADMIN_LOCAL.md`**, which is **gitignored**. Copy **[`docs/ADMIN_LOCAL.md.example`](docs/ADMIN_LOCAL.md.example)** to `docs/ADMIN_LOCAL.md` and fill in your values. Automated VPS setup: **`scripts/provision_ubuntu_prod.sh`** and **[`docs/AWS_DEPLOYMENT.md`](docs/AWS_DEPLOYMENT.md)**.
+Server-specific commands (SSH, Oracle firewall, nginx timeouts, backups) live in **`docs/ADMIN_LOCAL.md`**, which is **gitignored**. Copy **[`docs/ADMIN_LOCAL.md.example`](docs/ADMIN_LOCAL.md.example)** to `docs/ADMIN_LOCAL.md` and fill in your values. Automated VPS setup: **`scripts/provision_ubuntu_prod.sh`** and **[`docs/AWS_DEPLOYMENT.md`](docs/AWS_DEPLOYMENT.md)**. **Auto-deploy on push to `main`:** **[`docs/GITHUB_DEPLOY.md`](docs/GITHUB_DEPLOY.md)** (GitHub Actions → Oracle).
 
 ### Web frontend
 

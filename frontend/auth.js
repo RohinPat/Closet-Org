@@ -1,11 +1,48 @@
 // Authentication JavaScript
 
 const API_URL = window.location.origin;
+let sessionCheckAbort = null;
+
+function formatAuthError(detail) {
+    if (detail === null || detail === undefined) return '';
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+        return detail
+            .map((entry) => {
+                if (typeof entry === 'string') return entry;
+                if (!entry || typeof entry !== 'object') return '';
+                const field = Array.isArray(entry.loc)
+                    ? entry.loc.filter((part) => part !== 'body').join(' · ')
+                    : '';
+                const msg =
+                    (typeof entry.msg === 'string' && entry.msg) ||
+                    (typeof entry.message === 'string' && entry.message) ||
+                    '';
+                if (field && msg) return `${field}: ${msg}`;
+                return msg;
+            })
+            .filter(Boolean)
+            .join(' ');
+    }
+    if (typeof detail === 'object') {
+        if (typeof detail.msg === 'string') return detail.msg;
+        if (typeof detail.message === 'string') return detail.message;
+        if (typeof detail.detail === 'string') return detail.detail;
+    }
+    return '';
+}
+
+function errorMessageFromCaught(error) {
+    if (error instanceof Error && error.message) return error.message;
+    return formatAuthError(error) || 'Something went wrong. Please try again.';
+}
 
 // Utility functions
 function showError(message) {
     const errorDiv = document.getElementById('error-message');
-    errorDiv.textContent = message;
+    if (!errorDiv) return;
+    const text = formatAuthError(message) || 'Something went wrong. Please try again.';
+    errorDiv.textContent = text;
     errorDiv.classList.remove('hidden');
 }
 
@@ -37,35 +74,44 @@ if (loginForm) {
         hideError();
         
         const button = document.getElementById('login-btn');
-        const username = document.getElementById('username').value;
+        const username = document.getElementById('username').value.trim();
         const password = document.getElementById('password').value;
+        
+        if (!username) {
+            showError('Enter your username or email');
+            return;
+        }
         
         try {
             setLoading(button, true);
+            sessionCheckAbort?.abort();
             
             const response = await fetch(`${API_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ username, password })
+                body: JSON.stringify({ username, password }),
             });
             
             const data = await response.json();
             
             if (!response.ok) {
-                throw new Error(data.detail || 'Login failed');
+                throw new Error(formatAuthError(data.detail) || 'Login failed');
+            }
+            if (!data.access_token) {
+                throw new Error('Login succeeded but no token was returned');
             }
             
             // Store token and user info
             localStorage.setItem('access_token', data.access_token);
             localStorage.setItem('user', JSON.stringify(data.user));
             
-            // Redirect to main app
-            window.location.href = '/app';
+            // Redirect to main app (replace so back button does not return to login)
+            window.location.replace('/app');
             
         } catch (error) {
-            showError(error.message);
+            showError(errorMessageFromCaught(error));
             setLoading(button, false);
         }
     });
@@ -83,14 +129,22 @@ if (registerForm) {
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
         const confirmPassword = document.getElementById('confirm_password').value;
-        const fullName = document.getElementById('full_name').value;
+        const fullName = document.getElementById('full_name').value.trim();
+        const usernameTrim = username.trim();
         
-        // Validation
-        if (password.length < 6) {
-            showError('Password must be at least 6 characters long');
+        // Validation (match backend rules)
+        if (usernameTrim.length < 3) {
+            showError('Username must be at least 3 characters');
             return;
         }
-        
+        if (!/^[a-zA-Z0-9_.\-]+$/.test(usernameTrim)) {
+            showError('Username can only use letters, numbers, and _ . -');
+            return;
+        }
+        if (password.length < 10) {
+            showError('Password must be at least 10 characters');
+            return;
+        }
         if (password !== confirmPassword) {
             showError('Passwords do not match');
             return;
@@ -98,6 +152,7 @@ if (registerForm) {
         
         try {
             setLoading(button, true);
+            sessionCheckAbort?.abort();
             
             const response = await fetch(`${API_URL}/api/auth/register`, {
                 method: 'POST',
@@ -105,28 +160,35 @@ if (registerForm) {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    username,
-                    email,
+                    username: usernameTrim,
+                    email: email.trim(),
                     password,
-                    full_name: fullName || null
-                })
+                    full_name: fullName || null,
+                }),
             });
             
-            const data = await response.json();
+            let data;
+            try {
+                data = await response.json();
+            } catch {
+                throw new Error(response.ok ? 'Invalid server response' : 'Registration failed');
+            }
             
             if (!response.ok) {
-                throw new Error(data.detail || 'Registration failed');
+                throw new Error(formatAuthError(data.detail) || 'Registration failed');
+            }
+            if (!data.access_token) {
+                throw new Error('Registration succeeded but no token was returned');
             }
             
             // Store token and user info
             localStorage.setItem('access_token', data.access_token);
             localStorage.setItem('user', JSON.stringify(data.user));
             
-            // Redirect to main app
-            window.location.href = '/app';
+            window.location.replace('/app');
             
         } catch (error) {
-            showError(error.message);
+            showError(errorMessageFromCaught(error));
             setLoading(button, false);
         }
     });
@@ -152,7 +214,7 @@ if (forgotForm) {
             });
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.detail || 'Request failed');
+                throw new Error(formatAuthError(data.detail) || 'Request failed');
             }
             let msg = data.message || 'Done.';
             if (data.dev_reset_token) {
@@ -165,7 +227,7 @@ if (forgotForm) {
                     encodeURIComponent(data.dev_reset_token);
             }
         } catch (error) {
-            showError(error.message);
+            showError(errorMessageFromCaught(error));
         } finally {
             setLoading(button, false);
         }
@@ -200,43 +262,53 @@ if (resetForm) {
             });
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.detail || 'Reset failed');
+                throw new Error(formatAuthError(data.detail) || 'Reset failed');
             }
             alert(data.message || 'Password updated.');
             window.location.href = '/frontend/login.html';
         } catch (error) {
-            showError(error.message);
+            showError(errorMessageFromCaught(error));
         } finally {
             setLoading(button, false);
         }
     });
 }
 
-// Check if already logged in
+// Check if already logged in (must not clear a newer token from a concurrent login)
 window.addEventListener('DOMContentLoaded', () => {
-    const token = localStorage.getItem('access_token');
-    
-    // If on login/register page and already have token, redirect to app
-    if (token && (window.location.pathname.includes('login') || window.location.pathname.includes('register') || window.location.pathname.includes('forgot-password') || window.location.pathname.includes('reset-password'))) {
-        // Verify token is still valid
-        fetch(`${API_URL}/api/auth/me`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        })
-        .then(response => {
+    const tokenAtStart = localStorage.getItem('access_token');
+    const onAuthPage =
+        window.location.pathname.includes('login') ||
+        window.location.pathname.includes('register') ||
+        window.location.pathname.includes('forgot-password') ||
+        window.location.pathname.includes('reset-password');
+
+    if (!tokenAtStart || !onAuthPage) return;
+
+    sessionCheckAbort?.abort();
+    sessionCheckAbort = new AbortController();
+    const { signal } = sessionCheckAbort;
+
+    fetch(`${API_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${tokenAtStart}` },
+        signal,
+    })
+        .then((response) => {
+            const tokenNow = localStorage.getItem('access_token');
+            if (tokenNow !== tokenAtStart) return;
             if (response.ok) {
-                window.location.href = '/app';
-            } else {
-                // Token invalid, clear storage
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('user');
+                window.location.replace('/app');
+                return;
             }
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user');
         })
-        .catch(() => {
+        .catch((err) => {
+            if (err && err.name === 'AbortError') return;
+            const tokenNow = localStorage.getItem('access_token');
+            if (tokenNow !== tokenAtStart) return;
             localStorage.removeItem('access_token');
             localStorage.removeItem('user');
         });
-    }
 });
 

@@ -5,19 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Closet-Org - AI Closet Organizer</title>
     <link rel="stylesheet" href="/frontend/styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="/frontend/fonts/inter.css" rel="stylesheet">
 </head>
 <body>
-    <!-- Header -->
     <header class="header">
         <div class="container">
             <div class="header-content">
                 <h1 class="logo">Closet-Org</h1>
                 <nav class="nav" aria-label="Main">
-                    <button type="button" class="nav-btn active" data-tab="closet">My Closet</button>
-                    <button type="button" class="nav-btn" data-tab="upload">Upload</button>
+                    <button type="button" class="nav-btn nav-btn--feed hidden" id="nav-feed" data-tab="feed">Feed</button>
+                    <button type="button" class="nav-btn active" data-tab="closet">Closet</button>
+                    <button type="button" class="nav-btn" data-tab="upload">Add</button>
                     <button type="button" class="nav-btn" data-tab="outfits">Outfits</button>
-                    <button type="button" class="nav-btn" data-tab="care">Care</button>
+                    <button type="button" class="nav-btn" data-tab="profile">Profile</button>
                 </nav>
                 <div class="user-menu">
                     <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to dark mode">
@@ -30,18 +30,12 @@
                         </svg>
                     </button>
                     <div class="user-profile-btn" id="user-profile-btn">
-                        <div class="user-avatar" id="user-avatar">
-                            <span id="user-initials">U</span>
-                        </div>
+                        <div class="user-avatar" id="user-avatar"><span id="user-initials">U</span></div>
                         <span class="user-name" id="user-name">User</span>
                     </div>
                     <div class="dropdown-menu hidden" id="dropdown-menu">
-                        <a href="#" class="dropdown-item" data-tab="profile">
-                            Profile
-                        </a>
-                        <a href="#" class="dropdown-item" id="logout-btn">
-                            Logout
-                        </a>
+                        <a href="#" class="dropdown-item" data-tab="profile">Profile</a>
+                        <a href="#" class="dropdown-item" id="logout-btn">Logout</a>
                     </div>
                 </div>
             </div>
@@ -50,10 +44,18 @@
 
     <main class="main">
         <div class="container">
-            <!-- My Closet Tab -->
             <section id="closet-tab" class="tab-content active">
                 <div class="section-header">
-                    <h2>My Virtual Closet</h2>
+                    <h2>My Closet</h2>
+                    <div class="closet-toolbar">
+                        <label class="visually-hidden" for="closet-search">Search closet</label>
+                        <input type="search" id="closet-search" class="search-input" placeholder="Search items…" autocomplete="off">
+                        <button type="button" class="btn btn-secondary btn-sm" id="fit-check-btn">Fit check</button>
+                        <button type="button" class="btn btn-secondary btn-sm" id="visual-search-btn">Visual search</button>
+                        <select id="closet-location-filter" class="filter-select" aria-label="Closet location">
+                            <option value="">All locations</option>
+                        </select>
+                    </div>
                     <div class="closet-filter-bar">
                         <div class="filter-chip-rows">
                             <div class="filter-chip-row" role="group" aria-label="Category">
@@ -91,234 +93,252 @@
                                 <option value="best-cpw">Best value</option>
                                 <option value="freshness">Freshness score</option>
                             </select>
-                            <button type="button" class="btn-filter-more" id="closet-filter-more" aria-expanded="false" aria-controls="closet-filter-panel">
-                                More filters
-                            </button>
+                            <button type="button" class="btn-filter-more" id="closet-filter-more" aria-expanded="false" aria-controls="closet-filter-panel">More filters</button>
                         </div>
                         <div id="closet-filter-panel" class="filter-advanced-panel hidden" role="region" aria-label="All closet filters">
-                            <p class="visually-hidden" id="closet-filter-panel-hint">Use these menus for precise filtering or keyboard access.</p>
                             <div class="filters">
-                                <div>
-                                    <label class="visually-hidden" for="category-filter">Category</label>
-                                    <select id="category-filter" class="filter-select" aria-describedby="closet-filter-panel-hint">
-                                        <option value="">All Categories</option>
-                                        <option value="Top">Tops</option>
-                                        <option value="Bottom">Bottoms</option>
-                                        <option value="Dress">Dresses</option>
-                                        <option value="Footwear">Footwear</option>
-                                        <option value="Accessory">Accessories</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="visually-hidden" for="status-filter">Laundry status</label>
-                                    <select id="status-filter" class="filter-select">
-                                        <option value="">All Items</option>
-                                        <option value="clean">Clean</option>
-                                        <option value="dirty">Needs Washing</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="visually-hidden" for="rotation-filter">Rotation</label>
-                                    <select id="rotation-filter" class="filter-select">
-                                        <option value="">All Rotation</option>
-                                        <option value="favorites">Favorites</option>
-                                        <option value="high">High Rotation</option>
-                                        <option value="medium">Medium Rotation</option>
-                                        <option value="low">Low Rotation</option>
-                                        <option value="neglected">Neglected</option>
-                                    </select>
-                                </div>
+                                <select id="category-filter" class="filter-select" aria-label="Category">
+                                    <option value="">All Categories</option>
+                                    <option value="Top">Tops</option>
+                                    <option value="Bottom">Bottoms</option>
+                                    <option value="Dress">Dresses</option>
+                                    <option value="Footwear">Footwear</option>
+                                    <option value="Accessory">Accessories</option>
+                                </select>
+                                <select id="status-filter" class="filter-select" aria-label="Status">
+                                    <option value="">All Items</option>
+                                    <option value="clean">Clean</option>
+                                    <option value="dirty">Needs Washing</option>
+                                </select>
+                                <select id="rotation-filter" class="filter-select" aria-label="Rotation">
+                                    <option value="">All Rotation</option>
+                                    <option value="favorites">Favorites</option>
+                                    <option value="high">High Rotation</option>
+                                    <option value="medium">Medium Rotation</option>
+                                    <option value="low">Low Rotation</option>
+                                    <option value="neglected">Neglected</option>
+                                </select>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div id="closet-grid" class="closet-grid">
-                    <div class="loading">Loading your closet...</div>
-                </div>
+                <div id="closet-grid" class="closet-grid"><div class="loading">Loading your closet...</div></div>
             </section>
 
-            <!-- Upload Tab -->
             <section id="upload-tab" class="tab-content">
                 <div class="upload-section">
-                    <h2>Add New Clothing Item</h2>
-                    <p class="subtitle">Upload a photo of your clothing and our AI will classify it</p>
-                    
+                    <h2>Add clothing</h2>
+                    <p class="subtitle">Upload a photo — AI classifies category, color, and style</p>
                     <div class="upload-area" id="upload-area">
-                        <div class="upload-icon">
-                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="17 8 12 3 7 8"></polyline>
-                                <line x1="12" y1="3" x2="12" y2="15"></line>
-                            </svg>
-                        </div>
-                        <p class="upload-text">Drag & drop an image or click to browse</p>
+                        <p class="upload-text">Drag & drop or click to browse</p>
                         <input type="file" id="file-input" accept="image/*" hidden>
-                        <button type="button" class="btn btn-primary" id="choose-image-btn">
-                            Choose Image
-                        </button>
+                        <button type="button" class="btn btn-primary" id="choose-image-btn">Choose image</button>
                     </div>
-
                     <div id="upload-preview" class="upload-preview hidden">
                         <img id="preview-image" src="" alt="Preview">
-                        <div class="preview-info">
-                            <h3>Preview</h3>
-                            <button class="btn btn-primary" id="upload-btn">Upload & Classify</button>
-                            <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
-                        </div>
+                        <button class="btn btn-primary" id="upload-btn">Upload & classify</button>
+                        <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
                     </div>
-
                     <div id="classification-result" class="classification-result hidden">
-                        <h3>Classification Complete</h3>
+                        <h3>Classification complete</h3>
                         <div class="result-details"></div>
-                        <button class="btn btn-primary" id="add-another-btn">Add Another Item</button>
+                        <button class="btn btn-primary" id="add-another-btn">Add another</button>
                     </div>
                 </div>
             </section>
 
-            <!-- Outfits Tab -->
             <section id="outfits-tab" class="tab-content">
                 <div class="section-header">
-                    <h2>AI Outfit Recommendations</h2>
-                    <div class="filters">
-                        <select id="occasion-filter" class="filter-select">
-                            <option value="">Any Occasion</option>
+                    <h2>Outfits</h2>
+                    <div class="outfit-filters">
+                        <select id="occasion-filter" class="filter-select" aria-label="Occasion">
+                            <option value="">Any occasion</option>
                             <option value="work">Work</option>
                             <option value="casual">Casual</option>
                             <option value="gym">Gym</option>
-                            <option value="date">Date Night</option>
+                            <option value="date">Date night</option>
                             <option value="party">Party</option>
                         </select>
-                        <select id="season-filter" class="filter-select">
-                            <option value="">Any Season</option>
+                        <select id="season-filter" class="filter-select" aria-label="Season">
+                            <option value="">Any season</option>
                             <option value="Spring">Spring</option>
                             <option value="Summer">Summer</option>
                             <option value="Fall">Fall</option>
                             <option value="Winter">Winter</option>
                         </select>
-                        <button class="btn btn-primary" id="generate-outfits-btn">Generate Outfits</button>
+                        <select id="vibe-filter" class="filter-select" aria-label="Vibe">
+                            <option value="">Any vibe</option>
+                            <option value="clean_prep">Clean prep</option>
+                            <option value="streetwear">Streetwear</option>
+                            <option value="cozy">Cozy</option>
+                            <option value="minimal">Minimal</option>
+                            <option value="bold">Bold</option>
+                            <option value="athleisure">Athleisure</option>
+                        </select>
+                        <label class="toggle-row"><input type="checkbox" id="weather-sync-toggle"><span>Weather-aware</span></label>
+                        <label class="toggle-row"><input type="checkbox" id="include-packed-toggle"><span>Include packed</span></label>
+                        <button type="button" class="btn btn-primary" id="generate-outfits-btn">Generate</button>
+                        <button type="button" class="btn btn-secondary" id="reshuffle-outfits-btn">Reshuffle</button>
                     </div>
                 </div>
+                <div id="outfit-weather-banner" class="weather-banner hidden" role="status"></div>
                 <div id="outfits-container" class="outfits-container">
-                    <div class="empty-state">
-                        <p>Click "Generate Outfits" to get AI-powered recommendations</p>
+                    <div class="empty-state"><p>Generate outfits from your clean closet.</p></div>
+                </div>
+                <div id="ai-stylist-panel" class="glass-card ai-stylist-panel"></div>
+                <div class="planned-outfits-section">
+                    <div class="section-header section-header--compact">
+                        <h3>Upcoming plans</h3>
+                        <button type="button" class="btn btn-secondary btn-sm" id="planning-quick-btn">Plan outfit</button>
                     </div>
+                    <div id="outfits-planned-list" class="hub-list"><p class="hint-text">Loading plans…</p></div>
                 </div>
             </section>
 
-            <!-- Care: laundry, insights, stats -->
+            <section id="feed-tab" class="tab-content">
+                <div class="subview-header">
+                    <h2>Feed</h2>
+                    <button type="button" class="btn btn-primary btn-sm" id="feed-create-fit-btn">Post fit</button>
+                </div>
+                <div id="feed-container" class="feed-container"><div class="loading">Loading feed…</div></div>
+            </section>
+
             <section id="care-tab" class="tab-content">
+                <button type="button" class="btn-back" data-back-tab="profile">← Profile</button>
                 <div class="care-subnav" role="tablist" aria-label="Care sections">
-                    <button type="button" class="care-subnav-btn active" role="tab" aria-selected="true" data-care-pane="laundry">Laundry</button>
-                    <button type="button" class="care-subnav-btn" role="tab" aria-selected="false" data-care-pane="insights">Insights</button>
-                    <button type="button" class="care-subnav-btn" role="tab" aria-selected="false" data-care-pane="stats">Stats</button>
+                    <button type="button" class="care-subnav-btn active" data-care-pane="laundry">Laundry</button>
+                    <button type="button" class="care-subnav-btn" data-care-pane="insights">Insights</button>
+                    <button type="button" class="care-subnav-btn" data-care-pane="stats">Stats</button>
                 </div>
-                <div id="care-pane-laundry" class="care-pane active" role="tabpanel">
-                    <div class="section-header">
-                        <h2>Laundry</h2>
-                        <button type="button" class="btn btn-primary" id="refresh-laundry-btn">Refresh</button>
-                    </div>
-                    <div id="laundry-container">
-                        <div class="loading">Loading laundry queue...</div>
-                    </div>
+                <div id="care-pane-laundry" class="care-pane active">
+                    <div class="section-header"><h2>Laundry</h2><button type="button" class="btn btn-primary" id="refresh-laundry-btn">Refresh</button></div>
+                    <div id="laundry-container"><div class="loading">Loading laundry…</div></div>
                 </div>
-                <div id="care-pane-insights" class="care-pane" role="tabpanel">
+                <div id="care-pane-insights" class="care-pane">
                     <div class="section-header">
                         <h2>Wardrobe insights</h2>
-                        <div class="filters">
-                            <label class="visually-hidden" for="neglect-days-filter">Unworn threshold</label>
-                            <select id="neglect-days-filter" class="filter-select">
-                                <option value="30">30+ days unworn</option>
-                                <option value="60">60+ days unworn</option>
-                                <option value="90">90+ days unworn</option>
-                            </select>
-                            <button type="button" class="btn btn-primary" id="refresh-insights-btn">Refresh</button>
-                        </div>
+                        <select id="neglect-days-filter" class="filter-select" aria-label="Unworn threshold">
+                            <option value="30">30+ days</option>
+                            <option value="60">60+ days</option>
+                            <option value="90">90+ days</option>
+                        </select>
+                        <button type="button" class="btn btn-primary" id="refresh-insights-btn">Refresh</button>
                     </div>
-                    <div id="insights-container">
-                        <div class="loading">Loading insights...</div>
-                    </div>
+                    <div id="insights-container"><div class="loading">Loading insights…</div></div>
                 </div>
-                <div id="care-pane-stats" class="care-pane" role="tabpanel">
-                    <h2>Closet statistics</h2>
-                    <div id="stats-container" class="stats-container">
-                        <div class="loading">Loading statistics...</div>
+                <div id="care-pane-stats" class="care-pane">
+                    <h2>Closet stats</h2>
+                    <div id="stats-container" class="stats-container"><div class="loading">Loading stats…</div></div>
+                </div>
+            </section>
+
+            <section id="profile-tab" class="tab-content">
+                <div class="profile-container">
+                    <h2>Profile</h2>
+                    <div id="profile-reminders" class="hub-reminders hidden"></div>
+                    <div class="profile-identity-card glass-card">
+                        <div class="profile-avatar-section">
+                            <button type="button" class="profile-avatar-large" id="profile-avatar-btn" aria-label="Change photo"><span id="profile-initials">U</span></button>
+                            <div>
+                                <h3 id="profile-username">Username</h3>
+                                <p class="profile-email" id="profile-email">email@example.com</p>
+                                <p class="hint-text" id="profile-stats-line"></p>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" id="profile-edit-toggle">Edit profile</button>
+                    </div>
+                    <form id="profile-form" class="profile-form glass-card hidden">
+                        <div class="form-group"><label for="profile-full-name">Display name</label><input type="text" id="profile-full-name" class="form-input"></div>
+                        <div class="form-group"><label for="profile-bio">Bio</label><textarea id="profile-bio" class="form-input" rows="3" maxlength="400"></textarea></div>
+                        <div id="profile-message" class="profile-message hidden"></div>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </form>
+                    <p class="section-label">Closet</p>
+                    <div class="hub-grid">
+                        <button type="button" class="hub-card" data-tab="settings"><span class="hub-card-title">Personal settings</span><span class="hub-card-hint">Weather, locations</span></button>
+                        <button type="button" class="hub-card" data-tab="pack"><span class="hub-card-title">Pack mode</span><span class="hub-card-hint">Trips & packed items</span></button>
+                        <button type="button" class="hub-card" data-tab="trips"><span class="hub-card-title">Trip outfit log</span><span class="hub-card-hint">Travel albums</span></button>
+                        <button type="button" class="hub-card" data-tab="planning"><span class="hub-card-title">Planning ahead</span><span class="hub-card-hint">Reserve by date</span></button>
+                        <button type="button" class="hub-card" data-tab="wishlist"><span class="hub-card-title">Wishlist</span><span class="hub-card-hint">Want list</span></button>
+                        <button type="button" class="hub-card" data-tab="care" data-care-pane="stats"><span class="hub-card-title">Closet stats</span><span class="hub-card-hint">Counts & CPW</span></button>
+                        <button type="button" class="hub-card" data-tab="care" data-care-pane="laundry"><span class="hub-card-title">Laundry</span><span class="hub-card-hint">Wash queue</span></button>
+                        <button type="button" class="hub-card" data-tab="care" data-care-pane="insights"><span class="hub-card-title">Insights</span><span class="hub-card-hint">Gaps & neglect</span></button>
+                    </div>
+                    <div id="profile-social-section" class="hidden">
+                        <p class="section-label">Social</p>
+                        <div class="hub-grid">
+                            <button type="button" class="hub-card" data-tab="friends"><span class="hub-card-title">Friends</span></button>
+                            <button type="button" class="hub-card" data-tab="create-fit"><span class="hub-card-title">Post a fit</span></button>
+                        </div>
+                        <p class="section-label">Your fits</p>
+                        <div id="profile-fits-grid" class="fits-grid"></div>
                     </div>
                 </div>
             </section>
 
-            <!-- Profile Tab -->
-            <section id="profile-tab" class="tab-content">
-                <div class="profile-container">
-                    <div class="profile-header">
-                        <h2>My Profile</h2>
-                    </div>
-                    
-                    <div class="profile-content">
-                        <div class="profile-card">
-                            <div class="profile-avatar-section">
-                                <div class="profile-avatar-large" id="profile-avatar-large">
-                                    <span id="profile-initials">U</span>
-                                </div>
-                                <h3 id="profile-username">Username</h3>
-                                <p class="profile-email" id="profile-email">email@example.com</p>
-                            </div>
-                            
-                            <form id="profile-form" class="profile-form">
-                                <div class="form-group">
-                                    <label for="profile-full-name">Full Name</label>
-                                    <input 
-                                        type="text" 
-                                        id="profile-full-name" 
-                                        name="full_name"
-                                        class="form-input"
-                                        placeholder="Enter your full name"
-                                    >
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="profile-bio">Bio</label>
-                                    <textarea 
-                                        id="profile-bio" 
-                                        name="bio"
-                                        class="form-input"
-                                        rows="4"
-                                        placeholder="Tell us about yourself..."
-                                    ></textarea>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label>Account Created</label>
-                                    <p class="info-text" id="profile-created">-</p>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label>Last Login</label>
-                                    <p class="info-text" id="profile-last-login">-</p>
-                                </div>
-                                
-                                <div id="profile-message" class="profile-message hidden"></div>
-                                
-                                <button type="submit" class="btn btn-primary">
-                                    Save Changes
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
+            <section id="wishlist-tab" class="tab-content">
+                <button type="button" class="btn-back" data-back-tab="profile">← Profile</button>
+                <div class="subview-header"><h2>Wishlist</h2><button type="button" class="btn btn-primary btn-sm" id="wishlist-add-btn">Add</button></div>
+                <div id="wishlist-container" class="hub-list"><div class="loading">Loading…</div></div>
+            </section>
+
+            <section id="pack-tab" class="tab-content">
+                <button type="button" class="btn-back" data-back-tab="profile">← Profile</button>
+                <div class="subview-header"><h2>Pack mode</h2><button type="button" class="btn btn-secondary btn-sm" id="pack-new-trip-btn">New trip</button></div>
+                <div id="pack-container"><div class="loading">Loading…</div></div>
+            </section>
+
+            <section id="planning-tab" class="tab-content">
+                <button type="button" class="btn-back" data-back-tab="profile">← Profile</button>
+                <h2>Planning ahead</h2>
+                <div id="planning-container" class="hub-list"><div class="loading">Loading…</div></div>
+            </section>
+
+            <section id="trips-tab" class="tab-content">
+                <button type="button" class="btn-back" data-back-tab="profile">← Profile</button>
+                <h2>Trip outfit log</h2>
+                <div id="trips-container" class="hub-list"><div class="loading">Loading…</div></div>
+            </section>
+
+            <section id="friends-tab" class="tab-content">
+                <button type="button" class="btn-back" data-back-tab="profile">← Profile</button>
+                <h2>Friends</h2>
+                <div id="friends-container" class="hub-list"><div class="loading">Loading…</div></div>
+            </section>
+
+            <section id="settings-tab" class="tab-content">
+                <button type="button" class="btn-back" data-back-tab="profile">← Profile</button>
+                <h2>Personal settings</h2>
+                <div id="settings-container" class="settings-panel"></div>
+            </section>
+
+            <section id="create-fit-tab" class="tab-content">
+                <button type="button" class="btn-back" data-back-tab="profile">← Profile</button>
+                <h2>Post a fit</h2>
+                <form id="create-fit-form" class="glass-card create-fit-form">
+                    <label class="form-group">Photo<input type="file" id="fit-photo-input" accept="image/*" required></label>
+                    <label class="form-group">Caption<textarea id="fit-caption-input" class="form-input" rows="2" maxlength="500"></textarea></label>
+                    <label class="form-group">Item IDs<input type="text" id="fit-item-ids-input" class="form-input" placeholder="12, 45"></label>
+                    <button type="submit" class="btn btn-primary">Post</button>
+                </form>
             </section>
         </div>
     </main>
 
-    <!-- Item Detail Modal -->
     <div id="item-modal" class="modal hidden">
-        <div class="modal-content">
-            <span class="modal-close">&times;</span>
-            <div id="modal-body"></div>
-        </div>
+        <div class="modal-content modal-content--wide"><span class="modal-close">&times;</span><div id="modal-body"></div></div>
     </div>
+    <div id="fit-modal" class="modal hidden">
+        <div class="modal-content"><span class="modal-close fit-modal-close">&times;</span><div id="fit-modal-body"></div></div>
+    </div>
+    <input type="file" id="fit-check-input" accept="image/*" hidden>
+    <input type="file" id="avatar-input" accept="image/*" hidden>
+
+    <input type="file" id="visual-search-input" accept="image/*" hidden>
 
     <script src="/frontend/script.js"></script>
+    <script src="/frontend/app-features.js"></script>
+    <script src="/frontend/item-detail.js"></script>
+    <script src="/frontend/app-features-upgrade.js"></script>
 </body>
 </html>
-
-

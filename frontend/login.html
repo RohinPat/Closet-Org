@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Closet-Org</title>
     <link rel="stylesheet" href="/frontend/auth.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="/frontend/fonts/inter.css" rel="stylesheet">
 </head>
 <body>
     <div class="auth-container">
@@ -30,14 +30,15 @@
                 <p class="form-subtitle">Sign in to access your virtual closet</p>
                 
                 <div class="form-group">
-                    <label for="username">Username</label>
+                    <label for="username">Username or email</label>
                     <div class="input-wrapper">
                         <span class="input-icon">👤</span>
                         <input 
                             type="text" 
                             id="username" 
                             name="username" 
-                            placeholder="Enter your username"
+                            placeholder="Username or email"
+                            autocomplete="username"
                             required
                         >
                     </div>

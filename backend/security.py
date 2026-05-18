@@ -67,10 +67,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     must be treated as untrusted media, never as code.
     """
 
+    # Inter is self-hosted under /frontend/fonts/ — no fonts.googleapis.com needed.
+    # Do not add script-src 'unsafe-eval'; nothing in our frontend uses eval().
     _APP_CSP = (
         "default-src 'self'; "
         "img-src 'self' data: blob:; "
         "style-src 'self' 'unsafe-inline'; "
+        "style-src-elem 'self'; "
         "script-src 'self'; "
         "connect-src 'self'; "
         "font-src 'self' data:; "

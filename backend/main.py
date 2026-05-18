@@ -1615,9 +1615,9 @@ async def login(credentials: UserLogin, request: Request):
 
 
 
-    raw_username = (credentials.username or "").strip()
+    raw_identifier = (credentials.username or "").strip()
 
-    if not raw_username:
+    if not raw_identifier:
 
         # Still pay the bcrypt cost so an empty username doesn't return
 
@@ -1629,7 +1629,10 @@ async def login(credentials: UserLogin, request: Request):
 
 
 
-    user = db.get_user_by_username(raw_username)
+    # Accept username or email in the same field (web/mobile often use email).
+    user = db.get_user_by_username(raw_identifier)
+    if user is None and "@" in raw_identifier:
+        user = db.get_user_by_email(normalize_email(raw_identifier))
 
 
 
