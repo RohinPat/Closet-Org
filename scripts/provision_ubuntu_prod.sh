@@ -65,12 +65,11 @@ source "${INSTALL_DIR}/.venv/bin/activate"
 pip install --upgrade pip
 pip install -r "${INSTALL_DIR}/requirements.txt"
 # Optional: background removal (falls back if missing)
-pip install "rembg[gpu,cpu]" 2>/dev/null || pip install rembg || true
+pip install rembg || true
 deactivate
 
-chown -R closet-org:closet-org "${INSTALL_DIR}/backend" "${INSTALL_DIR}/uploads" "${INSTALL_DIR}/.venv"
 mkdir -p "${INSTALL_DIR}/uploads"
-chown -R closet-org:closet-org "${INSTALL_DIR}/uploads"
+chown -R closet-org:closet-org "${INSTALL_DIR}/backend" "${INSTALL_DIR}/uploads" "${INSTALL_DIR}/.venv"
 
 cat >/etc/closet-org.env <<EOF
 CLOSET_ENV=production
