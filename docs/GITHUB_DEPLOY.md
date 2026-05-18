@@ -69,6 +69,21 @@ curl -s http://127.0.0.1/healthz
 
 ---
 
+## Bootstrap pull (permission denied on `.git`)
+
+If `git pull` fails as `ubuntu`:
+
+```bash
+sudo chown -R ubuntu:ubuntu /opt/closet-org/.git
+cd /opt/closet-org
+git pull origin main
+ls scripts/deploy_prod.sh
+```
+
+Then re-run **Deploy production** on GitHub.
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -76,7 +91,8 @@ curl -s http://127.0.0.1/healthz
 | Deploy job skipped | CI failed or push was not to `main` — fix tests or use **Run workflow** |
 | `Permission denied (publickey)` | Wrong `DEPLOY_SSH_KEY` or key not in `authorized_keys` — re-run setup script |
 | `sudo: a password is required` | Re-run `sudo bash scripts/setup_github_deploy.sh` for sudoers |
-| `deploy_prod.sh: command not found` | Server repo is behind `main` — run once: `cd /opt/closet-org && git pull` (as `ubuntu`), then re-run deploy |
+| `deploy_prod.sh: command not found` | Server repo is behind `main` — bootstrap pull (see below), then re-run deploy |
+| `.git/FETCH_HEAD: Permission denied` | Run bootstrap pull below — fixes `.git` ownership for `ubuntu` |
 | `git pull` failed | Local changes on server — `cd /opt/closet-org && sudo git status`, stash or reset |
 | Health check fails | `journalctl -u closet-org -n 80` on server |
 

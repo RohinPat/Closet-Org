@@ -26,6 +26,9 @@ fi
 
 git config --global --add safe.directory "${INSTALL_DIR}" 2>/dev/null || true
 
+# ubuntu must own .git for fetch/pull (runtime chown sometimes leaves .git as closet-org)
+chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "${INSTALL_DIR}/.git"
+
 echo "==> Fetch ${GIT_BRANCH}"
 sudo -u "${DEPLOY_USER}" git -C "${INSTALL_DIR}" fetch origin "${GIT_BRANCH}"
 sudo -u "${DEPLOY_USER}" git -C "${INSTALL_DIR}" checkout "${GIT_BRANCH}"
