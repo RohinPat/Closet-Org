@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
     test: {
-        environment: 'node',
+        environment: 'happy-dom',
         include: ['lib/**/*.test.js'],
         coverage: {
             provider: 'v8',
