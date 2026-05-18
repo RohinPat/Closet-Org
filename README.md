@@ -2,6 +2,8 @@
 
 A personal closet manager: upload photos of clothes, the backend classifies them with CLIP + a hue-based color extractor, and you get an outfit recommender and stats on top.
 
+**Copyright © 2026 Rohin Patel. All rights reserved.** This project is proprietary — see [LICENSE](LICENSE). User-facing terms: [/terms](frontend/terms.html) and [/privacy](frontend/privacy.html) on your deployed host. Overview: [docs/LEGAL.md](docs/LEGAL.md).
+
 Three surfaces share one FastAPI backend:
 
 - a Python FastAPI + SQLite **backend**
@@ -82,7 +84,9 @@ EXPO_PUBLIC_API_URL=http://192.168.1.50:8001 npx expo start
 
 </details>
 
-**Production:** point `EXPO_PUBLIC_API_URL` at HTTPS API; tighten Android cleartext and signing per your release pipeline ([PROJECT.md § Security](PROJECT.md#security)).
+**Production API:** copy [`mobile/.env.example`](mobile/.env.example) to `mobile/.env` (gitignored) or rely on `app.json` `extra.closetApiOrigin` + [`mobile/eas.json`](mobile/eas.json) for store builds.
+
+**Store release:** [`mobile/STORE_RELEASE.md`](mobile/STORE_RELEASE.md) (EAS build commands) · [`docs/STORE_LISTINGS.md`](docs/STORE_LISTINGS.md) (descriptions, Data safety, screenshots checklist) · privacy policy at `/privacy` on your API host.
 
 Main entry points:
 
@@ -213,7 +217,7 @@ Flows under `mobile/e2e/maestro/` — not in CI. [Maestro](https://maestro.mobil
 
 ### Store release QA
 
-Automated suites do **not** replace: production HTTPS URL, signing/bundle IDs, privacy policy / store questionnaires, disabling dev networking flags, screenshots, review credentials.
+See **[mobile/STORE_RELEASE.md](mobile/STORE_RELEASE.md)** and **[docs/STORE_LISTINGS.md](docs/STORE_LISTINGS.md)**. Automated suites do **not** replace: device testing on preview/production builds, store questionnaires, screenshots, and review credentials.
 
 ---
 

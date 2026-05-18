@@ -22,7 +22,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import Constants from 'expo-constants';
+import { privacyPolicyUrl, termsOfServiceUrl } from '../legal';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -452,6 +452,7 @@ type SlidePageProps = {
   colors: ThemeColors;
   surface: ThemeSurface;
   privacyUrl: string | null;
+  termsUrl: string | null;
   scrollTo: (next: number, animated: boolean) => void;
   finish: (status: 'completed' | 'skipped') => Promise<void>;
 };
@@ -467,6 +468,7 @@ function OnboardingSlidePage({
   colors,
   surface,
   privacyUrl,
+  termsUrl,
   scrollTo,
   finish,
 }: SlidePageProps) {
@@ -522,26 +524,48 @@ function OnboardingSlidePage({
 
             {isPrivacy ? (
               <View style={styles.privacyBlock}>
-                {privacyUrl ? (
-                  <Pressable
-                    onPress={() => void Linking.openURL(privacyUrl)}
-                    style={({ pressed }) => [
-                      styles.policyPill,
-                      { opacity: pressed ? 0.82 : 1 },
-                    ]}
-                    accessibilityRole="link"
-                    accessibilityLabel="Open privacy policy"
-                  >
-                    <Ionicons
-                      name="open-outline"
-                      size={18}
-                      color={colors.accent}
-                    />
-                    <Text style={styles.policyPillText}>Privacy policy</Text>
-                  </Pressable>
+                {privacyUrl || termsUrl ? (
+                  <View style={styles.policyRow}>
+                    {privacyUrl ? (
+                      <Pressable
+                        onPress={() => void Linking.openURL(privacyUrl)}
+                        style={({ pressed }) => [
+                          styles.policyPill,
+                          { opacity: pressed ? 0.82 : 1 },
+                        ]}
+                        accessibilityRole="link"
+                        accessibilityLabel="Open privacy policy"
+                      >
+                        <Ionicons
+                          name="open-outline"
+                          size={18}
+                          color={colors.accent}
+                        />
+                        <Text style={styles.policyPillText}>Privacy</Text>
+                      </Pressable>
+                    ) : null}
+                    {termsUrl ? (
+                      <Pressable
+                        onPress={() => void Linking.openURL(termsUrl)}
+                        style={({ pressed }) => [
+                          styles.policyPill,
+                          { opacity: pressed ? 0.82 : 1 },
+                        ]}
+                        accessibilityRole="link"
+                        accessibilityLabel="Open terms of service"
+                      >
+                        <Ionicons
+                          name="open-outline"
+                          size={18}
+                          color={colors.accent}
+                        />
+                        <Text style={styles.policyPillText}>Terms</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                 ) : (
                   <Text style={styles.mutedNote}>
-                    The full policy will be linked here for store release.
+                    Legal documents will be linked here for store release.
                   </Text>
                 )}
               </View>
@@ -583,13 +607,8 @@ export function OnboardingCarouselScreen({ onFinished }: Props) {
 
   const orbs = useMemo(() => orbsForSlide(index, colors), [index, colors]);
 
-  const privacyUrlRaw =
-    (Constants.expoConfig?.extra as { privacyPolicyUrl?: string } | undefined)
-      ?.privacyPolicyUrl ?? '';
-  const privacyUrl =
-    typeof privacyUrlRaw === 'string' && privacyUrlRaw.startsWith('http')
-      ? privacyUrlRaw
-      : null;
+  const privacyUrl = privacyPolicyUrl();
+  const termsUrl = termsOfServiceUrl();
 
   useEffect(() => {
     let cancelled = false;
@@ -665,6 +684,7 @@ export function OnboardingCarouselScreen({ onFinished }: Props) {
         colors={colors}
         surface={surface}
         privacyUrl={privacyUrl}
+        termsUrl={termsUrl}
         scrollTo={scrollTo}
         finish={finish}
       />
@@ -672,6 +692,7 @@ export function OnboardingCarouselScreen({ onFinished }: Props) {
     [
       finish,
       privacyUrl,
+      termsUrl,
       scrollTo,
       colors,
       surface,
@@ -894,6 +915,11 @@ function makeStyles(t: ThemeContextValue) {
     },
     privacyBlock: {
       marginTop: spacing.lg,
+    },
+    policyRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
     },
     policyPill: {
       flexDirection: 'row',

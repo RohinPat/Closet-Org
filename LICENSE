@@ -1,0 +1,50 @@
+Copyright (c) 2026 Rohin Patel. All Rights Reserved.
+
+PROPRIETARY SOFTWARE LICENSE
+
+This repository and all associated materials — including but not limited to
+source code, object code, documentation, designs, user interface, graphics,
+algorithms, models, trade dress, and the "Closet Org" name — (collectively,
+the "Software") are the exclusive property of Rohin Patel.
+
+NO LICENSE GRANTED
+
+Except as expressly permitted in writing by the copyright owner, you may not:
+
+  • copy, reproduce, or duplicate the Software or any portion thereof;
+  • modify, adapt, translate, or create derivative works;
+  • distribute, publish, sublicense, sell, rent, lease, or lend the Software;
+  • reverse engineer, decompile, disassemble, or attempt to derive source code;
+  • remove or alter copyright, trademark, or proprietary notices;
+  • use the Software, its name, or branding to compete with or clone the
+    Closet Org product or service.
+
+VIEWING ON GITHUB
+
+Public visibility of this repository does not grant any right to use the
+Software. Forking or cloning for any purpose other than authorized
+contribution with written permission is prohibited.
+
+THIRD-PARTY COMPONENTS
+
+Dependencies listed in package manifests (npm, pip, etc.) remain subject to
+their respective open-source licenses. This LICENSE applies only to
+original work in this repository owned by Rohin Patel.
+
+TERMS OF USE
+
+Use of the hosted application is also governed by the Terms of Service and
+Privacy Policy served at /terms and /privacy on the deployed service (see
+frontend/terms.html and frontend/privacy.html).
+
+ENFORCEMENT
+
+Unauthorized use may result in termination of access and pursuit of all
+remedies available under applicable law, including copyright and trade-secret
+law.
+
+CONTACT
+
+For licensing inquiries:
+  patel.rohin@northeastern.edu
+  Subject line: "Closet Org licensing"

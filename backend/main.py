@@ -1300,6 +1300,26 @@ async def register_page():
 
 
 
+@app.get("/privacy")
+
+async def privacy_page():
+
+    return FileResponse(str(FRONTEND_DIR / "privacy.html"))
+
+
+
+
+
+@app.get("/terms")
+
+async def terms_page():
+
+    return FileResponse(str(FRONTEND_DIR / "terms.html"))
+
+
+
+
+
 @app.get("/healthz")
 
 async def healthz():

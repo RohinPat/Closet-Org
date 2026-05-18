@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -21,6 +22,7 @@ import {
   GlassInputContainer,
   ScreenBackground,
 } from '../components/Glass';
+import { privacyPolicyUrl, termsOfServiceUrl } from '../legal';
 import { spacing, typography, type ThemeColors } from '../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
@@ -37,6 +39,8 @@ export function RegisterScreen({ navigation }: Props) {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const privacyUrl = privacyPolicyUrl();
+  const termsUrl = termsOfServiceUrl();
 
   async function onSubmit() {
     setError(null);
@@ -162,6 +166,26 @@ export function RegisterScreen({ navigation }: Props) {
             >
               <Text style={styles.link}>Already have an account? Sign in</Text>
             </Pressable>
+
+            {privacyUrl && termsUrl ? (
+              <Text style={styles.legal}>
+                By creating an account, you agree to our{' '}
+                <Text
+                  style={styles.legalLink}
+                  onPress={() => void Linking.openURL(termsUrl)}
+                >
+                  Terms of Service
+                </Text>{' '}
+                and{' '}
+                <Text
+                  style={styles.legalLink}
+                  onPress={() => void Linking.openURL(privacyUrl)}
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
+            ) : null}
           </GlassCard>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -226,6 +250,17 @@ function makeStyles({ colors }: { colors: ThemeColors }) {
       color: colors.accent,
       fontSize: 15,
       fontWeight: '600',
+    },
+    legal: {
+      marginTop: spacing.lg,
+      fontSize: 12,
+      lineHeight: 18,
+      color: colors.textMuted,
+      textAlign: 'center',
+    },
+    legalLink: {
+      color: colors.accent,
+      textDecorationLine: 'underline',
     },
   });
 }

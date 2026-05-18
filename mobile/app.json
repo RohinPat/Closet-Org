@@ -30,14 +30,24 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.rohinpat.closetorg",
+      "buildNumber": "1",
       "infoPlist": {
         "NSAppTransportSecurity": {
-          "NSAllowsLocalNetworking": true
+          "NSAllowsLocalNetworking": true,
+          "NSExceptionDomains": {
+            "193.122.156.36": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSIncludesSubdomains": false
+            }
+          }
         },
         "NSLocationWhenInUseUsageDescription": "Allow Closet Org to use your location to sync local weather for outfit suggestions."
       }
     },
     "android": {
+      "package": "com.rohinpat.closetorg",
+      "versionCode": 1,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
@@ -54,9 +64,10 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "closetApiOrigin": "",
+      "closetApiOrigin": "http://193.122.156.36",
       "closetApiPort": "8001",
-      "privacyPolicyUrl": ""
+      "privacyPolicyUrl": "http://193.122.156.36/privacy",
+      "termsOfServiceUrl": "http://193.122.156.36/terms"
     }
   }
 }

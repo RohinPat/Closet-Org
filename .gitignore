@@ -72,5 +72,6 @@ docs/ADMIN_LOCAL.md
 # Expo / React Native
 mobile/node_modules/
 mobile/.expo/
+mobile/.env
 
 
