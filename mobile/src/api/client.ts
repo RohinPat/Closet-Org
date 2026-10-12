@@ -6,6 +6,8 @@ import { apiUrl } from '../config';
 
 import { formatApiError } from './errors';
 
+import { eventForApiCall, track } from '../telemetry';
+
 import type {
 
   AiStylistRequest,
@@ -200,7 +202,8 @@ async function apiFetch<T>(
 
   }
 
-
+  const event = eventForApiCall(init.method ?? 'GET', path, init.body);
+  if (event) track(event);
 
   return body as T;
 

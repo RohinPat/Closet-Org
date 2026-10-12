@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import * as api from '../api/client';
+import { identifyUser, resetUser } from '../telemetry';
 import type { User } from '../api/types';
 
 type SignUpPayload = {
@@ -91,13 +92,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     await api.setStoredToken(null);
     setUser(null);
+    resetUser();
   }, []);
 
   const deleteAccount = useCallback(async (password: string) => {
     await api.deleteAccount(password);
     await api.setStoredToken(null);
     setUser(null);
+    resetUser();
   }, []);
+
+  // Tie crash reports / analytics to the numeric user id only.
+  useEffect(() => {
+    if (user) identifyUser(user.id);
+  }, [user]);
 
   const value = useMemo(
     () => ({

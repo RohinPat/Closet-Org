@@ -4,8 +4,17 @@ import {
   NavigationContainer,
   DefaultTheme,
   DarkTheme,
+  createNavigationContainerRef,
   type NavigatorScreenParams,
 } from '@react-navigation/native';
+import { trackScreen } from '../telemetry';
+
+const navigationRef = createNavigationContainerRef<Record<string, object | undefined>>();
+
+function trackCurrentScreen() {
+  const name = navigationRef.getCurrentRoute()?.name;
+  if (name) trackScreen(name);
+}
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -391,7 +400,12 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      onReady={trackCurrentScreen}
+      onStateChange={trackCurrentScreen}
+    >
       {!carouselDone ? (
         <OnboardingCarouselScreen onFinished={onCarouselFinished} />
       ) : user ? (

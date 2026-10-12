@@ -68,7 +68,7 @@
   <p>We use a small number of service providers to run the app:</p>
   <ul>
     <li><strong>AI stylist:</strong> when you send a message to the AI stylist, your message, local weather, and the names and attributes of suggested items are sent to Anthropic to write the reply. Photos are not sent.</li>
-    <li><strong>Crash reporting and product analytics:</strong> error reports (Sentry) and anonymous feature-usage events (PostHog) tied to your account ID, used to fix bugs and understand which features are used. They do not include your photos or passwords.</li>
+    <li><strong>Crash reporting and product analytics:</strong> error reports (Sentry) and feature-usage events (PostHog), identified only by your numeric account ID, used to fix bugs and understand which features are used. They do not include your photos or passwords.</li>
     <li><strong>Backups:</strong> nightly copies of the database and photos, kept for up to 14 days on our server and with our cloud storage provider.</li>
   </ul>
 

@@ -123,6 +123,8 @@ def _dummy_hash() -> str:
 
 from database.db_manager import get_db
 
+from observability import init_sentry
+
 from models.ai_stylist import build_ai_stylist_response
 
 from models.closet_insights import build_closet_insights
@@ -163,8 +165,8 @@ from security import (
 
 logger = logging.getLogger("closet_org")
 
-
-
+# Must run before FastAPI() so Sentry's integration hooks the app.
+init_sentry()
 
 
 app = FastAPI(

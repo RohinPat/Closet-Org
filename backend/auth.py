@@ -28,6 +28,7 @@ from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from database.db_manager import get_db
+from observability import set_user_id
 
 
 # ---- Configuration -----------------------------------------------------------
@@ -173,6 +174,7 @@ def get_current_user(
         # User was deleted, or their tokens were invalidated.
         raise HTTPException(status_code=401, detail="Token revoked")
 
+    set_user_id(user_id)
     return {"user_id": user_id, "username": payload.get("username", "")}
 
 
