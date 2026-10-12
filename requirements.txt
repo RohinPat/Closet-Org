@@ -11,3 +11,4 @@ PyJWT>=2.8.0
 email-validator>=2.0.0
 pytesseract>=0.3.13
 onnxruntime>=1.16.0
+anthropic>=1.13,<2

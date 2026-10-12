@@ -11,7 +11,6 @@ from models.ai_stylist import (
     _apply_feedback,
     _clean_pin_ids,
     _compact_item,
-    _extract_json_object,
     _infer_pin_ids,
     _local_intro,
     _local_rationale,
@@ -170,10 +169,6 @@ def test_compact_item() -> None:
     assert _compact_item(row)["colors"] == []
 
 
-def test_extract_json_object() -> None:
-    assert _extract_json_object('foo {"a": 1} bar') == '{"a": 1}'
-
-
 def test_try_claude_copy_no_api_key() -> None:
     assert _try_claude_copy("hi", {}, None, []) is None
 
@@ -223,3 +218,81 @@ def test_build_ai_stylist_response_local_source(monkeypatch: pytest.MonkeyPatch)
     )
     assert resp["source"] == "local"
     assert resp["suggestions"]
+
+
+class _FakeBlock:
+    def __init__(self, type_: str, text: str = "") -> None:
+        self.type = type_
+        self.text = text
+
+
+class _FakeResponse:
+    def __init__(self, text: str, stop_reason: str = "end_turn") -> None:
+        # Haiku 5.5 thinks by default, so a thinking block can come first.
+        self.content = [_FakeBlock("thinking"), _FakeBlock("text", text)]
+        self.stop_reason = stop_reason
+
+
+class _FakeMessages:
+    def __init__(self, response=None, exc=None) -> None:
+        self.response, self.exc, self.calls = response, exc, []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.exc:
+            raise self.exc
+        return self.response
+
+
+class _FakeClient:
+    def __init__(self, messages: _FakeMessages) -> None:
+        self.messages = messages
+
+
+_SUGGESTIONS = [
+    {
+        "title": "Easy casual",
+        "outfit": {"items": [{"id": 1, "category": "Shirt", "colors": ["Blue"]}]},
+    }
+]
+
+
+def _patch_client(monkeypatch: pytest.MonkeyPatch, fake: _FakeMessages) -> None:
+    import models.ai_stylist as stylist
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    monkeypatch.setattr(stylist, "_get_anthropic_client", lambda: _FakeClient(fake))
+
+
+def test_try_claude_copy_request_shape_and_parse(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeMessages(_FakeResponse('{"message": " Wear the blue shirt. ", "rationales": ["Cool day"]}'))
+    _patch_client(monkeypatch, fake)
+
+    out = _try_claude_copy("what should I wear", {}, None, _SUGGESTIONS)
+
+    assert out == {"message": "Wear the blue shirt.", "rationales": ["Cool day"]}
+    req = fake.calls[0]
+    assert req["model"] == "claude-haiku-5-5"
+    # Haiku 5.5 rejects non-default sampling params and prefill.
+    assert "temperature" not in req and "top_p" not in req and "top_k" not in req
+    assert req["messages"][-1]["role"] == "user"
+    assert req["output_config"]["format"]["type"] == "json_schema"
+    assert req["output_config"]["effort"] == "low"
+
+
+def test_try_claude_copy_falls_back_on_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import anthropic
+    import httpx2
+
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    err = anthropic.NotFoundError(
+        "model not found", response=httpx2.Response(404, request=request), body=None
+    )
+    _patch_client(monkeypatch, _FakeMessages(exc=err))
+    assert _try_claude_copy("hi", {}, None, _SUGGESTIONS) is None
+
+
+def test_try_claude_copy_falls_back_on_refusal(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(monkeypatch, _FakeMessages(_FakeResponse("", stop_reason="refusal")))
+    assert _try_claude_copy("hi", {}, None, _SUGGESTIONS) is None
