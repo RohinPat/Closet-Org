@@ -12,17 +12,19 @@ import ast
 from contextlib import contextmanager
 from pathlib import Path
 
-MAIN = Path(__file__).resolve().parent.parent / "main.py"
+BACKEND = Path(__file__).resolve().parent.parent
+ROUTE_FILES = [BACKEND / "main.py", *sorted((BACKEND / "routers").glob("*.py"))]
 
 
 def test_async_routes_actually_await() -> None:
-    tree = ast.parse(MAIN.read_text(encoding="utf-8"))
     offenders = []
-    for node in tree.body:
-        if not isinstance(node, ast.AsyncFunctionDef):
-            continue
-        if not any(isinstance(n, (ast.Await, ast.AsyncFor, ast.AsyncWith)) for n in ast.walk(node)):
-            offenders.append(f"{node.name} (line {node.lineno})")
+    for path in ROUTE_FILES:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if not isinstance(node, ast.AsyncFunctionDef):
+                continue
+            if not any(isinstance(n, (ast.Await, ast.AsyncFor, ast.AsyncWith)) for n in ast.walk(node)):
+                offenders.append(f"{path.name}:{node.name} (line {node.lineno})")
     assert not offenders, (
         "async def handlers with no await block the event loop; use plain def: "
         + ", ".join(offenders)
@@ -43,7 +45,7 @@ def test_slow_handler_does_not_block_health_check(client) -> None:
     import time
     from io import BytesIO
 
-    import main as main_module
+    import deps
     from closet_org_pytest_helpers import MIN_PNG, auth_header, register_account
 
     tok = register_account(client, password="Abcd5678ef")["access_token"]
@@ -64,11 +66,11 @@ def test_slow_handler_does_not_block_health_check(client) -> None:
             return None
 
     slow = SlowClassifier()
-    original = main_module.get_classifier
-    main_module.get_classifier = lambda: slow
+    original = deps.get_classifier
+    deps.get_classifier = lambda: slow
     # As a context manager the TestClient shares one event loop across requests,
     # like a real uvicorn worker; otherwise each request gets its own loop.
-    with client, _restore(main_module, original):
+    with client, _restore(deps, original):
         done = {}
 
         def upload():
