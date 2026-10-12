@@ -1929,6 +1929,14 @@
                     </form>
                     <button type="button" class="btn btn-danger btn-sm" id="logout-all-btn">Sign out everywhere</button>
                 </div>
+                <div class="glass-card settings-block" id="delete-account">
+                    <h3>Delete account</h3>
+                    <p class="hint-text">Permanently deletes your closet, outfits, posts and photos. This cannot be undone.</p>
+                    <form id="delete-account-form" class="change-password-form">
+                        <label class="form-group">Password<input type="password" id="delete-account-password" class="form-input" autocomplete="current-password" required></label>
+                        <button type="submit" class="btn btn-danger btn-sm">Delete my account</button>
+                    </form>
+                </div>
             `;
             document.getElementById('settings-theme')?.addEventListener('change', async (e) => {
                 const theme_preference = e.target.value;
@@ -2025,6 +2033,29 @@
                     }
                     ev.target.reset();
                     app().showToast('Password updated');
+                } catch (err) {
+                    toastError(err);
+                }
+            });
+            document.getElementById('delete-account-form')?.addEventListener('submit', async (ev) => {
+                ev.preventDefault();
+                const password = document.getElementById('delete-account-password')?.value || '';
+                const ok = await showConfirmModal({
+                    title: 'Delete your account?',
+                    message: 'Everything in your closet will be permanently deleted.',
+                    confirmLabel: 'Delete forever',
+                    danger: true,
+                });
+                if (!ok) return;
+                try {
+                    await api('/auth/delete-account', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password }),
+                    });
+                    localStorage.removeItem('access_token');
+                    localStorage.removeItem('user');
+                    window.location.href = '/frontend/login.html';
                 } catch (err) {
                     toastError(err);
                 }

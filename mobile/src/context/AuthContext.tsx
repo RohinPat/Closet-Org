@@ -22,6 +22,7 @@ type AuthContextType = {
   signIn: (username: string, password: string) => Promise<void>;
   signUp: (payload: SignUpPayload) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: (password: string) => Promise<void>;
   refreshUser: () => Promise<void>;
 };
 
@@ -92,6 +93,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const deleteAccount = useCallback(async (password: string) => {
+    await api.deleteAccount(password);
+    await api.setStoredToken(null);
+    setUser(null);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -99,9 +106,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signUp,
       signOut,
+      deleteAccount,
       refreshUser,
     }),
-    [user, loading, signIn, signUp, signOut, refreshUser]
+    [user, loading, signIn, signUp, signOut, deleteAccount, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

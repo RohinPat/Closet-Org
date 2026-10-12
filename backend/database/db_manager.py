@@ -7812,6 +7812,101 @@ class DatabaseManager:
 
 
 
+    def delete_user_account(self, user_id: int) -> Optional[List[str]]:
+        """Permanently delete a user and everything they own, in one transaction.
+
+        Returns the stored image/thumbnail/avatar paths so the caller can
+        remove the files from disk, or ``None`` if the user does not exist.
+        Children are deleted explicitly because most FKs here have no
+        ``ON DELETE CASCADE``.
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT avatar_url FROM users WHERE id = ?", (user_id,))
+            user = cursor.fetchone()
+            if not user:
+                return None
+
+            files: List[str] = []
+            if user["avatar_url"]:
+                files.append(user["avatar_url"])
+
+            cursor.execute(
+                "SELECT image_path, thumbnail_path, image_paths, thumbnail_paths "
+                "FROM clothing_items WHERE user_id = ?",
+                (user_id,),
+            )
+            for row in cursor.fetchall():
+                for single in (row["image_path"], row["thumbnail_path"]):
+                    if single:
+                        files.append(single)
+                for multi in (row["image_paths"], row["thumbnail_paths"]):
+                    if not multi:
+                        continue
+                    try:
+                        parsed = json.loads(multi)
+                    except (TypeError, ValueError):
+                        continue
+                    if isinstance(parsed, list):
+                        files.extend(p for p in parsed if isinstance(p, str) and p)
+
+            cursor.execute("SELECT image_path FROM fit_posts WHERE user_id = ?", (user_id,))
+            files.extend(r["image_path"] for r in cursor.fetchall() if r["image_path"])
+
+            items = "SELECT id FROM clothing_items WHERE user_id = ?"
+            posts = "SELECT id FROM fit_posts WHERE user_id = ?"
+            plans = "SELECT id FROM planned_outfits WHERE user_id = ?"
+            trips = "SELECT id FROM trips WHERE user_id = ?"
+            u = (user_id,)
+            statements = [
+                (f"DELETE FROM post_reactions WHERE user_id = ? OR post_id IN ({posts})", u * 2),
+                (f"DELETE FROM post_comments WHERE user_id = ? OR post_id IN ({posts})", u * 2),
+                ("DELETE FROM fit_posts WHERE user_id = ?", u),
+                ("DELETE FROM friendships WHERE requester_id = ? OR addressee_id = ?", u * 2),
+                (
+                    f"DELETE FROM reminder_cards WHERE user_id = ? "
+                    f"OR item_id IN ({items}) OR plan_id IN ({plans})",
+                    u * 3,
+                ),
+                (
+                    f"DELETE FROM classification_corrections WHERE user_id = ? "
+                    f"OR item_id IN ({items})",
+                    u * 2,
+                ),
+                (
+                    f"DELETE FROM trip_packed_items WHERE trip_id IN ({trips}) "
+                    f"OR item_id IN ({items})",
+                    u * 2,
+                ),
+                ("DELETE FROM trips WHERE user_id = ?", u),
+                (
+                    f"DELETE FROM planned_outfit_items WHERE plan_id IN ({plans}) "
+                    f"OR item_id IN ({items})",
+                    u * 2,
+                ),
+                ("DELETE FROM planned_outfits WHERE user_id = ?", u),
+                (f"DELETE FROM laundry_queue WHERE item_id IN ({items})", u),
+                (f"DELETE FROM wear_history WHERE item_id IN ({items})", u),
+                ("DELETE FROM clothing_items WHERE user_id = ?", u),
+                ("DELETE FROM closet_locations WHERE user_id = ?", u),
+                ("DELETE FROM outfit_suggestion_history WHERE user_id = ?", u),
+                ("DELETE FROM ai_stylist_feedback WHERE user_id = ?", u),
+                ("DELETE FROM password_reset_tokens WHERE user_id = ?", u),
+                ("DELETE FROM users WHERE id = ?", u),
+            ]
+            for sql, params in statements:
+                cursor.execute(sql, params)
+            conn.commit()
+            return files
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+
     def item_belongs_to(self, item_id: int, user_id: int) -> bool:
 
         """True if ``item_id`` is owned by ``user_id``. False otherwise.

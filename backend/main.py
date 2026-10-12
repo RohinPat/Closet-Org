@@ -77,7 +77,7 @@ from fastapi import (
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from fastapi.staticfiles import StaticFiles
 
@@ -326,6 +326,10 @@ class PasswordChange(BaseModel):
     current_password: str = Field(..., min_length=1, max_length=512)
 
     new_password: str = Field(..., min_length=1, max_length=512)
+
+
+class AccountDelete(BaseModel):
+    password: str = Field(..., min_length=1, max_length=512)
 
 
 
@@ -1307,7 +1311,10 @@ async def privacy_page():
     return FileResponse(str(FRONTEND_DIR / "privacy.html"))
 
 
-
+@app.get("/delete-account")
+async def delete_account_page():
+    """Public account-deletion instructions (Google Play 'delete account' URL)."""
+    return RedirectResponse(url="/privacy#delete-account", status_code=302)
 
 
 @app.get("/terms")
@@ -1929,7 +1936,51 @@ async def change_password(
     return {"success": True, "access_token": token, "token_type": "bearer"}
 
 
+def _remove_user_upload_files(stored_paths: List[str]) -> None:
+    """Best-effort unlink of a deleted user's files.
 
+    Stored values are a mix of absolute paths and ``/uploads/<name>`` URLs;
+    both are reduced to a bare filename inside ``UPLOAD_DIR`` so nothing
+    outside the uploads folder can ever be touched. Shared bulk placeholders
+    are skipped.
+    """
+    root = UPLOAD_DIR.resolve()
+    for stored in stored_paths:
+        name = Path(str(stored).replace("\\", "/")).name
+        if not name or name.startswith("_bulk_placeholder"):
+            continue
+        target = (root / name).resolve()
+        if target.parent != root:
+            continue
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove upload %s during account deletion", name)
+
+
+@app.post("/api/auth/delete-account")
+def delete_account(
+    body: AccountDelete,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Permanently delete the caller's account, closet, posts and photos.
+
+    Requires the current password. Required by App Store (5.1.1(v)) and
+    Google Play account-deletion policies.
+    """
+    rate_limit(request, "auth.delete_account", limit=5, window=300)
+    user = db.get_user_by_id(current_user["user_id"])
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Password is incorrect")
+    files = db.delete_user_account(user["id"])
+    if files is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    _remove_user_upload_files(files)
+    logger.info("Account %s deleted", user["id"])
+    return {"success": True}
 
 
 @app.get("/api/auth/me")

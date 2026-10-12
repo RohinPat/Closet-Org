@@ -346,6 +346,15 @@ export async function fetchMe(token?: string | null) {
 
 }
 
+/** Permanently deletes the signed-in account and all of its data. */
+export async function deleteAccount(password: string) {
+  return apiFetch<{ success: boolean }>('/auth/delete-account', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+}
+
 
 
 export async function fetchCloset(params?: {
