@@ -43,6 +43,8 @@ import re
 
 import secrets
 
+import threading
+
 import time
 
 from datetime import datetime, timezone
@@ -1224,16 +1226,18 @@ def _closet_item_matches_query(item: dict, q_lower: str) -> bool:
 
 
 
+_classifier_lock = threading.Lock()
+
+
 def get_classifier():
-
+    """Lazy, thread-safe CLIP singleton (routes run in FastAPI's threadpool)."""
     global _classifier
-
     if _classifier is None:
+        with _classifier_lock:
+            if _classifier is None:
+                from models.clothing_classifier import ClothingClassifier
 
-        from models.clothing_classifier import ClothingClassifier
-
-        _classifier = ClothingClassifier()
-
+                _classifier = ClothingClassifier()
     return _classifier
 
 
@@ -1266,7 +1270,7 @@ app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend"
 
 @app.get("/")
 
-async def root():
+def root():
 
     return FileResponse(str(FRONTEND_DIR / "landing.html"))
 
@@ -1276,7 +1280,7 @@ async def root():
 
 @app.get("/app")
 
-async def app_page():
+def app_page():
 
     return FileResponse(str(FRONTEND_DIR / "index.html"))
 
@@ -1286,7 +1290,7 @@ async def app_page():
 
 @app.get("/login")
 
-async def login_page():
+def login_page():
 
     return FileResponse(str(FRONTEND_DIR / "login.html"))
 
@@ -1296,7 +1300,7 @@ async def login_page():
 
 @app.get("/register")
 
-async def register_page():
+def register_page():
 
     return FileResponse(str(FRONTEND_DIR / "register.html"))
 
@@ -1306,20 +1310,20 @@ async def register_page():
 
 @app.get("/privacy")
 
-async def privacy_page():
+def privacy_page():
 
     return FileResponse(str(FRONTEND_DIR / "privacy.html"))
 
 
 @app.get("/delete-account")
-async def delete_account_page():
+def delete_account_page():
     """Public account-deletion instructions (Google Play 'delete account' URL)."""
     return RedirectResponse(url="/privacy#delete-account", status_code=302)
 
 
 @app.get("/terms")
 
-async def terms_page():
+def terms_page():
 
     return FileResponse(str(FRONTEND_DIR / "terms.html"))
 
@@ -1329,7 +1333,7 @@ async def terms_page():
 
 @app.get("/healthz")
 
-async def healthz():
+def healthz():
 
     """Liveness probe. Doesn't touch the database — just confirms the
 
@@ -1349,7 +1353,7 @@ async def healthz():
 
 @app.get("/api/weather/geocode")
 
-async def weather_geocode(
+def weather_geocode(
 
     q: str,
 
@@ -1379,7 +1383,7 @@ async def weather_geocode(
 
 @app.get("/api/weather/current")
 
-async def weather_current(
+def weather_current(
 
     lat: float,
 
@@ -1425,7 +1429,7 @@ async def weather_current(
 
 @app.get("/api/weather/forecast")
 
-async def weather_forecast(
+def weather_forecast(
 
     lat: float,
 
@@ -1517,7 +1521,7 @@ def _public_user(user: dict) -> dict:
 
 @app.post("/api/auth/register")
 
-async def register(user_data: UserRegister, request: Request):
+def register(user_data: UserRegister, request: Request):
 
     """Register a new user. Email is normalized to lowercase and must be unique
     ignoring case (same address cannot exist twice).
@@ -1612,7 +1616,7 @@ async def register(user_data: UserRegister, request: Request):
 
 @app.post("/api/auth/login")
 
-async def login(credentials: UserLogin, request: Request):
+def login(credentials: UserLogin, request: Request):
 
     """Exchange username/password for an access token."""
 
@@ -1727,7 +1731,7 @@ _RESET_TTL_SECONDS = 3600
 
 @app.post("/api/auth/forgot-password")
 
-async def forgot_password(body: PasswordForgot, request: Request):
+def forgot_password(body: PasswordForgot, request: Request):
 
     """Request a password reset email (or dev token when SMTP is not configured).
 
@@ -1809,7 +1813,7 @@ async def forgot_password(body: PasswordForgot, request: Request):
 
 @app.post("/api/auth/reset-password")
 
-async def reset_password(body: PasswordResetConfirm, request: Request):
+def reset_password(body: PasswordResetConfirm, request: Request):
 
     """Consume a one-time reset token from email (forgot-password flow)."""
 
@@ -1863,7 +1867,7 @@ async def reset_password(body: PasswordResetConfirm, request: Request):
 
 @app.post("/api/auth/logout-all")
 
-async def logout_all(current_user: dict = Depends(get_current_user)):
+def logout_all(current_user: dict = Depends(get_current_user)):
 
     """Invalidate every outstanding token for the calling user.
 
@@ -1885,7 +1889,7 @@ async def logout_all(current_user: dict = Depends(get_current_user)):
 
 @app.post("/api/auth/change-password")
 
-async def change_password(
+def change_password(
 
     body: PasswordChange,
 
@@ -1985,7 +1989,7 @@ def delete_account(
 
 @app.get("/api/auth/me")
 
-async def get_me(current_user: dict = Depends(get_current_user)):
+def get_me(current_user: dict = Depends(get_current_user)):
 
     user = db.get_user_by_id(current_user["user_id"])
 
@@ -2001,7 +2005,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 
 @app.put("/api/auth/profile")
 
-async def update_profile(
+def update_profile(
 
     profile_data: UserProfile,
 
@@ -2051,7 +2055,7 @@ async def update_profile(
 
 @app.get("/api/settings")
 
-async def get_settings(current_user: dict = Depends(get_current_user)):
+def get_settings(current_user: dict = Depends(get_current_user)):
 
     settings = db.get_user_settings(current_user["user_id"])
 
@@ -2067,7 +2071,7 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
 
 @app.put("/api/settings")
 
-async def update_settings(
+def update_settings(
 
     settings: UserSettingsUpdate,
 
@@ -2149,7 +2153,7 @@ def _require_item_owner(item_id: int, user_id: int) -> None:
 
 @app.post("/api/upload-clothing")
 
-async def upload_clothing(
+def upload_clothing(
 
     request: Request,
 
@@ -2374,7 +2378,7 @@ async def upload_clothing(
 
 @app.get("/api/closet/insights")
 
-async def get_closet_insights(current_user: dict = Depends(get_current_user)):
+def get_closet_insights(current_user: dict = Depends(get_current_user)):
 
     items = db.get_all_items(user_id=current_user["user_id"])
 
@@ -2384,18 +2388,18 @@ async def get_closet_insights(current_user: dict = Depends(get_current_user)):
 
 
 @app.get("/api/reminders")
-async def get_reminders(current_user: dict = Depends(get_current_user)):
+def get_reminders(current_user: dict = Depends(get_current_user)):
     return {"cards": db.get_reminder_cards(current_user["user_id"])}
 
 
 @app.get("/api/trips")
-async def list_trips(current_user: dict = Depends(get_current_user)):
+def list_trips(current_user: dict = Depends(get_current_user)):
     db.auto_unpack_expired_trips(current_user["user_id"])
     return {"trips": db.list_trips(current_user["user_id"])}
 
 
 @app.post("/api/trips")
-async def create_trip(body: TripCreate, current_user: dict = Depends(get_current_user)):
+def create_trip(body: TripCreate, current_user: dict = Depends(get_current_user)):
     activities = [clip_text(a, max_len=60) for a in (body.activities or [])]
     activities = [a for a in activities if a]
     trip = db.create_trip(
@@ -2411,7 +2415,7 @@ async def create_trip(body: TripCreate, current_user: dict = Depends(get_current
 
 
 @app.put("/api/trips/{trip_id}")
-async def update_trip(
+def update_trip(
     trip_id: int,
     body: TripUpdate,
     current_user: dict = Depends(get_current_user),
@@ -2442,7 +2446,7 @@ async def update_trip(
 
 
 @app.put("/api/trips/{trip_id}/packed")
-async def set_trip_packed(
+def set_trip_packed(
     trip_id: int,
     body: TripPackedUpdate,
     current_user: dict = Depends(get_current_user),
@@ -2456,12 +2460,12 @@ async def set_trip_packed(
 
 
 @app.post("/api/trips/auto-unpack")
-async def auto_unpack_trips(current_user: dict = Depends(get_current_user)):
+def auto_unpack_trips(current_user: dict = Depends(get_current_user)):
     return {"success": True, "updated": db.auto_unpack_expired_trips(current_user["user_id"])}
 
 
 @app.post("/api/closet/embedding-backfill")
-async def backfill_embeddings(
+def backfill_embeddings(
     limit: int = 10,
     current_user: dict = Depends(get_current_user),
 ):
@@ -2485,7 +2489,7 @@ async def backfill_embeddings(
 
 @app.post("/api/closet/fit-check")
 
-async def closet_fit_check(
+def closet_fit_check(
 
     request: Request,
 
@@ -2581,7 +2585,7 @@ async def closet_fit_check(
 
 @app.post("/api/closet/bulk-item")
 
-async def create_bulk_item(
+def create_bulk_item(
 
     request: Request,
 
@@ -2661,7 +2665,7 @@ async def create_bulk_item(
 
 @app.post("/api/closet/bulk-item/upload")
 
-async def create_bulk_item_with_photo(
+def create_bulk_item_with_photo(
 
     request: Request,
 
@@ -2809,7 +2813,7 @@ async def create_bulk_item_with_photo(
 
 @app.post("/api/closet/import-csv")
 
-async def import_closet_csv(
+def import_closet_csv(
 
     request: Request,
 
@@ -2974,7 +2978,7 @@ async def import_closet_csv(
 
 @app.post("/api/closet/import-manual")
 
-async def import_closet_manual(
+def import_closet_manual(
 
     request: Request,
 
@@ -3073,7 +3077,7 @@ async def import_closet_manual(
 
 @app.post("/api/closet/visual-search")
 
-async def closet_visual_search(
+def closet_visual_search(
 
     request: Request,
 
@@ -3175,7 +3179,7 @@ async def closet_visual_search(
 
 @app.get("/api/closet/locations")
 
-async def list_closet_locations(current_user: dict = Depends(get_current_user)):
+def list_closet_locations(current_user: dict = Depends(get_current_user)):
 
     return {"locations": db.list_closet_locations(current_user["user_id"])}
 
@@ -3185,7 +3189,7 @@ async def list_closet_locations(current_user: dict = Depends(get_current_user)):
 
 @app.post("/api/closet/locations")
 
-async def create_closet_location(
+def create_closet_location(
 
     body: ClosetLocationCreate,
 
@@ -3225,7 +3229,7 @@ async def create_closet_location(
 
 @app.put("/api/closet/locations/{location_id}")
 
-async def update_closet_location(
+def update_closet_location(
 
     location_id: int,
 
@@ -3267,7 +3271,7 @@ async def update_closet_location(
 
 @app.delete("/api/closet/locations/{location_id}")
 
-async def delete_closet_location(
+def delete_closet_location(
 
     location_id: int,
 
@@ -3289,7 +3293,7 @@ async def delete_closet_location(
 
 @app.get("/api/closet")
 
-async def get_closet(
+def get_closet(
 
     category: Optional[str] = None,
 
@@ -3333,7 +3337,7 @@ async def get_closet(
 
 @app.put("/api/closet/packed")
 
-async def bulk_update_packed(
+def bulk_update_packed(
 
     body: PackedBulkUpdate,
 
@@ -3373,7 +3377,7 @@ async def bulk_update_packed(
 
 @app.get("/api/planned-outfits")
 
-async def list_planned_outfits(
+def list_planned_outfits(
 
     include_past: bool = True,
 
@@ -3397,7 +3401,7 @@ async def list_planned_outfits(
 
 @app.post("/api/planned-outfits")
 
-async def create_planned_outfit(
+def create_planned_outfit(
 
     body: PlannedOutfitCreate,
 
@@ -3447,7 +3451,7 @@ async def create_planned_outfit(
 
 @app.get("/api/planned-outfits/{plan_id}")
 
-async def get_planned_outfit(
+def get_planned_outfit(
 
     plan_id: int,
 
@@ -3469,7 +3473,7 @@ async def get_planned_outfit(
 
 @app.put("/api/planned-outfits/{plan_id}")
 
-async def update_planned_outfit(
+def update_planned_outfit(
 
     plan_id: int,
 
@@ -3539,7 +3543,7 @@ async def update_planned_outfit(
 
 @app.delete("/api/planned-outfits/{plan_id}")
 
-async def delete_planned_outfit(
+def delete_planned_outfit(
 
     plan_id: int,
 
@@ -3559,7 +3563,7 @@ async def delete_planned_outfit(
 
 @app.get("/api/item/{item_id}")
 
-async def get_item(
+def get_item(
 
     item_id: int,
 
@@ -3585,7 +3589,7 @@ async def get_item(
 
 @app.get("/api/item/{item_id}/outfits")
 
-async def item_suggested_outfits(
+def item_suggested_outfits(
 
     item_id: int,
 
@@ -3666,7 +3670,7 @@ async def item_suggested_outfits(
 
 
 @app.get("/api/item/{item_id}/wear-history")
-async def item_wear_history(
+def item_wear_history(
     item_id: int,
     current_user: dict = Depends(get_current_user),
 ):
@@ -3675,7 +3679,7 @@ async def item_wear_history(
 
 
 @app.get("/api/item/{item_id}/worn-outfits")
-async def item_worn_outfits(
+def item_worn_outfits(
     item_id: int,
     current_user: dict = Depends(get_current_user),
 ):
@@ -3684,7 +3688,7 @@ async def item_worn_outfits(
 
 
 @app.post("/api/item/{item_id}/classification-correction")
-async def save_classification_correction(
+def save_classification_correction(
     item_id: int,
     body: ClassificationCorrection,
     current_user: dict = Depends(get_current_user),
@@ -3724,7 +3728,7 @@ async def save_classification_correction(
 
 @app.put("/api/item/{item_id}/status")
 
-async def update_item_status(
+def update_item_status(
 
     item_id: int,
 
@@ -3778,7 +3782,7 @@ async def update_item_status(
 
 @app.put("/api/item/{item_id}")
 
-async def update_item_details(
+def update_item_details(
 
     item_id: int,
 
@@ -3838,7 +3842,7 @@ async def update_item_details(
 
 @app.post("/api/item/{item_id}/care-label")
 
-async def scan_item_care_label(
+def scan_item_care_label(
 
     request: Request,
 
@@ -3926,7 +3930,7 @@ async def scan_item_care_label(
 
 @app.post("/api/item/{item_id}/promote-bulk")
 
-async def promote_bulk_item(
+def promote_bulk_item(
 
     item_id: int,
 
@@ -3976,7 +3980,7 @@ async def promote_bulk_item(
 
 @app.delete("/api/item/{item_id}")
 
-async def delete_item(
+def delete_item(
 
     item_id: int,
 
@@ -4000,7 +4004,7 @@ async def delete_item(
 
 @app.get("/api/outfits/recommend")
 
-async def recommend_outfit(
+def recommend_outfit(
 
     occasion: Optional[str] = None,
 
@@ -4170,7 +4174,7 @@ async def recommend_outfit(
 
 @app.post("/api/ai-stylist")
 
-async def ai_stylist(
+def ai_stylist(
 
     body: AiStylistRequest,
 
@@ -4296,7 +4300,7 @@ async def ai_stylist(
 
 @app.post("/api/ai-stylist/feedback")
 
-async def ai_stylist_feedback(
+def ai_stylist_feedback(
 
     body: AiStylistFeedbackRequest,
 
@@ -4326,7 +4330,7 @@ async def ai_stylist_feedback(
 
 @app.get("/api/stats")
 
-async def get_stats(current_user: dict = Depends(get_current_user)):
+def get_stats(current_user: dict = Depends(get_current_user)):
 
     return db.get_statistics(user_id=current_user["user_id"])
 
@@ -4336,7 +4340,7 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
 
 @app.get("/api/neglected-items")
 
-async def get_neglected_items(
+def get_neglected_items(
 
     days: int = 30,
 
@@ -4362,7 +4366,7 @@ async def get_neglected_items(
 
 @app.put("/api/item/{item_id}/favorite")
 
-async def toggle_favorite(
+def toggle_favorite(
 
     item_id: int,
 
@@ -4386,7 +4390,7 @@ async def toggle_favorite(
 
 @app.put("/api/item/{item_id}/lend")
 
-async def lend_item(
+def lend_item(
 
     item_id: int,
 
@@ -4444,7 +4448,7 @@ async def lend_item(
 
 @app.put("/api/item/{item_id}/return")
 
-async def return_item(
+def return_item(
 
     item_id: int,
 
@@ -4470,7 +4474,7 @@ async def return_item(
 
 @app.get("/api/wishlist")
 
-async def get_wishlist(current_user: dict = Depends(get_current_user)):
+def get_wishlist(current_user: dict = Depends(get_current_user)):
 
     return {"items": db.get_wishlist_items(user_id=current_user["user_id"])}
 
@@ -4480,7 +4484,7 @@ async def get_wishlist(current_user: dict = Depends(get_current_user)):
 
 @app.post("/api/wishlist")
 
-async def create_wishlist_item(
+def create_wishlist_item(
 
     body: WishlistCreate,
 
@@ -4536,7 +4540,7 @@ async def create_wishlist_item(
 
 @app.put("/api/item/{item_id}/promote")
 
-async def promote_wishlist_item(
+def promote_wishlist_item(
 
     item_id: int,
 
@@ -4562,7 +4566,7 @@ async def promote_wishlist_item(
 
 @app.put("/api/wishlist/{item_id}")
 
-async def update_wishlist_item(
+def update_wishlist_item(
 
     item_id: int,
 
@@ -4616,7 +4620,7 @@ async def update_wishlist_item(
 
 @app.get("/api/laundry")
 
-async def get_laundry_queue(current_user: dict = Depends(get_current_user)):
+def get_laundry_queue(current_user: dict = Depends(get_current_user)):
 
     return db.get_laundry_queue(user_id=current_user["user_id"])
 
@@ -4626,7 +4630,7 @@ async def get_laundry_queue(current_user: dict = Depends(get_current_user)):
 
 @app.post("/api/laundry/add/{item_id}")
 
-async def add_to_laundry(
+def add_to_laundry(
 
     item_id: int,
 
@@ -4666,7 +4670,7 @@ async def add_to_laundry(
 
 @app.put("/api/laundry/{queue_id}/status")
 
-async def update_laundry_status(
+def update_laundry_status(
 
     queue_id: int,
 
@@ -4698,7 +4702,7 @@ async def update_laundry_status(
 
 @app.post("/api/refresh-scores")
 
-async def refresh_freshness_scores(current_user: dict = Depends(get_current_user)):
+def refresh_freshness_scores(current_user: dict = Depends(get_current_user)):
 
     db.update_freshness_scores(user_id=current_user["user_id"])
 
@@ -4714,7 +4718,7 @@ async def refresh_freshness_scores(current_user: dict = Depends(get_current_user
 
 @app.post("/api/auth/avatar")
 
-async def upload_avatar(
+def upload_avatar(
 
     request: Request,
 
@@ -4746,7 +4750,7 @@ async def upload_avatar(
 
 @app.get("/api/users/search")
 
-async def search_users(
+def search_users(
 
     q: str = "",
 
@@ -4764,7 +4768,7 @@ async def search_users(
 
 @app.get("/api/users/{user_id}")
 
-async def get_public_user(
+def get_public_user(
 
     user_id: int,
 
@@ -4790,7 +4794,7 @@ async def get_public_user(
 
 @app.get("/api/users/by-username/{username}")
 
-async def get_public_user_by_username(
+def get_public_user_by_username(
 
     username: str,
 
@@ -4816,7 +4820,7 @@ async def get_public_user_by_username(
 
 @app.get("/api/users/{user_id}/posts")
 
-async def get_user_posts_endpoint(
+def get_user_posts_endpoint(
 
     user_id: int,
 
@@ -4840,7 +4844,7 @@ async def get_user_posts_endpoint(
 
 @app.get("/api/friends")
 
-async def list_friends(current_user: dict = Depends(get_current_user)):
+def list_friends(current_user: dict = Depends(get_current_user)):
 
     return {"friends": db.get_friends(current_user["user_id"])}
 
@@ -4850,7 +4854,7 @@ async def list_friends(current_user: dict = Depends(get_current_user)):
 
 @app.get("/api/friends/requests")
 
-async def list_friend_requests(current_user: dict = Depends(get_current_user)):
+def list_friend_requests(current_user: dict = Depends(get_current_user)):
 
     return db.get_friend_requests(current_user["user_id"])
 
@@ -4860,7 +4864,7 @@ async def list_friend_requests(current_user: dict = Depends(get_current_user)):
 
 @app.post("/api/friends/requests")
 
-async def create_friend_request(
+def create_friend_request(
 
     body: FriendRequestCreate,
 
@@ -4886,7 +4890,7 @@ async def create_friend_request(
 
 @app.post("/api/friends/requests/{friendship_id}/accept")
 
-async def accept_friend_request(
+def accept_friend_request(
 
     friendship_id: int,
 
@@ -4916,7 +4920,7 @@ async def accept_friend_request(
 
 @app.post("/api/friends/requests/{friendship_id}/reject")
 
-async def reject_friend_request(
+def reject_friend_request(
 
     friendship_id: int,
 
@@ -4946,7 +4950,7 @@ async def reject_friend_request(
 
 @app.delete("/api/friends/{user_id}")
 
-async def remove_friend(
+def remove_friend(
 
     user_id: int,
 
@@ -4968,7 +4972,7 @@ async def remove_friend(
 
 @app.get("/api/feed")
 
-async def get_feed(
+def get_feed(
 
     before: Optional[str] = None,
 
@@ -5004,7 +5008,7 @@ async def get_feed(
 
 @app.post("/api/fits")
 
-async def create_fit_post(
+def create_fit_post(
 
     request: Request,
 
@@ -5112,7 +5116,7 @@ async def create_fit_post(
 
 @app.get("/api/trips/logs")
 
-async def list_trip_logs(current_user: dict = Depends(get_current_user)):
+def list_trip_logs(current_user: dict = Depends(get_current_user)):
 
     return {"trips": db.get_trip_logs(user_id=current_user["user_id"])}
 
@@ -5122,7 +5126,7 @@ async def list_trip_logs(current_user: dict = Depends(get_current_user)):
 
 @app.get("/api/fits/{post_id}")
 
-async def get_fit_post(
+def get_fit_post(
 
     post_id: int,
 
@@ -5144,7 +5148,7 @@ async def get_fit_post(
 
 @app.delete("/api/fits/{post_id}")
 
-async def delete_fit_post(
+def delete_fit_post(
 
     post_id: int,
 
@@ -5166,7 +5170,7 @@ async def delete_fit_post(
 
 @app.post("/api/fits/{post_id}/react")
 
-async def react_to_fit(
+def react_to_fit(
 
     post_id: int,
 
@@ -5194,7 +5198,7 @@ async def react_to_fit(
 
 @app.get("/api/fits/{post_id}/comments")
 
-async def list_comments(
+def list_comments(
 
     post_id: int,
 
@@ -5216,7 +5220,7 @@ async def list_comments(
 
 @app.post("/api/fits/{post_id}/comments")
 
-async def post_comment(
+def post_comment(
 
     post_id: int,
 
@@ -5244,7 +5248,7 @@ async def post_comment(
 
 @app.delete("/api/comments/{comment_id}")
 
-async def delete_comment_endpoint(
+def delete_comment_endpoint(
 
     comment_id: int,
 
