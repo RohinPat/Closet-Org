@@ -105,3 +105,14 @@ jobs:
             sleep 1
           done
           E2E_BASE_URL=http://127.0.0.1:8765 python -m pytest e2e -v --tb=short
+
+  ops-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: ShellCheck
+        run: shellcheck scripts/backup_prod.sh scripts/test_backup_prod.sh
+
+      - name: Backup script end-to-end
+        run: sudo bash scripts/test_backup_prod.sh

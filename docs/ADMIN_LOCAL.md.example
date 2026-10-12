@@ -188,10 +188,10 @@ sudo grep CLOSET_SECRET_KEY /etc/closet-org.env   # do not paste in chat
 
 ## Backups
 
-Snapshot EBS volume or copy:
+Nightly DB + photo snapshots run automatically (`closet-org-backup.timer`, installed by `deploy_prod.sh`).
+Turn on the off-site copy and practice a restore: see **[docs/BACKUPS.md](BACKUPS.md)**.
 
-- `/opt/closet-org/backend/closet.db`
-- `/opt/closet-org/uploads/`
+- Off-site remote: `BACKUP_RCLONE_REMOTE=` in `/etc/closet-org-backup.env`
 
 ---
 
