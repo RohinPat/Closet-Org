@@ -43,12 +43,14 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path):
 
     monkeypatch.setattr(clothing_classifier, "generate_cutout_thumbnail", lambda *a, **k: False)
 
+    import deps
     import main as main_module
 
-    monkeypatch.setattr(main_module, "db", fresh)
-    monkeypatch.setattr(main_module, "weather_provider", FakeWeatherProvider())
+    # Routers read shared state as ``deps.<name>`` at call time.
+    monkeypatch.setattr(deps, "db", fresh)
+    monkeypatch.setattr(deps, "weather_provider", FakeWeatherProvider())
     _fc = FakeClassifier()
-    monkeypatch.setattr(main_module, "get_classifier", lambda: _fc)
+    monkeypatch.setattr(deps, "get_classifier", lambda: _fc)
 
     from fastapi.testclient import TestClient
 

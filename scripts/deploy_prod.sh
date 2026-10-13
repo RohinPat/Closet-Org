@@ -68,6 +68,34 @@ done
 chgrp closet-org "${BACKEND_DIR}"
 chmod 2775 "${BACKEND_DIR}"
 
+echo "==> Nightly backup timer (scripts/backup_prod.sh, docs/BACKUPS.md)"
+command -v rsync >/dev/null || apt-get install -y -q rsync
+cat >/etc/systemd/system/closet-org-backup.service <<UNIT
+[Unit]
+Description=Closet-Org backup (database + photos)
+
+[Service]
+Type=oneshot
+Environment=INSTALL_DIR=${INSTALL_DIR}
+ExecStart=/bin/bash ${INSTALL_DIR}/scripts/backup_prod.sh
+Nice=10
+IOSchedulingClass=idle
+UNIT
+cat >/etc/systemd/system/closet-org-backup.timer <<'UNIT'
+[Unit]
+Description=Run the Closet-Org backup nightly
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now closet-org-backup.timer
+
 echo "==> Restart services"
 systemctl restart closet-org
 if nginx -t 2>/dev/null; then

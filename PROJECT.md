@@ -84,7 +84,7 @@ Small multi-tenant web + mobile app with one shared SQLite database. Intended co
 
 - **Passwords** — bcrypt + salt (`hash_password` in `backend/auth.py`). Policy: minimum 10 chars, two character classes, no username substring, max 256 chars (bcrypt ~72-byte limit).
 - **Login throttling** — per-IP sliding window (`InMemoryRateLimiter` in `backend/security.py`): 10 tries / 5 min on `/api/auth/login`; plus per-account lockout after 8 failures (15 minutes).
-- **Timing-safe lookups** — missing username still runs a dummy bcrypt compare (`main._dummy_hash`).
+- **Timing-safe lookups** — missing username still runs a dummy bcrypt compare (`route_helpers._dummy_hash`).
 - **JWTs** — HS256, UTC-aware, claims `exp`, `iat`, `iss`, `user_id`, `tv`; signing secret `CLOSET_SECRET_KEY` (mandatory in production).
 - **Revocation** — `tv` validated against `users.token_version`; password change / `POST /api/auth/logout-all` bumps version.
 

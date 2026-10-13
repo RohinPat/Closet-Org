@@ -6,6 +6,8 @@ import { apiUrl } from '../config';
 
 import { formatApiError } from './errors';
 
+import { eventForApiCall, track } from '../telemetry';
+
 import type {
 
   AiStylistRequest,
@@ -200,7 +202,8 @@ async function apiFetch<T>(
 
   }
 
-
+  const event = eventForApiCall(init.method ?? 'GET', path, init.body);
+  if (event) track(event);
 
   return body as T;
 
@@ -344,6 +347,15 @@ export async function fetchMe(token?: string | null) {
 
   return apiFetch<User>('/auth/me', {}, token);
 
+}
+
+/** Permanently deletes the signed-in account and all of its data. */
+export async function deleteAccount(password: string) {
+  return apiFetch<{ success: boolean }>('/auth/delete-account', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
 }
 
 

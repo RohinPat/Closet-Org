@@ -76,6 +76,19 @@ App Store Connect → TestFlight → add internal testers.
 | `eas.json` | Build profiles + `EXPO_PUBLIC_API_URL` for release |
 | `.env.example` | Local Expo Go template |
 
+## Crash reporting and analytics (optional, recommended for the beta)
+
+Both are off until you set the keys. With no keys the app sends nothing.
+
+1. Create a free **Sentry** project (React Native) and a free **PostHog** project.
+2. Add these to the `env` of each `eas.json` build profile you ship:
+   - `EXPO_PUBLIC_SENTRY_DSN`: the Sentry DSN
+   - `EXPO_PUBLIC_POSTHOG_KEY`: the PostHog project API key (and `EXPO_PUBLIC_POSTHOG_HOST` for an EU project)
+3. Optional, for readable stack traces: add a `SENTRY_AUTH_TOKEN` EAS secret, set `organization`/`project` on the `@sentry/react-native` plugin in `app.json`, and remove `SENTRY_DISABLE_AUTO_UPLOAD` from `eas.json`.
+4. Backend crashes: set `SENTRY_DSN` in `/etc/closet-org.env` and restart.
+
+Tracked events are listed in `src/telemetry.ts` (`TelemetryEvent`): sign-up, item uploaded, outfit recommended/planned, item worn, stylist message, fit posted, account deleted, plus screen views. They carry only the numeric user id. Update the Data safety / App Privacy answers in `docs/STORE_LISTINGS.md` when you turn these on.
+
 ## After `git pull` on Oracle
 
 ```bash

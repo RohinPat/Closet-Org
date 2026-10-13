@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import * as api from '../api/client';
+import { identifyUser, resetUser } from '../telemetry';
 import type { User } from '../api/types';
 
 type SignUpPayload = {
@@ -22,6 +23,7 @@ type AuthContextType = {
   signIn: (username: string, password: string) => Promise<void>;
   signUp: (payload: SignUpPayload) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: (password: string) => Promise<void>;
   refreshUser: () => Promise<void>;
 };
 
@@ -90,7 +92,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     await api.setStoredToken(null);
     setUser(null);
+    resetUser();
   }, []);
+
+  const deleteAccount = useCallback(async (password: string) => {
+    await api.deleteAccount(password);
+    await api.setStoredToken(null);
+    setUser(null);
+    resetUser();
+  }, []);
+
+  // Tie crash reports / analytics to the numeric user id only.
+  useEffect(() => {
+    if (user) identifyUser(user.id);
+  }, [user]);
 
   const value = useMemo(
     () => ({
@@ -99,9 +114,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signUp,
       signOut,
+      deleteAccount,
       refreshUser,
     }),
-    [user, loading, signIn, signUp, signOut, refreshUser]
+    [user, loading, signIn, signUp, signOut, deleteAccount, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

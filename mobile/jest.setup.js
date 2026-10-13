@@ -47,3 +47,18 @@ jest.mock('expo-haptics', () => ({
   ImpactFeedbackStyle: { Light: 'light' },
   impactAsync: jest.fn(async () => {}),
 }));
+
+jest.mock('@sentry/react-native', () => ({
+  init: jest.fn(),
+  setUser: jest.fn(),
+  wrap: (Root) => Root,
+}));
+
+jest.mock('posthog-react-native', () =>
+  jest.fn().mockImplementation(() => ({
+    capture: jest.fn(),
+    identify: jest.fn(),
+    reset: jest.fn(),
+    screen: jest.fn(async () => {}),
+  }))
+);

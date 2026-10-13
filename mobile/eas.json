@@ -8,7 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://193.122.156.36"
+        "EXPO_PUBLIC_API_URL": "http://193.122.156.36",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "preview": {
@@ -17,13 +18,15 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://193.122.156.36"
+        "EXPO_PUBLIC_API_URL": "http://193.122.156.36",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://193.122.156.36"
+        "EXPO_PUBLIC_API_URL": "http://193.122.156.36",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     }
   },

@@ -40,7 +40,7 @@ Threat model, headers, uploads, deployment checklist → **[PROJECT.md § Securi
 
 ### Production ops (private notes)
 
-Server-specific commands (SSH, Oracle firewall, nginx timeouts, backups) live in **`docs/ADMIN_LOCAL.md`**, which is **gitignored**. Copy **[`docs/ADMIN_LOCAL.md.example`](docs/ADMIN_LOCAL.md.example)** to `docs/ADMIN_LOCAL.md` and fill in your values. Automated VPS setup: **`scripts/provision_ubuntu_prod.sh`** and **[`docs/AWS_DEPLOYMENT.md`](docs/AWS_DEPLOYMENT.md)**. **Auto-deploy on push to `main`:** **[`docs/GITHUB_DEPLOY.md`](docs/GITHUB_DEPLOY.md)** (GitHub Actions → Oracle).
+Server-specific commands (SSH, Oracle firewall, nginx timeouts, backups) live in **`docs/ADMIN_LOCAL.md`**, which is **gitignored**. Copy **[`docs/ADMIN_LOCAL.md.example`](docs/ADMIN_LOCAL.md.example)** to `docs/ADMIN_LOCAL.md` and fill in your values. Automated VPS setup: **`scripts/provision_ubuntu_prod.sh`** and **[`docs/AWS_DEPLOYMENT.md`](docs/AWS_DEPLOYMENT.md)**. **Auto-deploy on push to `main`:** **[`docs/GITHUB_DEPLOY.md`](docs/GITHUB_DEPLOY.md)** (GitHub Actions → Oracle). **Backups and restore:** **[`docs/BACKUPS.md`](docs/BACKUPS.md)**.
 
 ### Web frontend
 
@@ -101,9 +101,16 @@ Main entry points:
 
 ```
 backend/                FastAPI app, SQLite
-  main.py               routes
+  main.py               app setup: middleware, CORS, static mounts, router order
+  routers/              API routes by area (auth, closet, items, outfits, social, ...)
+  schemas.py            Pydantic request bodies
+  route_helpers.py      shared validation/parsing helpers
+  deps.py               shared state (db, models, paths); tests patch it here
   auth.py               JWT + bcrypt
-  database/             manager + migrations
+  database/
+    db_manager.py       DatabaseManager = connection + one mixin per area
+    schema.py           tables + in-place migrations
+    users.py, items.py, social.py, ...   queries by area
   models/
     clothing_classifier.py   CLIP + HSV color
     outfit_recommender.py    rule-based picker

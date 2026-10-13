@@ -70,7 +70,7 @@ export function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
   const scrollTop = tabScrollContentPaddingTop(insets);
-  const { user, signOut, refreshUser } = useAuth();
+  const { user, signOut, deleteAccount, refreshUser } = useAuth();
   const { colors, surface, pref, mode, setPref } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -86,6 +86,31 @@ export function ProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [weatherSync, setWeatherSync] = useState(false);
   const [weatherPermission, setWeatherPermission] = useState('Unknown');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const startDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your closet, outfits, posts and photos. It cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', style: 'destructive', onPress: () => setConfirmingDelete(true) },
+      ]
+    );
+  };
+
+  const submitDeleteAccount = async () => {
+    if (!deletePassword) return;
+    setDeletingAccount(true);
+    try {
+      await deleteAccount(deletePassword);
+    } catch (e) {
+      setDeletingAccount(false);
+      Alert.alert('Could not delete account', e instanceof Error ? e.message : 'Error');
+    }
+  };
 
   const loadProfileAndPosts = useCallback(async () => {
     if (!user) return;
@@ -664,6 +689,58 @@ export function ProfileScreen() {
           variant="danger"
           style={styles.signOut}
         />
+
+        {confirmingDelete ? (
+          <GlassCard padded style={styles.deleteCard}>
+            <Text style={styles.rowTitle}>Confirm account deletion</Text>
+            <Text style={styles.hint}>
+              Enter your password to permanently delete your account.
+            </Text>
+            <GlassInputContainer style={styles.fieldShell}>
+              <TextInput
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+                placeholder="Password"
+                placeholderTextColor={colors.placeholder}
+                style={styles.fieldInput}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                testID="delete-account-password"
+              />
+            </GlassInputContainer>
+            <View style={styles.editActions}>
+              <GlassButton
+                title="Cancel"
+                variant="secondary"
+                onPress={() => {
+                  setConfirmingDelete(false);
+                  setDeletePassword('');
+                }}
+                disabled={deletingAccount}
+              />
+              <GlassButton
+                title="Delete forever"
+                variant="danger"
+                onPress={submitDeleteAccount}
+                loading={deletingAccount}
+                disabled={!deletePassword || deletingAccount}
+                testID="delete-account-submit"
+              />
+            </View>
+          </GlassCard>
+        ) : (
+          <Pressable
+            onPress={startDeleteAccount}
+            hitSlop={8}
+            style={styles.deleteLink}
+            testID="delete-account"
+          >
+            <Text style={[styles.hint, { color: colors.danger }]}>
+              Delete account
+            </Text>
+          </Pressable>
+        )}
       </ScrollView>
     </View>
   );
@@ -909,6 +986,14 @@ function makeStyles({ colors, surface, mode }: ThemeContextValue) {
     },
     signOut: {
       marginTop: spacing.xl,
+    },
+    deleteLink: {
+      alignSelf: 'center',
+      marginTop: spacing.lg,
+      paddingVertical: spacing.sm,
+    },
+    deleteCard: {
+      marginTop: spacing.lg,
     },
   });
 }

@@ -4,15 +4,11 @@ from __future__ import annotations
 
 import json
 
+import logging
+
 import os
 
 import random
-
-import re
-
-import urllib.error
-
-import urllib.request
 
 from datetime import date
 
@@ -21,6 +17,8 @@ from typing import Any, Dict, List, Optional, Set
 
 
 from models.outfit_recommender import OutfitRecommender
+
+logger = logging.getLogger("closet_org.ai_stylist")
 
 
 
@@ -938,159 +936,104 @@ def _local_rationale(
 
 
 
+_STYLIST_MODEL_DEFAULT = "claude-haiku-5-5"
+
+_STYLIST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "message": {"type": "string"},
+        "rationales": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["message", "rationales"],
+    "additionalProperties": False,
+}
+
+_anthropic_client = None
+
+
+def _get_anthropic_client():
+    """One shared client (connection pooling); built lazily so tests and
+    key-less deployments never import or configure it."""
+    global _anthropic_client
+    if _anthropic_client is None:
+        import anthropic
+
+        # Short timeout + one retry: the stylist falls back to local copy, so a
+        # slow API call should never hold the request for long.
+        _anthropic_client = anthropic.Anthropic(timeout=20.0, max_retries=1)
+    return _anthropic_client
+
+
 def _try_claude_copy(
-
     message: str,
-
     interpreted: Dict[str, Any],
-
     weather: Optional[Dict[str, Any]],
-
     suggestions: List[Dict[str, Any]],
-
 ) -> Optional[Dict[str, Any]]:
-
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-
-    if not api_key or not suggestions:
-
+    if not os.getenv("ANTHROPIC_API_KEY") or not suggestions:
         return None
 
+    import anthropic
 
-
-    payload = {
-
-        "model": os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest"),
-
-        "max_tokens": 500,
-
-        "temperature": 0.5,
-
-        "system": (
-
-            "You are a concise personal stylist. Use only the provided closet "
-
-            "metadata. Return strict JSON with keys message and rationales."
-
-        ),
-
-        "messages": [
-
-            {
-
-                "role": "user",
-
-                "content": json.dumps(
-
-                    {
-
-                        "user_message": message[:500],
-
-                        "interpreted": interpreted,
-
-                        "weather": weather,
-
-                        "planning": interpreted.get("planning") or {},
-
-                        "suggestions": [
-
-                            {
-
-                                "title": s["title"],
-
-                                "items": [_compact_item(item) for item in s["outfit"].get("items", [])],
-
-                            }
-
-                            for s in suggestions
-
-                        ],
-
-                    },
-
-                    separators=(",", ":"),
-
-                ),
-
-            }
-
-        ],
-
-    }
-
-    req = urllib.request.Request(
-
-        "https://api.anthropic.com/v1/messages",
-
-        data=json.dumps(payload).encode("utf-8"),
-
-        headers={
-
-            "content-type": "application/json",
-
-            "x-api-key": api_key,
-
-            "anthropic-version": "2023-06-01",
-
+    model = os.getenv("ANTHROPIC_MODEL", _STYLIST_MODEL_DEFAULT)
+    context = json.dumps(
+        {
+            "user_message": message[:500],
+            "interpreted": interpreted,
+            "weather": weather,
+            "planning": interpreted.get("planning") or {},
+            "suggestions": [
+                {
+                    "title": s["title"],
+                    "items": [_compact_item(item) for item in s["outfit"].get("items", [])],
+                }
+                for s in suggestions
+            ],
         },
-
-        method="POST",
-
+        separators=(",", ":"),
     )
-
     try:
-
-        # URL is always https://api.anthropic.com/… (no user-controlled scheme).
-        with urllib.request.urlopen(req, timeout=8) as res:  # nosec B310
-
-            raw = json.loads(res.read().decode("utf-8"))
-
-    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
-
+        response = _get_anthropic_client().messages.create(
+            model=model,
+            # Room for adaptive thinking plus a short JSON answer.
+            max_tokens=2048,
+            output_config={
+                "effort": "low",
+                "format": {"type": "json_schema", "schema": _STYLIST_SCHEMA},
+            },
+            system=(
+                "You are a concise personal stylist. Use only the provided closet "
+                "metadata. Write one short, friendly message to the user and one "
+                "rationale per suggestion, in the same order as the suggestions."
+            ),
+            messages=[{"role": "user", "content": context}],
+        )
+    except anthropic.APIStatusError as exc:
+        logger.warning("AI stylist: Claude API error %s (model=%s)", exc.status_code, model)
+        return None
+    except anthropic.APIConnectionError:
+        logger.warning("AI stylist: could not reach Claude API (model=%s)", model)
         return None
 
-
-
-    text = "".join(
-
-        block.get("text", "")
-
-        for block in raw.get("content", [])
-
-        if isinstance(block, dict) and block.get("type") == "text"
-
-    )
-
-    try:
-
-        parsed = json.loads(_extract_json_object(text))
-
-    except (TypeError, ValueError):
-
+    if response.stop_reason != "end_turn":
+        logger.warning("AI stylist: Claude stopped with %s (model=%s)", response.stop_reason, model)
         return None
-
+    text = next((b.text for b in response.content if b.type == "text"), "")
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        logger.warning("AI stylist: Claude returned non-JSON text (model=%s)", model)
+        return None
     if not isinstance(parsed, dict):
-
         return None
-
     message_out = parsed.get("message")
-
     rationales = parsed.get("rationales")
-
     if not isinstance(message_out, str) or not isinstance(rationales, list):
-
         return None
-
     return {
-
         "message": message_out.strip()[:500],
-
         "rationales": [r for r in rationales if isinstance(r, str)],
-
     }
-
-
-
 
 
 def _compact_item(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -1119,13 +1062,4 @@ def _compact_item(item: Dict[str, Any]) -> Dict[str, Any]:
 
 
 
-def _extract_json_object(text: str) -> str:
-
-    match = re.search(r"\{.*\}", text, flags=re.S)
-
-    if not match:
-
-        raise ValueError("No JSON object")
-
-    return match.group(0)
 

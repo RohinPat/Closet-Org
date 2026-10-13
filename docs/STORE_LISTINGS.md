@@ -69,11 +69,13 @@ AI closet & outfit planner
 |----------|--------|
 | Collects data? | Yes |
 | Data encrypted in transit | Partially (HTTP today; HTTPS when domain added) |
-| Users can request deletion | Yes (email support) |
+| Users can request deletion | Yes — in app (Profile → Delete account), on web, or by email |
+| Account deletion URL | http://193.122.156.36/delete-account |
 | **Personal info** | Email, username (account) |
 | **Photos** | Clothing photos user uploads |
 | **Location** | Approximate, optional, for weather |
-| **App activity** | Closet items, outfits, preferences (app functionality) |
+| **App activity** | Closet items, outfits, preferences (app functionality); feature-usage events (analytics, if PostHog is enabled) |
+| **App info & performance** | Crash logs and diagnostics (if Sentry is enabled) |
 | Sold to third parties | No |
 | Used for ads | No |
 
@@ -86,7 +88,8 @@ AI closet & outfit planner
 | Email, user ID | Yes | No | App functionality, account |
 | Photos | Yes | No | App functionality |
 | Coarse location | Yes | No | App functionality (weather) |
-| Product interaction (closet usage) | Yes | No | App functionality |
+| Product interaction (closet usage) | Yes | No | App functionality, Analytics (if PostHog is enabled) |
+| Crash data, performance data | Yes | No | App functionality (if Sentry is enabled) |
 
 Tracking: **No**  
 Third-party advertising: **No**

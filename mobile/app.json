@@ -21,7 +21,9 @@
           "locationWhenInUsePermission": "Allow Closet Org to use your location to sync local weather for outfit suggestions."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@sentry/react-native",
+      "expo-localization"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",

@@ -4,24 +4,32 @@ import colorsys
 from PIL import Image
 import numpy as np
 from typing import Dict, List, Tuple, Optional
+import threading
 import warnings
 warnings.filterwarnings('ignore')
 
+# Routes run in FastAPI's threadpool, so several requests can reach the models
+# at once. Model *inference* is serialized: torch already uses every core for
+# one forward pass, and running several in parallel on the small prod VM only
+# multiplies peak memory. Non-model requests are unaffected.
+_inference_lock = threading.Lock()
+_rembg_init_lock = threading.Lock()
 _rembg_session = None
 
 def _get_rembg_session():
     """Lazy-load the background-removal model. Returns None if rembg unavailable."""
     global _rembg_session
+    if _rembg_session is None:
+        with _rembg_init_lock:
+            if _rembg_session is None:
+                try:
+                    from rembg import new_session
+                    _rembg_session = new_session("u2netp")  # small/fast variant
+                except Exception as e:
+                    print(f"rembg unavailable, falling back to center crop: {e}")
+                    _rembg_session = False
     if _rembg_session is False:
         return None
-    if _rembg_session is None:
-        try:
-            from rembg import new_session
-            _rembg_session = new_session("u2netp")  # small/fast variant
-        except Exception as e:
-            print(f"rembg unavailable, falling back to center crop: {e}")
-            _rembg_session = False
-            return None
     return _rembg_session
 
 
@@ -40,7 +48,8 @@ def generate_cutout_thumbnail(
         from rembg import remove
         img = Image.open(input_path).convert("RGB")
         img.thumbnail((max_size, max_size))
-        cutout = remove(img, session=session)
+        with _inference_lock:
+            cutout = remove(img, session=session)
         cutout.save(output_path, "PNG")
         return True
     except Exception as e:
@@ -121,7 +130,7 @@ class ClothingClassifier:
             image = Image.open(image_path).convert("RGB")
             img_tensor = self.preprocess(image).unsqueeze(0).to(self.device)
 
-            with torch.no_grad():
+            with _inference_lock, torch.no_grad():
                 img_features = self.model.encode_image(img_tensor)
                 img_features = img_features / img_features.norm(dim=-1, keepdim=True)
                 cat_logits = (100.0 * img_features @ self.cat_features.T).softmax(dim=-1)[0]
@@ -301,7 +310,7 @@ class ClothingClassifier:
         try:
             image = Image.open(image_path).convert("RGB")
             img_tensor = self.preprocess(image).unsqueeze(0).to(self.device)
-            with torch.no_grad():
+            with _inference_lock, torch.no_grad():
                 feats = self.model.encode_image(img_tensor)
                 feats = feats / feats.norm(dim=-1, keepdim=True)
             return [float(x) for x in feats.cpu().numpy().flatten()]
