@@ -85,137 +85,188 @@ import type {
 
 
 const TOKEN_KEY = 'closet_org_access_token';
+const REFRESH_KEY = 'closet_org_refresh_token';
 
 const isWeb = Platform.OS === 'web';
 
+async function readSecure(key: string): Promise<string | null> {
+  try {
+    if (isWeb) {
+      return typeof window !== 'undefined' ? window.localStorage.getItem(key) : null;
+    }
+    return await SecureStore.getItemAsync(key);
+  } catch {
+    return null;
+  }
+}
 
+async function writeSecure(key: string, value: string | null): Promise<void> {
+  if (isWeb) {
+    if (typeof window === 'undefined') return;
+    if (value) window.localStorage.setItem(key, value);
+    else window.localStorage.removeItem(key);
+    return;
+  }
+  if (value) await SecureStore.setItemAsync(key, value);
+  else await SecureStore.deleteItemAsync(key);
+}
 
 export async function getStoredToken(): Promise<string | null> {
-
-  try {
-
-    if (isWeb) {
-
-      return typeof window !== 'undefined' ? window.localStorage.getItem(TOKEN_KEY) : null;
-
-    }
-
-    return await SecureStore.getItemAsync(TOKEN_KEY);
-
-  } catch {
-
-    return null;
-
-  }
-
+  return readSecure(TOKEN_KEY);
 }
 
+export async function getStoredRefreshToken(): Promise<string | null> {
+  return readSecure(REFRESH_KEY);
+}
 
-
+/** Store the access token; clearing it (null) also clears the refresh token. */
 export async function setStoredToken(token: string | null): Promise<void> {
-
-  if (isWeb) {
-
-    if (typeof window === 'undefined') return;
-
-    if (token) window.localStorage.setItem(TOKEN_KEY, token);
-
-    else window.localStorage.removeItem(TOKEN_KEY);
-
-    return;
-
-  }
-
-  if (token) {
-
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
-
-  } else {
-
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-
-  }
-
+  await writeSecure(TOKEN_KEY, token);
+  if (!token) await writeSecure(REFRESH_KEY, null);
 }
 
+/** Store tokens returned by login / register / refresh / change-password. */
+export async function setStoredSession(session: {
+  access_token: string;
+  refresh_token?: string | null;
+}): Promise<void> {
+  await writeSecure(TOKEN_KEY, session.access_token);
+  if (session.refresh_token) await writeSecure(REFRESH_KEY, session.refresh_token);
+}
 
+// ---- Session refresh ---------------------------------------------------------
+
+type SessionListener = () => void;
+const sessionExpiredListeners = new Set<SessionListener>();
+
+/** Called when the refresh token is gone or rejected and the user must sign in again. */
+export function onSessionExpired(listener: SessionListener): () => void {
+  sessionExpiredListeners.add(listener);
+  return () => {
+    sessionExpiredListeners.delete(listener);
+  };
+}
+
+/** Paths that must never trigger a refresh-and-retry. */
+const NO_REFRESH_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
+
+/**
+ * - `ok`: new tokens stored
+ * - `rejected`: no refresh token, or the server refused it; sign in again
+ * - `unavailable`: network error or a concurrent rotation (409); keep the session
+ */
+export type RefreshResult = 'ok' | 'rejected' | 'unavailable';
+
+let refreshInFlight: Promise<RefreshResult> | null = null;
+
+/**
+ * Trade the stored refresh token for a new pair. Concurrent callers share one
+ * request, because the server rotates the token and a second use of the same
+ * token would look like theft.
+ */
+export function refreshSession(): Promise<RefreshResult> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async (): Promise<RefreshResult> => {
+      const refreshToken = await getStoredRefreshToken();
+      if (!refreshToken) return 'rejected';
+      try {
+        const res = await fetch(apiUrl('/auth/refresh'), {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        if (res.status === 401) return 'rejected';
+        if (!res.ok) return 'unavailable';
+        const data = (await res.json()) as { access_token: string; refresh_token: string };
+        await setStoredSession(data);
+        return 'ok';
+      } catch {
+        return 'unavailable';
+      }
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+async function expireSession(): Promise<void> {
+  await setStoredToken(null);
+  sessionExpiredListeners.forEach((listener) => listener());
+}
 
 async function apiFetch<T>(
-
   path: string,
-
   init: RequestInit = {},
-
   token?: string | null
-
 ): Promise<T> {
-
-  const headers: Record<string, string> = {
-
-    Accept: 'application/json',
-
-    ...(init.headers as Record<string, string> | undefined),
-
+  const send = async (accessToken: string | null) => {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      // Opt in to short-lived access tokens + refresh tokens.
+      'X-Closet-Refresh': '1',
+      ...(init.headers as Record<string, string> | undefined),
+    };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    return fetch(apiUrl(path), { ...init, headers });
   };
 
+  const sentToken = token ?? (await getStoredToken());
+  let res = await send(sentToken);
 
-
-  const t = token ?? (await getStoredToken());
-
-  if (t) {
-
-    headers.Authorization = `Bearer ${t}`;
-
+  if (res.status === 401 && sentToken && !NO_REFRESH_PATHS.includes(path)) {
+    const refreshed = await refreshSession();
+    if (refreshed === 'ok') {
+      res = await send(await getStoredToken());
+    } else if (refreshed === 'rejected') {
+      await expireSession();
+    }
   }
-
-
-
-  const res = await fetch(apiUrl(path), { ...init, headers });
 
   const text = await res.text();
-
   let body: unknown = null;
-
   try {
-
     body = text ? JSON.parse(text) : null;
-
   } catch {
-
     body = text;
-
   }
 
-
-
   if (!res.ok) {
-
     const detail =
-
       body && typeof body === 'object' && body !== null && 'detail' in body
-
         ? (body as { detail: unknown }).detail
-
         : body;
-
     throw new Error(formatApiError(detail));
-
   }
 
   const event = eventForApiCall(init.method ?? 'GET', path, init.body);
   if (event) track(event);
 
   return body as T;
-
 }
 
-
+/** Sign this device out on the server (revokes its refresh token). Best-effort. */
+export async function logout(): Promise<void> {
+  const refreshToken = await getStoredRefreshToken();
+  if (!refreshToken) return;
+  try {
+    await fetch(apiUrl('/auth/logout'), {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  } catch {
+    // Offline: the token still expires on its own.
+  }
+}
 
 export async function login(username: string, password: string) {
 
   return apiFetch<{
 
     access_token: string;
+
+    refresh_token?: string;
 
     user: User;
 
@@ -256,6 +307,8 @@ export async function register(payload: {
   return apiFetch<{
 
     access_token: string;
+
+    refresh_token?: string;
 
     user: User;
 

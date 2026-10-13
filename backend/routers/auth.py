@@ -13,6 +13,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
+from datetime import timedelta
 from typing import Dict
 from security import (
     PRODUCTION,
@@ -25,6 +26,10 @@ from security import (
     validate_password,
 )
 from auth import (
+    ACCESS_TOKEN_TTL_MINUTES,
+    LEGACY_ACCESS_TOKEN_TTL_MINUTES,
+    REFRESH_CLIENT_HEADER,
+    REFRESH_TOKEN_TTL_DAYS,
     create_access_token,
     get_current_user,
     hash_password,
@@ -37,6 +42,7 @@ from schemas import (
     PasswordChange,
     PasswordForgot,
     PasswordResetConfirm,
+    RefreshRequest,
     UserLogin,
     UserProfile,
     UserRegister,
@@ -54,6 +60,30 @@ from route_helpers import (
 )
 
 router = APIRouter()
+
+
+def _issue_tokens(request: Request, *, user_id: int, username: str, token_version: int) -> Dict:
+    """Access token (+ refresh token for clients that support refresh)."""
+    if request.headers.get(REFRESH_CLIENT_HEADER) != "1":
+        return {
+            "access_token": create_access_token(
+                user_id=user_id,
+                username=username,
+                token_version=token_version,
+                expires_delta=timedelta(minutes=LEGACY_ACCESS_TOKEN_TTL_MINUTES),
+            ),
+            "token_type": "bearer",
+        }
+    return {
+        "access_token": create_access_token(
+            user_id=user_id, username=username, token_version=token_version
+        ),
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_TTL_MINUTES * 60,
+        "refresh_token": deps.db.create_refresh_token(
+            user_id, ttl_seconds=REFRESH_TOKEN_TTL_DAYS * 86400
+        ),
+    }
 
 
 @router.post("/api/auth/register")
@@ -119,19 +149,9 @@ def register(user_data: UserRegister, request: Request):
 
 
 
-    access_token = create_access_token(
-
-        user_id=user_id, username=username, token_version=0
-
-    )
-
     return {
-
         "success": True,
-
-        "access_token": access_token,
-
-        "token_type": "bearer",
+        **_issue_tokens(request, user_id=user_id, username=username, token_version=0),
 
         "user": {
 
@@ -231,23 +251,14 @@ def login(credentials: UserLogin, request: Request):
 
     token_version = int(user.get("token_version") or 0)
 
-    access_token = create_access_token(
-
-        user_id=user["id"],
-
-        username=user["username"],
-
-        token_version=token_version,
-
-    )
-
     return {
-
         "success": True,
-
-        "access_token": access_token,
-
-        "token_type": "bearer",
+        **_issue_tokens(
+            request,
+            user_id=user["id"],
+            username=user["username"],
+            token_version=token_version,
+        ),
 
         "user": _public_user(user),
 
@@ -443,17 +454,59 @@ def change_password(
 
 
 
-    # Re-issue a token so the caller doesn't have to redo the login flow.
-
+    # Re-issue tokens so the caller doesn't have to redo the login flow.
     new_version = deps.db.get_user_token_version(user["id"]) or 0
+    return {
+        "success": True,
+        **_issue_tokens(
+            request, user_id=user["id"], username=user["username"], token_version=new_version
+        ),
+    }
 
-    token = create_access_token(
 
-        user_id=user["id"], username=user["username"], token_version=new_version
+@router.post("/api/auth/refresh")
+def refresh_session(body: RefreshRequest, request: Request):
+    """Trade a refresh token for a new access token and a new refresh token.
 
+    The presented refresh token is consumed. Re-using a consumed token
+    revokes the whole login (every token in its family).
+    """
+    rate_limit(request, "auth.refresh", limit=30, window=300)
+    status, user_id, new_refresh = deps.db.rotate_refresh_token(
+        body.refresh_token, ttl_seconds=REFRESH_TOKEN_TTL_DAYS * 86400
     )
+    if status == "conflict":
+        raise HTTPException(status_code=409, detail="Refresh token was just used; retry")
+    if status == "reused":
+        logger.warning("Refresh token reuse for user %s; session family revoked", user_id)
+    if status != "ok":
+        raise HTTPException(status_code=401, detail="Session expired, please sign in again")
+    user = deps.db.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Session expired, please sign in again")
+    return {
+        "success": True,
+        "access_token": create_access_token(
+            user_id=user["id"],
+            username=user["username"],
+            token_version=int(user.get("token_version") or 0),
+        ),
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_TTL_MINUTES * 60,
+        "refresh_token": new_refresh,
+    }
 
-    return {"success": True, "access_token": token, "token_type": "bearer"}
+
+@router.post("/api/auth/logout")
+def logout(body: RefreshRequest, request: Request):
+    """Sign this device out: revoke its refresh token's family.
+
+    Possession of the refresh token is the proof, so no access token is
+    needed (it may already be expired). Always succeeds.
+    """
+    rate_limit(request, "auth.logout", limit=30, window=300)
+    deps.db.revoke_refresh_family(body.refresh_token)
+    return {"success": True}
 
 
 @router.post("/api/auth/delete-account")

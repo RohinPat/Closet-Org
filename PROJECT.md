@@ -8,7 +8,7 @@ This is the single supplement to **[README.md](README.md)**. Use the README for 
 
 Near-term order meant for “what should we touch next?” — not a promise of roadmapping rigor. Reorder as your constraints change; the full backlog stays under **Still to build** below.
 
-1. **Before wide deployment** — short-lived access tokens + rotated refresh tokens, then image storage off local disk (S3/R2 + signed URLs) if the API leaves a single machine.
+1. **Before wide deployment** — image storage off local disk (S3/R2 + signed URLs) if the API leaves a single machine. (Short-lived access + rotating refresh tokens: done.)
 2. **Optional** — richer **device-calendar** cues for outfits (beyond planned-outfit pinning by date on the Outfits tab).
 
 Defer **capsule optimizer**, **push notifications**, **fine-tuned classifier**, and **Larger ideas** until the above are stable or you have a dedicated spike.
@@ -50,7 +50,7 @@ Grouped for the current FastAPI + SQLite + Expo + CLIP codebase. Toggle items of
 
 - [ ] **Image storage** — S3/R2 + signed URLs beyond single-machine disk.
 - [ ] **Background jobs** — classification off the upload critical path.
-- [ ] **Refresh tokens** — short access + rotated refresh.
+- [ ] **Web refresh token in an httpOnly cookie** — today it lives in `localStorage` next to the access token (XSS-readable); a cookie needs CSRF handling.
 - [ ] **Audit log** — auth events persisted.
 - [ ] **TOTP / MFA** — optional per user.
 - [ ] **Distributed rate limiting** — Redis vs. in-process (`backend/security.py`).
@@ -86,7 +86,8 @@ Small multi-tenant web + mobile app with one shared SQLite database. Intended co
 - **Login throttling** — per-IP sliding window (`InMemoryRateLimiter` in `backend/security.py`): 10 tries / 5 min on `/api/auth/login`; plus per-account lockout after 8 failures (15 minutes).
 - **Timing-safe lookups** — missing username still runs a dummy bcrypt compare (`route_helpers._dummy_hash`).
 - **JWTs** — HS256, UTC-aware, claims `exp`, `iat`, `iss`, `user_id`, `tv`; signing secret `CLOSET_SECRET_KEY` (mandatory in production).
-- **Revocation** — `tv` validated against `users.token_version`; password change / `POST /api/auth/logout-all` bumps version.
+- **Sessions** — clients sending `X-Closet-Refresh: 1` get 60-minute access tokens plus a 30-day refresh token (`POST /api/auth/refresh`). Refresh tokens are stored as SHA-256 hashes, rotate on every use, and re-use of a rotated token revokes that whole login (`database/sessions.py`). `POST /api/auth/logout` signs out one device. Older clients without the header still get 7-day access tokens (`LEGACY_ACCESS_TOKEN_TTL_MINUTES`).
+- **Revocation** — `tv` validated against `users.token_version`; password change/reset and `POST /api/auth/logout-all` bump the version and revoke every refresh token.
 
 ### Authorization
 
