@@ -47,8 +47,9 @@ uploads/
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs / crash dumps
 *.log
+*.stackdump
 
 # pytest / coverage
 .pytest_cache/

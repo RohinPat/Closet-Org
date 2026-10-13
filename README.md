@@ -124,6 +124,8 @@ mobile/                 Expo React Native
   src/navigation/RootNavigator.tsx
 ```
 
+Early research notebook (Colab): [Closet-Org AI prototype](https://colab.research.google.com/drive/1aDLnJ79t0sg-rL_Q3CfgTkJr32i_9Zjc?usp=sharing)
+
 ---
 
 ## API surface
