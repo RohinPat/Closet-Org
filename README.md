@@ -101,9 +101,16 @@ Main entry points:
 
 ```
 backend/                FastAPI app, SQLite
-  main.py               routes
+  main.py               app setup: middleware, CORS, static mounts, router order
+  routers/              API routes by area (auth, closet, items, outfits, social, ...)
+  schemas.py            Pydantic request bodies
+  route_helpers.py      shared validation/parsing helpers
+  deps.py               shared state (db, models, paths); tests patch it here
   auth.py               JWT + bcrypt
-  database/             manager + migrations
+  database/
+    db_manager.py       DatabaseManager = connection + one mixin per area
+    schema.py           tables + in-place migrations
+    users.py, items.py, social.py, ...   queries by area
   models/
     clothing_classifier.py   CLIP + HSV color
     outfit_recommender.py    rule-based picker

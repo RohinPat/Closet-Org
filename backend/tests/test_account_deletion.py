@@ -62,11 +62,11 @@ def test_delete_account_requires_auth(client) -> None:
 def test_delete_account_removes_data_and_files(
     client, strong_password: str, tmp_path, monkeypatch
 ) -> None:
-    import main as main_module
+    import deps
 
     uploads = tmp_path / "uploads"
     uploads.mkdir()
-    monkeypatch.setattr(main_module, "UPLOAD_DIR", uploads)
+    monkeypatch.setattr(deps, "UPLOAD_DIR", uploads)
     placeholder = uploads / "_bulk_placeholder_socks.png"
     placeholder.write_bytes(MIN_PNG)
 
@@ -84,7 +84,7 @@ def test_delete_account_removes_data_and_files(
     )
     assert login.status_code == 401
 
-    db = main_module.db
+    db = deps.db
     conn = db.get_connection()
     uid = a["user"]["id"]
     try:
@@ -114,15 +114,16 @@ def test_delete_account_removes_data_and_files(
 
 
 def test_delete_account_files_cannot_escape_uploads(tmp_path, monkeypatch) -> None:
-    import main as main_module
+    import deps
+    from route_helpers import _remove_user_upload_files
 
     uploads = tmp_path / "uploads"
     uploads.mkdir()
     outside = tmp_path / "secret.txt"
     outside.write_text("keep me")
-    monkeypatch.setattr(main_module, "UPLOAD_DIR", uploads)
+    monkeypatch.setattr(deps, "UPLOAD_DIR", uploads)
 
-    main_module._remove_user_upload_files([str(outside), "../secret.txt", "/uploads/../secret.txt"])
+    _remove_user_upload_files([str(outside), "../secret.txt", "/uploads/../secret.txt"])
     assert outside.exists()
 
 
