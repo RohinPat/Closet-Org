@@ -79,17 +79,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(async (username: string, password: string) => {
     const data = await api.login(username, password);
-    await api.setStoredToken(data.access_token);
+    await api.setStoredSession(data);
     setUser(data.user);
   }, []);
 
   const signUp = useCallback(async (payload: SignUpPayload) => {
     const data = await api.register(payload);
-    await api.setStoredToken(data.access_token);
+    await api.setStoredSession(data);
     setUser(data.user);
   }, []);
 
   const signOut = useCallback(async () => {
+    await api.logout();
     await api.setStoredToken(null);
     setUser(null);
     resetUser();
@@ -101,6 +102,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     resetUser();
   }, []);
+
+  // A rejected refresh token anywhere in the app means: back to sign-in.
+  useEffect(
+    () =>
+      api.onSessionExpired(() => {
+        setUser(null);
+        resetUser();
+      }),
+    []
+  );
 
   // Tie crash reports / analytics to the numeric user id only.
   useEffect(() => {

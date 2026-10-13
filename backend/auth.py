@@ -34,9 +34,16 @@ from observability import set_user_id
 # ---- Configuration -----------------------------------------------------------
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_TTL_MINUTES = int(
-    os.getenv("ACCESS_TOKEN_TTL_MINUTES", str(60 * 24 * 7))  # 7 days
+# Clients that support refresh (send ``X-Closet-Refresh: 1``) get short-lived
+# access tokens plus a rotating refresh token. Older app builds that don't
+# send the header keep the legacy long-lived access token so they aren't
+# logged out every hour; drop the legacy path once those builds are gone.
+ACCESS_TOKEN_TTL_MINUTES = int(os.getenv("ACCESS_TOKEN_TTL_MINUTES", "60"))
+LEGACY_ACCESS_TOKEN_TTL_MINUTES = int(
+    os.getenv("LEGACY_ACCESS_TOKEN_TTL_MINUTES", str(60 * 24 * 7))  # 7 days
 )
+REFRESH_TOKEN_TTL_DAYS = int(os.getenv("REFRESH_TOKEN_TTL_DAYS", "30"))
+REFRESH_CLIENT_HEADER = "x-closet-refresh"
 _ISSUER = "closet-org"
 
 _PRODUCTION = os.getenv("CLOSET_ENV", "development").lower() == "production"

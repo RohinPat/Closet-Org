@@ -2,6 +2,8 @@
 
 const API_URL = window.location.origin;
 const { formatAuthError, errorMessageFromCaught } = window.ClosetWebUtils;
+// Already on an auth page: an expired session should not navigate away.
+window.ClosetSession.configure({ apiBase: '/api', onExpired: () => {} });
 let sessionCheckAbort = null;
 
 // Utility functions
@@ -73,6 +75,7 @@ if (loginForm) {
             const response = await fetch(`${API_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: {
+                    'X-Closet-Refresh': '1',
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ username, password }),
@@ -87,8 +90,8 @@ if (loginForm) {
                 throw new Error('Login succeeded but no token was returned');
             }
             
-            // Store token and user info
-            localStorage.setItem('access_token', data.access_token);
+            // Store tokens and user info
+            window.ClosetSession.storeSession(data);
             localStorage.setItem('user', JSON.stringify(data.user));
             
             // Redirect to main app (replace so back button does not return to login)
@@ -141,6 +144,7 @@ if (registerForm) {
             const response = await fetch(`${API_URL}/api/auth/register`, {
                 method: 'POST',
                 headers: {
+                    'X-Closet-Refresh': '1',
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
@@ -165,8 +169,8 @@ if (registerForm) {
                 throw new Error('Registration succeeded but no token was returned');
             }
             
-            // Store token and user info
-            localStorage.setItem('access_token', data.access_token);
+            // Store tokens and user info
+            window.ClosetSession.storeSession(data);
             localStorage.setItem('user', JSON.stringify(data.user));
             
             window.location.replace('/app');
@@ -260,7 +264,7 @@ if (resetForm) {
 
 // Check if already logged in (must not clear a newer token from a concurrent login)
 window.addEventListener('DOMContentLoaded', () => {
-    const tokenAtStart = localStorage.getItem('access_token');
+    const tokenAtStart = localStorage.getItem('access_token') || localStorage.getItem('refresh_token');
     const onAuthPage =
         window.location.pathname.includes('login') ||
         window.location.pathname.includes('register') ||
@@ -273,17 +277,21 @@ window.addEventListener('DOMContentLoaded', () => {
     sessionCheckAbort = new AbortController();
     const { signal } = sessionCheckAbort;
 
-    fetch(`${API_URL}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${tokenAtStart}` },
-        signal,
-    })
-        .then((response) => {
-            const tokenNow = localStorage.getItem('access_token');
-            if (tokenNow !== tokenAtStart) return;
+    window.ClosetSession.authedFetch(`${API_URL}/api/auth/me`, { signal })
+        .then(async (response) => {
+            if (response.status === 401 && !localStorage.getItem('access_token')) {
+                // No access token at all: try the refresh token directly.
+                if ((await window.ClosetSession.refresh()) === 'ok') {
+                    window.location.replace('/app');
+                }
+                return;
+            }
             if (response.ok) {
                 window.location.replace('/app');
                 return;
             }
+            const tokenNow = localStorage.getItem('access_token');
+            if (tokenNow !== tokenAtStart) return;
             localStorage.removeItem('access_token');
             localStorage.removeItem('user');
         })

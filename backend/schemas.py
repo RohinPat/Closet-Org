@@ -82,6 +82,10 @@ class PasswordChange(BaseModel):
     new_password: str = Field(..., min_length=1, max_length=512)
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=20, max_length=512)
+
+
 class AccountDelete(BaseModel):
     password: str = Field(..., min_length=1, max_length=512)
 

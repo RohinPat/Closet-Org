@@ -245,6 +245,29 @@ class SchemaMixin:
 
         )
 
+        # Refresh-token sessions (see database/sessions.py). Times are epoch seconds.
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS refresh_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                family_id TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                rotated_at INTEGER,
+                revoked_at INTEGER,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id)"
+        )
+
         
 
         # Lightweight migration: add columns to existing tables if missing.

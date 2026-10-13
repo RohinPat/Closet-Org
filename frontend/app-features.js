@@ -2009,7 +2009,7 @@
                 });
                 if (!ok) return;
                 await api('/auth/logout-all', { method: 'POST' });
-                localStorage.removeItem('access_token');
+                ClosetSession.clearSession();
                 window.location.href = '/frontend/login.html';
             });
             document.getElementById('change-password-form')?.addEventListener('submit', async (ev) => {
@@ -2028,7 +2028,7 @@
                         body: JSON.stringify({ current_password: current, new_password: next }),
                     });
                     if (data.access_token) {
-                        localStorage.setItem('access_token', data.access_token);
+                        ClosetSession.storeSession(data);
                         await app().refreshCurrentUser();
                     }
                     ev.target.reset();
@@ -2053,8 +2053,7 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ password }),
                     });
-                    localStorage.removeItem('access_token');
-                    localStorage.removeItem('user');
+                    ClosetSession.clearSession();
                     window.location.href = '/frontend/login.html';
                 } catch (err) {
                     toastError(err);

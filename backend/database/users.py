@@ -458,10 +458,9 @@ class UsersMixin:
 
         """Revoke every JWT for this user by incrementing token_version.
 
-
-
-        Called from password change, `/auth/logout-all`, and incident response.
-
+        Also revokes every refresh token, so no device can mint new access
+        tokens. Called from password change/reset, `/auth/logout-all`, and
+        incident response.
         """
 
         conn = self.get_connection()
@@ -483,6 +482,8 @@ class UsersMixin:
         conn.commit()
 
         conn.close()
+
+        self.revoke_all_refresh_tokens(user_id)
 
         return success
 
@@ -567,6 +568,7 @@ class UsersMixin:
                 ("DELETE FROM outfit_suggestion_history WHERE user_id = ?", u),
                 ("DELETE FROM ai_stylist_feedback WHERE user_id = ?", u),
                 ("DELETE FROM password_reset_tokens WHERE user_id = ?", u),
+                ("DELETE FROM refresh_tokens WHERE user_id = ?", u),
                 ("DELETE FROM users WHERE id = ?", u),
             ]
             for sql, params in statements:

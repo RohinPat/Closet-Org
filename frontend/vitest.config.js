@@ -6,7 +6,7 @@ export default defineConfig({
         include: ['lib/**/*.test.js'],
         coverage: {
             provider: 'v8',
-            include: ['lib/web-utils.js'],
+            include: ['lib/web-utils.js', 'lib/session.js'],
             thresholds: {
                 lines: 90,
                 functions: 90,

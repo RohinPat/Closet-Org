@@ -1,5 +1,6 @@
 // API Base URL
 const API_BASE = window.location.origin + '/api';
+ClosetSession.configure({ apiBase: '/api' });
 
 const _utils = window.ClosetWebUtils;
 if (!_utils) {
@@ -388,7 +389,7 @@ async function apiFetch(path, options = {}) {
     if (authToken) {
         headers.Authorization = `Bearer ${authToken}`;
     }
-    const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    const res = await ClosetSession.authedFetch(`${API_BASE}${path}`, { ...options, headers });
     const text = await res.text();
     let body = null;
     try {
@@ -431,7 +432,7 @@ async function checkAuthentication() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/auth/me`, {
+        const response = await ClosetSession.authedFetch(`${API_BASE}/auth/me`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
@@ -659,7 +660,7 @@ function initThemeToggle() {
         updateThemeIcon(newTheme);
 
         try {
-            await fetch(`${API_BASE}/settings`, {
+            await ClosetSession.authedFetch(`${API_BASE}/settings`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${authToken}`,
@@ -709,10 +710,9 @@ function initUserMenu() {
     });
     
     // Logout
-    logoutBtn.addEventListener('click', (e) => {
+    logoutBtn.addEventListener('click', async (e) => {
         e.preventDefault();
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('user');
+        await ClosetSession.logout();
         window.location.href = '/frontend/login.html';
     });
     
@@ -744,7 +744,7 @@ function initProfile() {
         const bio = document.getElementById('profile-bio').value;
         
         try {
-            const response = await fetch(`${API_BASE}/auth/profile`, {
+            const response = await ClosetSession.authedFetch(`${API_BASE}/auth/profile`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${authToken}`,
@@ -763,7 +763,7 @@ function initProfile() {
             showProfileMessage('Profile updated successfully!', 'success');
             
             // Refresh user data
-            const userResponse = await fetch(`${API_BASE}/auth/me`, {
+            const userResponse = await ClosetSession.authedFetch(`${API_BASE}/auth/me`, {
                 headers: {
                     'Authorization': `Bearer ${authToken}`
                 }
@@ -1171,7 +1171,7 @@ async function uploadClothing() {
     formData.append('files', selectedFile);
     
     try {
-        const response = await fetch(`${API_BASE}/upload-clothing`, {
+        const response = await ClosetSession.authedFetch(`${API_BASE}/upload-clothing`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${authToken}`
@@ -1834,7 +1834,7 @@ async function markAsWorn(itemId) {
 
 async function markAsWashed(itemId) {
     try {
-        await fetch(`${API_BASE}/item/${itemId}/status`, {
+        await ClosetSession.authedFetch(`${API_BASE}/item/${itemId}/status`, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${authToken}`,
@@ -1852,7 +1852,7 @@ async function markAsWashed(itemId) {
 
 async function handleWearAgainDecision(itemId, canWearAgain) {
     try {
-        await fetch(`${API_BASE}/item/${itemId}/status`, {
+        await ClosetSession.authedFetch(`${API_BASE}/item/${itemId}/status`, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${authToken}`,
@@ -1875,7 +1875,7 @@ async function handleWearAgainDecision(itemId, canWearAgain) {
 
 async function toggleFavorite(itemId) {
     try {
-        await fetch(`${API_BASE}/item/${itemId}/favorite`, {
+        await ClosetSession.authedFetch(`${API_BASE}/item/${itemId}/favorite`, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${authToken}`
@@ -2151,7 +2151,7 @@ async function loadStats() {
     container.innerHTML = '<div class="loading">Loading statistics...</div>';
     
     try {
-        const response = await fetch(`${API_BASE}/stats`, {
+        const response = await ClosetSession.authedFetch(`${API_BASE}/stats`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
@@ -2234,7 +2234,7 @@ async function loadLaundry() {
     container.innerHTML = '<div class="loading">Loading laundry queue...</div>';
     
     try {
-        const response = await fetch(`${API_BASE}/laundry`, {
+        const response = await ClosetSession.authedFetch(`${API_BASE}/laundry`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
@@ -2347,7 +2347,7 @@ function createLaundryCard(item) {
 
 async function updateLaundryStatus(queueId, status) {
     try {
-        await fetch(`${API_BASE}/laundry/${queueId}/status?status=${status}`, {
+        await ClosetSession.authedFetch(`${API_BASE}/laundry/${queueId}/status?status=${status}`, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${authToken}`
@@ -2374,7 +2374,7 @@ async function loadInsights() {
     container.innerHTML = '<div class="loading">Loading insights...</div>';
     
     try {
-        const response = await fetch(`${API_BASE}/neglected-items?days=${days}`, {
+        const response = await ClosetSession.authedFetch(`${API_BASE}/neglected-items?days=${days}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
