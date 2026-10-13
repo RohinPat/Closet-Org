@@ -1054,6 +1054,31 @@ class SchemaMixin:
 
         )
 
+        # Hot-path and foreign-key indexes. Without these, every closet read
+        # scans all users' items, item views scan all wear history, and
+        # deleting an item scans each child table for ON DELETE CASCADE.
+        for ddl in (
+            "CREATE INDEX IF NOT EXISTS idx_clothing_items_user_status "
+            "ON clothing_items(user_id, status)",
+            "CREATE INDEX IF NOT EXISTS idx_wear_history_item_date "
+            "ON wear_history(item_id, worn_date)",
+            "CREATE INDEX IF NOT EXISTS idx_laundry_queue_item "
+            "ON laundry_queue(item_id, status)",
+            "CREATE INDEX IF NOT EXISTS idx_classification_corrections_item "
+            "ON classification_corrections(item_id)",
+            "CREATE INDEX IF NOT EXISTS idx_reminder_cards_item "
+            "ON reminder_cards(item_id)",
+            "CREATE INDEX IF NOT EXISTS idx_reminder_cards_plan "
+            "ON reminder_cards(plan_id)",
+            "CREATE INDEX IF NOT EXISTS idx_post_reactions_user "
+            "ON post_reactions(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_post_comments_user "
+            "ON post_comments(user_id)",
+        ):
+            cursor.execute(ddl)
+        # Refresh planner statistics so SQLite actually picks the new indexes.
+        cursor.execute("PRAGMA optimize")
+
 
 
         conn.commit()
