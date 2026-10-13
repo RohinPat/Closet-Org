@@ -96,6 +96,9 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now closet-org-backup.timer
 
+echo "==> Grid thumbnails for existing items (idempotent)"
+sudo -u closet-org env $(grep -E '^CLOSET_DB_PATH=' /etc/closet-org.env 2>/dev/null || true)   "${INSTALL_DIR}/.venv/bin/python" "${INSTALL_DIR}/scripts/backfill_grid_thumbnails.py"   || echo "WARN: grid thumbnail backfill failed (grids fall back to full thumbnails)"
+
 echo "==> Restart services"
 systemctl restart closet-org
 if nginx -t 2>/dev/null; then

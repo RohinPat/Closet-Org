@@ -135,15 +135,17 @@ export function itemImageUrl(imagePath: string | undefined | null): string {
 }
 
 /**
- * Resolve the URL for an item's background-removed thumbnail, falling back to
- * the original image when no thumbnail was generated (e.g. rembg unavailable
- * at upload time or pre-existing items not yet backfilled).
+ * URL for showing an item in a list or grid: the small WebP grid thumbnail,
+ * then the background-removed cutout, then the original photo (items not yet
+ * backfilled, or rembg unavailable at upload time). Detail screens should use
+ * `itemImageUrl` with the full-size paths instead.
  */
 export function itemThumbnailUrl(item: {
   image_path?: string | null;
   thumbnail_path?: string | null;
+  grid_thumbnail_path?: string | null;
 }): string {
-  return itemImageUrl(item.thumbnail_path || item.image_path);
+  return itemImageUrl(item.grid_thumbnail_path || item.thumbnail_path || item.image_path);
 }
 
 /**

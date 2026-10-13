@@ -111,6 +111,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/uploads/"):
             h["Content-Security-Policy"] = self._UPLOAD_CSP
             h["Content-Disposition"] = "inline"
+            if response.status_code in (200, 304):
+                # Upload names are random and never reused, so clients can keep
+                # them for a year. `private` keeps photos out of shared caches.
+                # Shared bulk placeholders have fixed names and may be redrawn.
+                if request.url.path.startswith("/uploads/_bulk_placeholder"):
+                    h["Cache-Control"] = "private, max-age=86400"
+                else:
+                    h["Cache-Control"] = "private, max-age=31536000, immutable"
         else:
             h.setdefault("Content-Security-Policy", self._APP_CSP)
         return response

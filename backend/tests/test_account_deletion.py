@@ -72,7 +72,8 @@ def test_delete_account_removes_data_and_files(
 
     a, b, ha, hb = _setup_two_friends_with_content(client, strong_password)
     files_before = {p.name for p in uploads.iterdir()}
-    assert len(files_before) == 4  # A item + B item + A fit + placeholder
+    # A item + its grid thumb, B item + its grid thumb, A fit, placeholder
+    assert len(files_before) == 6
 
     r = client.post("/api/auth/delete-account", headers=ha, json={"password": strong_password})
     assert r.status_code == 200, r.text
@@ -107,10 +108,10 @@ def test_delete_account_removes_data_and_files(
     items_b = closet_b["items"] if isinstance(closet_b, dict) else closet_b
     assert len(items_b) == 1
 
-    # Only B's photo and the shared placeholder survive.
+    # Only B's photo (+ grid thumb) and the shared placeholder survive.
     remaining = {p.name for p in uploads.iterdir()}
     assert placeholder.name in remaining
-    assert len(remaining) == 2
+    assert len(remaining) == 3
 
 
 def test_delete_account_files_cannot_escape_uploads(tmp_path, monkeypatch) -> None:

@@ -508,12 +508,12 @@ class UsersMixin:
                 files.append(user["avatar_url"])
 
             cursor.execute(
-                "SELECT image_path, thumbnail_path, image_paths, thumbnail_paths "
-                "FROM clothing_items WHERE user_id = ?",
+                "SELECT image_path, thumbnail_path, grid_thumbnail_path, image_paths, "
+                "thumbnail_paths FROM clothing_items WHERE user_id = ?",
                 (user_id,),
             )
             for row in cursor.fetchall():
-                for single in (row["image_path"], row["thumbnail_path"]):
+                for single in (row["image_path"], row["thumbnail_path"], row["grid_thumbnail_path"]):
                     if single:
                         files.append(single)
                 for multi in (row["image_paths"], row["thumbnail_paths"]):

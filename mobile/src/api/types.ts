@@ -116,6 +116,8 @@ export type PostItemRef = {
 
   thumbnail_path?: string | null;
 
+  grid_thumbnail_path?: string | null;
+
   image_path?: string | null;
 
 };
@@ -201,6 +203,8 @@ export type ClothingItem = {
   image_path: string;
 
   thumbnail_path?: string | null;
+
+  grid_thumbnail_path?: string | null;
 
   image_paths?: string[];
 
@@ -500,6 +504,7 @@ export type TripPackedItem = {
   category?: string | null;
   subcategory?: string | null;
   thumbnail_path?: string | null;
+  grid_thumbnail_path?: string | null;
   image_path?: string | null;
   colors?: string[];
 };
@@ -548,6 +553,7 @@ export type ReminderCard = {
   item_id?: number | null;
   plan_id?: number | null;
   thumbnail_path?: string | null;
+  grid_thumbnail_path?: string | null;
 };
 
 export type DuplicateCandidate = {
@@ -664,6 +670,8 @@ export type PlannedOutfitItemRef = {
   subcategory: string;
 
   thumbnail_path?: string | null;
+
+  grid_thumbnail_path?: string | null;
 
   image_path?: string | null;
 
@@ -885,6 +893,8 @@ export type RetirementHint = {
 
   thumbnail_path?: string | null;
 
+  grid_thumbnail_path?: string | null;
+
   times_worn?: number;
 
   reasons: string[];
@@ -943,6 +953,8 @@ export type ClosetStats = {
     purchase_price?: number | null;
 
     thumbnail_path?: string | null;
+
+    grid_thumbnail_path?: string | null;
 
     image_path?: string | null;
 

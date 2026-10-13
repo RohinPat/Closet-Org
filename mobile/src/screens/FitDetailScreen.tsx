@@ -18,7 +18,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../navigation/RootNavigator';
 import * as api from '../api/client';
 import type { FitComment, FitPost } from '../api/types';
-import { absoluteUrl, itemImageUrl } from '../config';
+import { absoluteUrl, itemThumbnailUrl } from '../config';
 import {
   GlassButton,
   GlassCard,
@@ -285,7 +285,7 @@ export function FitDetailScreen({ route, navigation }: Props) {
                     contentContainerStyle={styles.itemRow}
                   >
                     {post.items.map((it) => {
-                      const uri = itemImageUrl(it.thumbnail_path || it.image_path);
+                      const uri = itemThumbnailUrl(it);
                       return (
                         <View key={it.id} style={styles.itemCard}>
                           {uri ? (

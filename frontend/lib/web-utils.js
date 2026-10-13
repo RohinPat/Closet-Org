@@ -99,9 +99,10 @@ const ClosetWebUtils = (function () {
         return '';
     }
 
+    /** List/grid image: small WebP grid thumbnail, then cutout, then original. */
     function closetItemImageUrl(item) {
         if (!item) return '';
-        return safeUrl(item.thumbnail_path || item.image_path);
+        return safeUrl(item.grid_thumbnail_path || item.thumbnail_path || item.image_path);
     }
 
     function readClosetDensity(storage) {
