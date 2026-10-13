@@ -25,6 +25,7 @@ from security import (
 from auth import get_current_user
 from models.closet_pairing import rank_closet_pairings
 import deps
+from images import make_grid_thumbnail
 from schemas import (
     BulkItemCreate,
     ClosetLocationCreate,
@@ -221,11 +222,10 @@ def upload_clothing(
             pattern=classification["pattern"],
             laundry_state="clean",
         )
-
-
-
+        grid = make_grid_thumbnail(thumb_paths[0] or saved_paths[0])
+        if grid:
+            deps.db.set_grid_thumbnail_path(item_id, str(grid))
         try:
-
             emb = deps.get_classifier().encode_image_embedding(saved_paths[0])
 
             if emb:
@@ -610,13 +610,12 @@ def create_bulk_item_with_photo(
             thumbnail_path=thumb_str,
 
             image_paths=[spath],
-
             thumbnail_paths=[thumb_str],
-
             clip_embedding=emb_list,
-
         )
-
+        grid = make_grid_thumbnail(thumb_str or spath)
+        if grid:
+            deps.db.set_grid_thumbnail_path(item_id, str(grid))
         return {"success": True, "item_id": item_id}
 
     except HTTPException:

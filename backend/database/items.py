@@ -674,6 +674,16 @@ class ItemsMixin:
 
         return success
 
+    def set_grid_thumbnail_path(self, item_id: int, path: Optional[str]) -> None:
+        conn = self.get_connection()
+        try:
+            conn.execute(
+                "UPDATE clothing_items SET grid_thumbnail_path = ? WHERE id = ?", (path, item_id)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def set_clip_embedding(self, item_id: int, embedding: List[float]) -> bool:
 
         """Persist a L2-normalized CLIP embedding (JSON float list) on an item."""

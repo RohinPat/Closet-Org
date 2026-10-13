@@ -369,11 +369,13 @@ class SchemaMixin:
             )
 
         if "thumbnail_paths" not in existing_cols:
-
             cursor.execute(
-
                 "ALTER TABLE clothing_items ADD COLUMN thumbnail_paths TEXT"
-
+            )
+        if "grid_thumbnail_path" not in existing_cols:
+            # Small WebP for list/grid views (backend/images.py).
+            cursor.execute(
+                "ALTER TABLE clothing_items ADD COLUMN grid_thumbnail_path TEXT"
             )
 
         if "storage_location" not in existing_cols:

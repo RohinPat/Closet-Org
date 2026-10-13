@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { absoluteUrl, itemImageUrl } from '../config';
+import { absoluteUrl, itemThumbnailUrl } from '../config';
 import { useTheme } from '../context/ThemeContext';
 import { radii, shadow, spacing, typography } from '../theme';
 import { GlassCard } from './Glass';
@@ -98,7 +98,7 @@ export function PostCard({
           contentContainerStyle={styles.itemRow}
         >
           {post.items.map((it) => {
-            const uri = itemImageUrl(it.thumbnail_path || it.image_path);
+            const uri = itemThumbnailUrl(it);
             return (
               <View key={it.id} style={styles.itemChip}>
                 {uri ? (

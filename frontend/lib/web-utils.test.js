@@ -79,6 +79,15 @@ describe('safeUrl', () => {
 });
 
 describe('closetItemImageUrl', () => {
+    it('prefers the small grid thumbnail', () => {
+        const url = utils.closetItemImageUrl({
+            grid_thumbnail_path: '/opt/closet-org/uploads/item_a.thumb.grid.webp',
+            thumbnail_path: '/opt/closet-org/uploads/item_a.thumb.png',
+            image_path: '/opt/closet-org/uploads/item_a.jpg',
+        });
+        expect(url).toContain('item_a.thumb.grid.webp');
+    });
+
     it('prefers thumbnail_path', () => {
         expect(utils.closetItemImageUrl({ thumbnail_path: '/uploads/item_a.webp' })).toContain(
             'item_a.webp'
