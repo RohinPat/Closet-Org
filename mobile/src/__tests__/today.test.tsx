@@ -155,13 +155,13 @@ it('shows suggestions and logs the chosen outfit', async () => {
   expect(textOf(tree)).toContain('Wearing today');
 });
 
-it('points an empty closet at the Add tab', async () => {
+it('points an empty closet at Quick add', async () => {
   (api.fetchOutfitRecommendations as jest.Mock).mockResolvedValue({ outfits: [], weather: null });
   const tree = await renderToday();
   expect(textOf(tree)).toContain('Nothing to suggest yet');
   const add = tree.root.find((n) => n.props.title === 'Add clothes');
   await act(async () => add.props.onPress());
-  expect(mockNavigate).toHaveBeenCalledWith('UploadTab');
+  expect(mockNavigate).toHaveBeenCalledWith('QuickAdd');
 });
 
 it('shows what is already logged today', async () => {

@@ -309,7 +309,7 @@ export function TodayScreen() {
         <Text style={styles.messageBody}>
           Add a few tops and bottoms (and a pair of shoes) and Today will put outfits together for you.
         </Text>
-        <GlassButton title="Add clothes" onPress={() => navigation.navigate('UploadTab')} />
+        <GlassButton title="Add clothes" onPress={() => navigation.navigate('QuickAdd')} />
       </GlassCard>
     );
   } else {
