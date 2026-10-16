@@ -76,7 +76,7 @@ class FakeClassifier:
 
     dim = 512
 
-    def classify(self, image_path: str) -> Dict[str, Any]:
+    def classify(self, image_path: str, cutout_path: Optional[str] = None) -> Dict[str, Any]:
         return {
             "category": "T-Shirt",
             "subcategory": "Top",

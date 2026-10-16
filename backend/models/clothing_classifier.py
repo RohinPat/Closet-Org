@@ -6,6 +6,8 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 import threading
 import warnings
+from collections import OrderedDict
+from pathlib import Path
 warnings.filterwarnings('ignore')
 
 # Routes run in FastAPI's threadpool, so several requests can reach the models
@@ -125,14 +127,45 @@ class ClothingClassifier:
         feats = feats / feats.norm(dim=-1, keepdim=True)
         return feats
 
-    def classify(self, image_path: str) -> Dict:
+    _FEATURE_CACHE_SIZE = 16
+
+    def _image_features(self, image_path: str, image: Optional[Image.Image] = None) -> torch.Tensor:
+        """L2-normalized CLIP image features, cached per file version.
+
+        Uploads call classify() and then encode_image_embedding() on the same
+        photo; caching means one CLIP forward pass instead of two.
+        """
+        path = Path(image_path)
+        key = (str(path.resolve()), path.stat().st_mtime_ns)
+        cache = self.__dict__.setdefault("_feature_cache", OrderedDict())
+        lock = self.__dict__.setdefault("_feature_cache_lock", threading.Lock())
+        with lock:
+            hit = cache.get(key)
+            if hit is not None:
+                cache.move_to_end(key)
+                return hit
+        if image is None:
+            image = Image.open(path).convert("RGB")
+        img_tensor = self.preprocess(image).unsqueeze(0).to(self.device)
+        with _inference_lock, torch.no_grad():
+            feats = self.model.encode_image(img_tensor)
+            feats = feats / feats.norm(dim=-1, keepdim=True)
+        with lock:
+            cache[key] = feats
+            while len(cache) > self._FEATURE_CACHE_SIZE:
+                cache.popitem(last=False)
+        return feats
+
+    def classify(self, image_path: str, cutout_path: Optional[str] = None) -> Dict:
+        """Category/style via CLIP, colors from the garment pixels.
+
+        Pass ``cutout_path`` (the background-removed PNG made at upload) to
+        reuse its mask for color extraction instead of running U2-Net again.
+        """
         try:
             image = Image.open(image_path).convert("RGB")
-            img_tensor = self.preprocess(image).unsqueeze(0).to(self.device)
-
-            with _inference_lock, torch.no_grad():
-                img_features = self.model.encode_image(img_tensor)
-                img_features = img_features / img_features.norm(dim=-1, keepdim=True)
+            img_features = self._image_features(image_path, image)
+            with torch.no_grad():
                 cat_logits = (100.0 * img_features @ self.cat_features.T).softmax(dim=-1)[0]
                 style_logits = (100.0 * img_features @ self.style_features.T).softmax(dim=-1)[0]
 
@@ -146,7 +179,7 @@ class ClothingClassifier:
                 "category": category,
                 "subcategory": self._get_subcategory(category),
                 "confidence": round(confidence * 100, 2),
-                "colors": self.extract_colors(image),
+                "colors": self.extract_colors(image, cutout_path=cutout_path),
                 "season": self._determine_season(category),
                 "style": style,
             }
@@ -161,7 +194,9 @@ class ClothingClassifier:
                 "style": "Casual",
             }
 
-    def extract_colors(self, image: Image.Image, num_colors: int = 2) -> List[str]:
+    def extract_colors(
+        self, image: Image.Image, num_colors: int = 2, cutout_path: Optional[str] = None
+    ) -> List[str]:
         """Extract dominant garment colors, ignoring background pixels.
 
         Uses rembg (U²-Net) to mask out the background, then votes a color
@@ -171,7 +206,7 @@ class ClothingClassifier:
         Voting per pixel and aggregating labels is robust to that.
         """
         try:
-            pixels = self._garment_pixels(image)
+            pixels = self._garment_pixels(image, cutout_path=cutout_path)
             if pixels is None or len(pixels) < 50:
                 return ["Gray"]
 
@@ -179,13 +214,10 @@ class ClothingClassifier:
             if len(pixels) > 4000:
                 pixels = pixels[rng.choice(len(pixels), 4000, replace=False)]
 
-            votes: Dict[str, int] = {}
-            for p in pixels:
-                name = self._closest_color(p)
-                votes[name] = votes.get(name, 0) + 1
-
-            total = sum(votes.values())
-            ordered = sorted(votes.items(), key=lambda kv: -kv[1])
+            names, counts = np.unique(self._closest_colors(pixels), return_counts=True)
+            total = int(counts.sum())
+            # Most votes first; ties broken by name so the result is stable.
+            ordered = sorted(zip(names.tolist(), counts.tolist()), key=lambda kv: (-kv[1], kv[0]))
 
             picked: List[str] = []
             for name, count in ordered:
@@ -200,15 +232,29 @@ class ClothingClassifier:
             print(f"Color extraction error: {e}")
             return ["Gray"]
 
-    def _garment_pixels(self, image: Image.Image) -> Optional[np.ndarray]:
+    def _garment_pixels(
+        self, image: Image.Image, cutout_path: Optional[str] = None
+    ) -> Optional[np.ndarray]:
         """Return the flat (N,3) array of pixels belonging to the garment.
 
-        Tries background removal first; falls back to a center crop if that
-        fails. Pixels are downsampled to ~96px on the long side for speed.
+        Uses the upload's existing cutout when given; otherwise runs
+        background removal; falls back to a center crop if both fail.
+        Works on a 256px copy for speed.
         """
+        if cutout_path and Path(cutout_path).exists():
+            try:
+                with Image.open(cutout_path) as cut:
+                    cut = cut.convert("RGBA")
+                    cut.thumbnail((256, 256))
+                    arr = np.array(cut)
+                mask = arr[..., 3] > 200
+                if mask.sum() > 200:
+                    return arr[..., :3][mask].astype(np.float32)
+            except Exception as e:
+                print(f"Cutout reuse failed, recomputing mask: {e}")
+
         thumb = image.copy()
         thumb.thumbnail((256, 256))
-
         session = _get_rembg_session()
         if session is not None:
             try:
@@ -229,6 +275,47 @@ class ClothingClassifier:
         half = int(0.30 * min(w, h))
         cropped = thumb.crop((cx - half, cy - half, cx + half, cy + half))
         return np.array(cropped).reshape(-1, 3).astype(np.float32)
+
+    def _closest_colors(self, pixels: np.ndarray) -> np.ndarray:
+        """Vectorized ``_closest_color`` over an (N, 3) array of RGB pixels.
+
+        Same rules, evaluated with numpy instead of a per-pixel Python loop.
+        np.select takes the first matching condition, mirroring the early
+        returns in ``_closest_color``.
+        """
+        rgb = np.asarray(pixels, dtype=np.float64) / 255.0
+        r, g, b = rgb[:, 0], rgb[:, 1], rgb[:, 2]
+        v = rgb.max(axis=1)
+        delta = v - rgb.min(axis=1)
+        s = np.where(v > 0, delta / np.where(v > 0, v, 1.0), 0.0)
+        safe = np.where(delta > 0, delta, 1.0)
+        rc, gc, bc = (v - r) / safe, (v - g) / safe, (v - b) / safe
+        h = np.where(r == v, bc - gc, np.where(g == v, 2.0 + rc - bc, 4.0 + gc - rc))
+        hd = np.where(delta > 0, (h / 6.0) % 1.0, 0.0) * 360.0
+
+        rules = [
+            (v < 0.18, "Black"),
+            ((s < 0.07) & (v > 0.85), "White"),
+            ((s < 0.07) & (v < 0.45), "Black"),
+            (s < 0.07, "Gray"),
+            ((s < 0.22) & (v > 0.75) & (hd >= 25) & (hd <= 65), "Beige"),
+            ((hd < 15) | (hd >= 345), "Red"),
+            ((hd < 35) & (v < 0.55) & (s < 0.85), "Brown"),
+            (hd < 35, "Orange"),
+            ((hd < 50) & (v < 0.55) & (s < 0.45), "Brown"),
+            ((hd < 50) & (v < 0.55), "Green"),
+            ((hd < 50) & (s < 0.35) & (v > 0.7), "Beige"),
+            (hd < 50, "Orange"),
+            ((hd < 70) & (v < 0.55) & (s < 0.55), "Brown"),
+            ((hd < 70) & (v < 0.55), "Green"),
+            (hd < 70, "Yellow"),
+            (hd < 170, "Green"),
+            (hd < 200, "Teal"),
+            ((hd < 255) & (v < 0.35), "Navy"),
+            (hd < 255, "Blue"),
+            (hd < 295, "Purple"),
+        ]
+        return np.select([c for c, _ in rules], [n for _, n in rules], default="Pink")
 
     def _closest_color(self, rgb: np.ndarray) -> str:
         """Classify a pixel/cluster centroid into a named color via HSV.
@@ -308,11 +395,7 @@ class ClothingClassifier:
     def encode_image_embedding(self, image_path: str) -> Optional[List[float]]:
         """L2-normalized CLIP image vector for visual similarity search."""
         try:
-            image = Image.open(image_path).convert("RGB")
-            img_tensor = self.preprocess(image).unsqueeze(0).to(self.device)
-            with _inference_lock, torch.no_grad():
-                feats = self.model.encode_image(img_tensor)
-                feats = feats / feats.norm(dim=-1, keepdim=True)
+            feats = self._image_features(image_path)
             return [float(x) for x in feats.cpu().numpy().flatten()]
         except Exception as e:
             print(f"CLIP embedding error: {e}")
