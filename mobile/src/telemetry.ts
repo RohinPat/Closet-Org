@@ -27,6 +27,7 @@ export type TelemetryEvent =
   | 'item_uploaded'
   | 'outfit_recommended'
   | 'item_worn'
+  | 'outfit_worn'
   | 'outfit_planned'
   | 'stylist_message_sent'
   | 'fit_posted'
@@ -54,6 +55,8 @@ export function eventForApiCall(
         return 'item_uploaded';
       case '/planned-outfits':
         return 'outfit_planned';
+      case '/outfits/wear':
+        return 'outfit_worn';
       case '/ai-stylist':
         return 'stylist_message_sent';
       case '/fits':

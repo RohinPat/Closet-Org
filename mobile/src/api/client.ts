@@ -79,6 +79,7 @@ import type {
   WishlistCreate,
 
   WishlistPatch,
+  WornOutfit,
 
 } from './types';
 
@@ -619,6 +620,20 @@ export async function autoUnpackTrips() {
   });
 }
 
+
+/** Log a whole outfit as worn today (marks each piece worn). */
+export async function wearOutfit(itemIds: number[], occasion?: string) {
+  return apiFetch<{ success: boolean; outfit: WornOutfit | null }>('/outfits/wear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_ids: itemIds, occasion: occasion ?? null }),
+  });
+}
+
+/** The outfit already logged today, if any. */
+export async function fetchTodaysOutfit() {
+  return apiFetch<{ outfit: WornOutfit | null }>('/outfits/wear/today');
+}
 
 export async function fetchPlannedOutfits(includePast = true) {
 

@@ -9,14 +9,9 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { CompositeNavigationProp } from '@react-navigation/native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type {
-  AppStackParamList,
-  MainTabParamList,
-} from '../navigation/RootNavigator';
+import type { AppStackParamList } from '../navigation/RootNavigator';
 import * as api from '../api/client';
 import type { FitPost } from '../api/types';
 import { API_ORIGIN } from '../config';
@@ -36,10 +31,7 @@ import {
   type ThemeSurface,
 } from '../theme';
 
-type Nav = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabParamList, 'FeedTab'>,
-  NativeStackNavigationProp<AppStackParamList>
->;
+type Nav = NativeStackNavigationProp<AppStackParamList, 'Feed'>;
 
 const PAGE_SIZE = 30;
 
@@ -208,6 +200,16 @@ export function FeedScreen() {
 
   const header = (
     <View style={styles.headerRow}>
+      {navigation.canGoBack() ? (
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.7 : 1 }]}
+          accessibilityLabel="Back"
+          hitSlop={8}
+        >
+          <Ionicons name="chevron-back" size={20} color={colors.text} />
+        </Pressable>
+      ) : null}
       <View style={{ flex: 1 }}>
         <Text style={styles.heading}>Feed</Text>
         <Text style={styles.sub}>Daily fits from your circle</Text>
