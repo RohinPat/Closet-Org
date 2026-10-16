@@ -99,3 +99,17 @@ def test_backfill_script_creates_missing_grid_thumbnails(client, tmp_path, monke
     first_mtime = grid.stat().st_mtime_ns
     assert mod.main() == 0  # idempotent: nothing regenerated
     assert grid.stat().st_mtime_ns == first_mtime
+
+
+def test_webp_grid_images_are_served_as_images(client) -> None:
+    """With nosniff on /uploads, a wrong content type means a blank tile."""
+    uploads = Path(__import__("deps").UPLOAD_DIR)
+    name = "zz_mime_probe.grid.webp"
+    Image.new("RGBA", (8, 8), (10, 20, 30, 255)).save(uploads / name, "WEBP")
+    try:
+        r = client.get(f"/uploads/{name}")
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "image/webp"
+        assert r.headers["x-content-type-options"] == "nosniff"
+    finally:
+        (uploads / name).unlink(missing_ok=True)

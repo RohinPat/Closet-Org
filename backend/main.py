@@ -25,6 +25,7 @@ Security posture (see PROJECT.md for the long version):
 
 from __future__ import annotations
 
+import mimetypes
 import os
 import uvicorn
 from security import (
@@ -78,7 +79,7 @@ _cors_common = dict(
 
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 
-    allow_headers=["Authorization", "Content-Type", "Accept"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Closet-Refresh"],
 
     max_age=600,
 
@@ -114,6 +115,10 @@ else:
     )
 
 
+# Grid thumbnails are WebP. Some Python builds (Windows, minimal Linux images)
+# don't map .webp, and /uploads is served with nosniff, so browsers would
+# refuse to draw an application/octet-stream image.
+mimetypes.add_type("image/webp", ".webp")
 app.mount("/uploads", StaticFiles(directory=str(deps.UPLOAD_DIR)), name="uploads")
 
 
