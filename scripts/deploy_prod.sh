@@ -7,6 +7,8 @@
 #   INSTALL_DIR   default /opt/closet-org
 #   DEPLOY_USER   git user (default ubuntu)
 #   GIT_BRANCH    default main
+#   DEPLOY_SHA    exact commit to deploy (pull_deploy.sh passes the CI-verified
+#                 commit so a newer, unverified push can't slip in)
 #
 set -euo pipefail
 
@@ -38,8 +40,12 @@ find "${INSTALL_DIR}" -mindepth 1 \
 
 echo "==> Fetch ${GIT_BRANCH}"
 sudo -u "${DEPLOY_USER}" git -C "${INSTALL_DIR}" fetch origin "${GIT_BRANCH}"
-sudo -u "${DEPLOY_USER}" git -C "${INSTALL_DIR}" checkout "${GIT_BRANCH}"
-sudo -u "${DEPLOY_USER}" git -C "${INSTALL_DIR}" pull --ff-only origin "${GIT_BRANCH}"
+if [[ -n "${DEPLOY_SHA:-}" ]]; then
+  sudo -u "${DEPLOY_USER}" git -C "${INSTALL_DIR}" checkout -B "${GIT_BRANCH}" "${DEPLOY_SHA}"
+else
+  sudo -u "${DEPLOY_USER}" git -C "${INSTALL_DIR}" checkout "${GIT_BRANCH}"
+  sudo -u "${DEPLOY_USER}" git -C "${INSTALL_DIR}" pull --ff-only origin "${GIT_BRANCH}"
+fi
 
 echo "==> Python dependencies"
 if [[ ! -x "${INSTALL_DIR}/.venv/bin/pip" ]]; then
@@ -96,8 +102,38 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now closet-org-backup.timer
 
+echo "==> Pull-deploy timer (scripts/pull_deploy.sh, every 2 minutes)"
+cat >/etc/systemd/system/closet-org-pull-deploy.service <<UNIT
+[Unit]
+Description=Closet-Org: deploy new main commits once CI is green
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=INSTALL_DIR=${INSTALL_DIR}
+Environment=DEPLOY_USER=${DEPLOY_USER}
+ExecStart=/bin/bash ${INSTALL_DIR}/scripts/pull_deploy.sh
+UNIT
+cat >/etc/systemd/system/closet-org-pull-deploy.timer <<'UNIT'
+[Unit]
+Description=Check for new Closet-Org commits every 2 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now closet-org-pull-deploy.timer
+
 echo "==> Grid thumbnails for existing items (idempotent)"
-sudo -u closet-org env $(grep -E '^CLOSET_DB_PATH=' /etc/closet-org.env 2>/dev/null || true)   "${INSTALL_DIR}/.venv/bin/python" "${INSTALL_DIR}/scripts/backfill_grid_thumbnails.py"   || echo "WARN: grid thumbnail backfill failed (grids fall back to full thumbnails)"
+db_env="$(grep -E '^CLOSET_DB_PATH=' /etc/closet-org.env 2>/dev/null || true)"
+if ! sudo -u closet-org env ${db_env:+"${db_env}"} \
+    "${INSTALL_DIR}/.venv/bin/python" "${INSTALL_DIR}/scripts/backfill_grid_thumbnails.py"; then
+  echo "WARN: grid thumbnail backfill failed (grids fall back to full thumbnails)"
+fi
 
 echo "==> Restart services"
 systemctl restart closet-org
