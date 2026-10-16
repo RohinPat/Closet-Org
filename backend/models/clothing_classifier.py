@@ -1,6 +1,5 @@
 import torch
 import open_clip
-import colorsys
 from PIL import Image
 import numpy as np
 from typing import Dict, List, Tuple, Optional
@@ -57,6 +56,50 @@ def generate_cutout_thumbnail(
     except Exception as e:
         print(f"Thumbnail generation failed for {input_path}: {e}")
         return False
+
+
+# ---- Color naming -------------------------------------------------------------
+# Reference swatches for each app color (several per name: light, dark and
+# muted variants). Taken from the Material Design palette and common fashion
+# references rather than fitted to the test colors.
+_COLOR_SWATCHES = {
+    "Red": ["#e53935", "#c62828", "#b71c1c", "#ff3b30", "#7f1d1d"],
+    "Pink": ["#f8bbd0", "#f48fb1", "#f06292", "#e91e63", "#ff80ab", "#c2185b", "#e8a0a8"],
+    "Purple": ["#9c27b0", "#6a1b9a", "#4a148c", "#ce93d8", "#7e57c2", "#5e3a6e", "#b39ddb"],
+    "Blue": ["#1e88e5", "#1565c0", "#64b5f6", "#90caf9", "#3f51b5", "#5c7fa8", "#0d47a1"],
+    "Navy": ["#1a237e", "#0d1b3e", "#1f2d4d", "#14143c", "#283655", "#0a1a7a"],
+    "Teal": ["#00897b", "#004d40", "#4db6ac", "#00acc1", "#26c6da", "#006064"],
+    "Green": ["#43a047", "#1b5e20", "#81c784", "#689f38", "#556b2f", "#827717", "#7d8471", "#2e4d32"],
+    "Yellow": ["#fdd835", "#ffeb3b", "#fff176", "#f9a825", "#fbc02d", "#f0e68c"],
+    "Orange": ["#fb8c00", "#ef6c00", "#ffb74d", "#f4511e", "#e65100", "#ffa000"],
+    "Brown": ["#6d4c41", "#4e342e", "#3e2723", "#8d6e63", "#a1887f", "#8b5a2b", "#a0522d", "#5d4037"],
+    "Beige": ["#f5f0e1", "#efe6d2", "#e8dcc4", "#d6c7a1", "#ddd0b4"],
+}
+_LIGHTNESS_WEIGHT = 0.5   # lightness matters less than hue for naming
+_NEUTRAL_CHROMA = 9.0     # below this a color reads as black/gray/white
+_BLACK_L = 24.0
+_WHITE_L = 90.0
+_ALWAYS_BLACK_L = 10.0    # too dark to name a hue
+
+
+def _rgb_to_lab(rgb: np.ndarray) -> np.ndarray:
+    """sRGB (0-255, shape (N, 3)) -> CIELAB (D65)."""
+    c = rgb / 255.0
+    lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    m = np.array([[0.4124564, 0.3575761, 0.1804375],
+                  [0.2126729, 0.7151522, 0.0721750],
+                  [0.0193339, 0.1191920, 0.9503041]])
+    xyz = lin @ m.T / np.array([0.95047, 1.0, 1.08883])
+    f = np.where(xyz > 216 / 24389, np.cbrt(xyz), (24389 / 27 * xyz + 16) / 116)
+    return np.stack([116 * f[:, 1] - 16, 500 * (f[:, 0] - f[:, 1]), 200 * (f[:, 1] - f[:, 2])], axis=1)
+
+
+def _hex_rgb(h: str):
+    return [int(h[i:i + 2], 16) for i in (1, 3, 5)]
+
+
+_PROTO_NAMES = np.array([n for n, hexes in _COLOR_SWATCHES.items() for _ in hexes])
+_PROTO_LAB = _rgb_to_lab(np.array([_hex_rgb(h) for hexes in _COLOR_SWATCHES.values() for h in hexes], dtype=np.float64))
 
 
 class ClothingClassifier:
@@ -277,100 +320,32 @@ class ClothingClassifier:
         return np.array(cropped).reshape(-1, 3).astype(np.float32)
 
     def _closest_colors(self, pixels: np.ndarray) -> np.ndarray:
-        """Vectorized ``_closest_color`` over an (N, 3) array of RGB pixels.
+        """Name each (N, 3) RGB pixel with one of the app's 14 colors.
 
-        Same rules, evaluated with numpy instead of a per-pixel Python loop.
-        np.select takes the first matching condition, mirroring the early
-        returns in ``_closest_color``.
+        Pixels are converted to CIELAB, where distances track how people see
+        color. Low-chroma pixels are named by lightness (Black / Gray /
+        White); the rest take the name of the nearest reference swatch, with
+        lightness down-weighted so a shadowed or sunlit fold of the same
+        fabric keeps its name.
         """
-        rgb = np.asarray(pixels, dtype=np.float64) / 255.0
-        r, g, b = rgb[:, 0], rgb[:, 1], rgb[:, 2]
-        v = rgb.max(axis=1)
-        delta = v - rgb.min(axis=1)
-        s = np.where(v > 0, delta / np.where(v > 0, v, 1.0), 0.0)
-        safe = np.where(delta > 0, delta, 1.0)
-        rc, gc, bc = (v - r) / safe, (v - g) / safe, (v - b) / safe
-        h = np.where(r == v, bc - gc, np.where(g == v, 2.0 + rc - bc, 4.0 + gc - rc))
-        hd = np.where(delta > 0, (h / 6.0) % 1.0, 0.0) * 360.0
+        lab = _rgb_to_lab(np.asarray(pixels, dtype=np.float64))
+        L, a, b = lab[:, 0], lab[:, 1], lab[:, 2]
+        chroma = np.hypot(a, b)
 
-        rules = [
-            (v < 0.18, "Black"),
-            ((s < 0.07) & (v > 0.85), "White"),
-            ((s < 0.07) & (v < 0.45), "Black"),
-            (s < 0.07, "Gray"),
-            ((s < 0.22) & (v > 0.75) & (hd >= 25) & (hd <= 65), "Beige"),
-            ((hd < 15) | (hd >= 345), "Red"),
-            ((hd < 35) & (v < 0.55) & (s < 0.85), "Brown"),
-            (hd < 35, "Orange"),
-            ((hd < 50) & (v < 0.55) & (s < 0.45), "Brown"),
-            ((hd < 50) & (v < 0.55), "Green"),
-            ((hd < 50) & (s < 0.35) & (v > 0.7), "Beige"),
-            (hd < 50, "Orange"),
-            ((hd < 70) & (v < 0.55) & (s < 0.55), "Brown"),
-            ((hd < 70) & (v < 0.55), "Green"),
-            (hd < 70, "Yellow"),
-            (hd < 170, "Green"),
-            (hd < 200, "Teal"),
-            ((hd < 255) & (v < 0.35), "Navy"),
-            (hd < 255, "Blue"),
-            (hd < 295, "Purple"),
-        ]
-        return np.select([c for c, _ in rules], [n for _, n in rules], default="Pink")
+        d = (
+            ((L[:, None] - _PROTO_LAB[None, :, 0]) * _LIGHTNESS_WEIGHT) ** 2
+            + (a[:, None] - _PROTO_LAB[None, :, 1]) ** 2
+            + (b[:, None] - _PROTO_LAB[None, :, 2]) ** 2
+        )
+        names = _PROTO_NAMES[np.argmin(d, axis=1)]
+
+        neutral = np.where(L < _BLACK_L, "Black", np.where(L > _WHITE_L, "White", "Gray"))
+        is_neutral = (chroma < _NEUTRAL_CHROMA) | (L < _ALWAYS_BLACK_L)
+        return np.where(is_neutral, neutral, names)
 
     def _closest_color(self, rgb: np.ndarray) -> str:
-        """Classify a pixel/cluster centroid into a named color via HSV.
-
-        RGB-distance against a tiny palette fails on muted clothing tones
-        (olive, sage, dusty pink, navy) because they sit closer to "Gray" than
-        to any saturated reference. Bucketing by hue first — with separate
-        achromatic/dark/light rules — matches human perception better.
-        """
-        r, g, b = float(rgb[0]) / 255.0, float(rgb[1]) / 255.0, float(rgb[2]) / 255.0
-        h, s, v = colorsys.rgb_to_hsv(r, g, b)
-        h_deg = h * 360.0
-
-        if v < 0.18:
-            return "Black"
-        if s < 0.07:
-            if v > 0.85:
-                return "White"
-            if v < 0.45:
-                return "Black"
-            return "Gray"
-        if s < 0.22 and v > 0.75 and 25 <= h_deg <= 65:
-            return "Beige"
-
-        if h_deg < 15 or h_deg >= 345:
-            return "Red"
-        if h_deg < 35:
-            if v < 0.55 and s < 0.85:
-                return "Brown"
-            return "Orange"
-        if h_deg < 50:
-            if v < 0.55 and s < 0.45:
-                return "Brown"
-            if v < 0.55:
-                return "Green"
-            if s < 0.35 and v > 0.7:
-                return "Beige"
-            return "Orange"
-        if h_deg < 70:
-            if v < 0.55 and s < 0.55:
-                return "Brown"
-            if v < 0.55:
-                return "Green"
-            return "Yellow"
-        if h_deg < 170:
-            return "Green"
-        if h_deg < 200:
-            return "Teal"
-        if h_deg < 255:
-            if v < 0.35:
-                return "Navy"
-            return "Blue"
-        if h_deg < 295:
-            return "Purple"
-        return "Pink"
+        """Single-pixel convenience wrapper around ``_closest_colors``."""
+        return str(self._closest_colors(np.asarray(rgb, dtype=np.float64).reshape(1, 3))[0])
 
     def _get_subcategory(self, category: str) -> str:
         tops = {"T-Shirt", "Shirt", "Sweater", "Jacket", "Coat"}
