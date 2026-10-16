@@ -112,7 +112,18 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: ShellCheck
-        run: shellcheck scripts/backup_prod.sh scripts/test_backup_prod.sh
+        run: |
+          shellcheck scripts/backup_prod.sh scripts/test_backup_prod.sh \
+            scripts/pull_deploy.sh scripts/test_pull_deploy.sh
+          shellcheck -S warning scripts/deploy_prod.sh scripts/provision_ubuntu_prod.sh
 
       - name: Backup script end-to-end
         run: sudo bash scripts/test_backup_prod.sh
+
+      - name: Pull-deploy script end-to-end
+        run: bash scripts/test_pull_deploy.sh
+
+      - name: Validate cloud-init config
+        run: |
+          sudo apt-get install -y -q cloud-init >/dev/null
+          cloud-init schema --config-file scripts/cloud-init.yaml

@@ -1,0 +1,30 @@
+#cloud-config
+# Closet-Org: zero-touch server setup.
+#
+# Paste this whole file into the provider's first-boot script box:
+#   Oracle Cloud: Create instance -> Advanced options -> Management ->
+#                 Initialization script -> "Paste cloud-init script"
+#   Hetzner:      Create server -> Cloud config
+#
+# On first boot it installs everything (about 15 minutes), opens ports 80/443,
+# runs the first deploy, and turns on nightly backups and pull-based deploys
+# (new main commits go live ~2 minutes after CI passes; no GitHub secrets).
+# Progress: ssh in and run  tail -f /var/log/closet-org-setup.log
+# The app answers on http://<server-ip>/ when it's done.
+
+package_update: true
+packages:
+  - git
+  - curl
+
+runcmd:
+  - - bash
+    - -c
+    - |
+      set -euo pipefail
+      exec >>/var/log/closet-org-setup.log 2>&1
+      echo "== Closet-Org setup started $(date -u)"
+      git clone --depth 1 https://github.com/RohinPat/Closet-Org.git /tmp/closet-org-src
+      CLOSET_REPO_URL=https://github.com/RohinPat/Closet-Org.git \
+        bash /tmp/closet-org-src/scripts/provision_ubuntu_prod.sh
+      echo "== Closet-Org setup finished $(date -u)"

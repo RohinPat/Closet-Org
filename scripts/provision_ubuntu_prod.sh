@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 # Provision Closet-Org on Ubuntu 22.04/24.04 (x86_64 or aarch64).
-# Run ON THE SERVER after SSH: sudo bash scripts/provision_ubuntu_prod.sh
+# Run ON THE SERVER: sudo bash scripts/provision_ubuntu_prod.sh
+# or let scripts/cloud-init.yaml run it on first boot (no SSH needed).
 #
 # Required env:
 #   CLOSET_REPO_URL   Git clone URL (e.g. https://github.com/YOU/Closet-Org.git)
-#   PUBLIC_HOSTNAME   Host nginx listens for (e.g. api.example.com) — set in DNS first for HTTPS
 #
 # Optional:
+#   PUBLIC_HOSTNAME   Domain nginx answers for (set DNS first for HTTPS). Unset =
+#                     serve on the server's IP over HTTP (TLS skipped).
+#   DEPLOY_USER       Owner of the git checkout (default ubuntu; created if missing)
+#   SKIP_FIRST_DEPLOY=1  Don't run deploy_prod.sh at the end
 #   CERTBOT_EMAIL     If set (and SKIP_TLS unset), runs non-interactive certbot --nginx
 #   SKIP_TLS=1        Only HTTP on port 80 (no Let's Encrypt); use for testing or IP-only
 #   CLOSET_SECRET_KEY If unset, a random key is generated and written to /etc/closet-org.env
@@ -16,8 +20,12 @@ set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/closet-org}"
 CLOSET_REPO_URL="${CLOSET_REPO_URL:?Export CLOSET_REPO_URL=... (git URL)}"
-PUBLIC_HOSTNAME="${PUBLIC_HOSTNAME:?Export PUBLIC_HOSTNAME=api.yourdomain.com}"
+PUBLIC_HOSTNAME="${PUBLIC_HOSTNAME:-_}"
 SKIP_TLS="${SKIP_TLS:-0}"
+DEPLOY_USER="${DEPLOY_USER:-ubuntu}"
+if [[ "${PUBLIC_HOSTNAME}" == "_" ]]; then
+  SKIP_TLS=1  # no domain: nginx catch-all on the IP, HTTP only
+fi
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run as root: sudo $0"
@@ -27,6 +35,10 @@ fi
 ORIGIN="https://${PUBLIC_HOSTNAME}"
 if [[ "${SKIP_TLS}" == "1" ]]; then
   ORIGIN="http://${PUBLIC_HOSTNAME}"
+fi
+if [[ "${PUBLIC_HOSTNAME}" == "_" ]]; then
+  PUBLIC_IP="$(curl -fsS -m 5 https://api.ipify.org 2>/dev/null || true)"
+  ORIGIN="http://${PUBLIC_IP:-localhost}"
 fi
 
 ALLOW_LIST="${CLOSET_ALLOWED_ORIGINS:-${ORIGIN}}"
@@ -43,20 +55,31 @@ apt-get install -y \
   tesseract-ocr \
   libgl1 libglib2.0-0
 
+# Oracle's Ubuntu image has an "ubuntu" user; other providers may log in as root.
+if ! id -u "${DEPLOY_USER}" &>/dev/null; then
+  useradd --create-home --shell /bin/bash "${DEPLOY_USER}"
+fi
+
+# Oracle's Ubuntu image ships iptables rules that drop web traffic.
+if command -v iptables >/dev/null && ! iptables -C INPUT -p tcp -m multiport --dports 80,443 -j ACCEPT 2>/dev/null; then
+  iptables -I INPUT -p tcp -m multiport --dports 80,443 -j ACCEPT
+  if command -v netfilter-persistent >/dev/null; then netfilter-persistent save || true; fi
+fi
+
 if ! id -u closet-org &>/dev/null; then
   useradd --system --home "${INSTALL_DIR}" --shell /usr/sbin/nologin closet-org
 fi
 
 mkdir -p "${INSTALL_DIR}"
-chown ubuntu:ubuntu "${INSTALL_DIR}" 2>/dev/null || chown root:root "${INSTALL_DIR}"
+chown "${DEPLOY_USER}:${DEPLOY_USER}" "${INSTALL_DIR}"
 
 if [[ ! -d "${INSTALL_DIR}/.git" ]]; then
-  sudo -u ubuntu git clone "${CLOSET_REPO_URL}" "${INSTALL_DIR}" || {
+  sudo -u "${DEPLOY_USER}" git clone "${CLOSET_REPO_URL}" "${INSTALL_DIR}" || {
     echo "Clone failed. For a private repo use SSH URL or a token in HTTPS URL."
     exit 1
   }
 else
-  sudo -u ubuntu git -C "${INSTALL_DIR}" pull --ff-only || true
+  sudo -u "${DEPLOY_USER}" git -C "${INSTALL_DIR}" pull --ff-only || true
 fi
 
 python3 -m venv "${INSTALL_DIR}/.venv"
@@ -143,6 +166,12 @@ else
   echo "sudo certbot --nginx -d ${PUBLIC_HOSTNAME}"
   echo "Or re-run with CERTBOT_EMAIL=you@domain.com (and SKIP_TLS unset)."
   echo ""
+fi
+
+if [[ "${SKIP_FIRST_DEPLOY:-0}" != "1" ]]; then
+  # Installs the backup and pull-deploy timers, backfills, health-checks.
+  export DEPLOY_USER INSTALL_DIR
+  bash "${INSTALL_DIR}/scripts/deploy_prod.sh"
 fi
 
 echo "Done. Check: systemctl status closet-org"
