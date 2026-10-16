@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import zlib
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
 from models.weather_service import WeatherServiceError
@@ -259,7 +260,10 @@ def ai_stylist(
 
         day = int(datetime.now(timezone.utc).timestamp() // 86400)
 
-        rng_seed = (current_user["user_id"] * 1_000_003 ^ day ^ hash(body.message)) % (2**31)
+        # crc32, not hash(): str hashes are randomized per process, so the same
+        # question would give different picks after every restart.
+        msg_key = zlib.crc32((body.message or "").encode("utf-8"))
+        rng_seed = (current_user["user_id"] * 1_000_003 ^ day ^ msg_key) % (2**31)
 
         recent = set(deps.db.get_recent_outfit_signatures(current_user["user_id"], days=14, limit=120))
 

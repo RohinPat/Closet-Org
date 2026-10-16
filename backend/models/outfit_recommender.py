@@ -1,4 +1,6 @@
 import random
+from collections import Counter
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Tuple
 
 # Fine-grained clothing `category` from the classifier (not subcategory).
@@ -6,6 +8,26 @@ _WARM_LAYER_CATEGORIES = frozenset({"Jacket", "Coat", "Sweater"})
 _SUMMERISH_CATEGORIES = frozenset({"Shorts", "Sandals"})
 _RAIN_READY_CATEGORIES = frozenset({"Jacket", "Coat", "Boots", "Sneakers"})
 _HEAVY_CATEGORIES = frozenset({"Coat", "Sweater", "Boots"})
+
+# Colors that go with anything, and pair with themselves (all-black, navy-on-navy).
+_NEUTRALS = frozenset({"Black", "White", "Gray", "Navy", "Beige", "Brown"})
+
+# Harmony strengths (0 = clash, 3 = unknown palette, 10 = curated complement).
+_STRENGTH_COMPLEMENT = 10
+_STRENGTH_NEUTRAL = 8
+_STRENGTH_DENIM = 6  # Blue reads as denim/chambray and pairs widely.
+_STRENGTH_MONOCHROME_BOLD = 4  # e.g. red on red: allowed, rarely the best pick.
+_STRENGTH_UNKNOWN = 3
+
+# Up to this many points for items not worn recently (never worn = full bonus).
+_FRESHNESS_MAX_BONUS = 4.0
+_FRESHNESS_FULL_DAYS = 30
+_FAVORITE_BONUS = 2.0
+
+# Score penalty per piece already used by a higher-ranked suggestion.
+_REUSE_PENALTY = 10.0
+# Shoes within this many points of the best fit are picked at random.
+_SHOE_TIE_WINDOW = 2.0
 
 
 class OutfitRecommender:
@@ -70,22 +92,26 @@ class OutfitRecommender:
         """Sparse color metadata — allow pairing, with a lower harmony score."""
         return len(colors) == 0
 
-    def color_match_strength(self, colors1: List[str], colors2: List[str]) -> int:
-        """0 = clash, 3 = weak / unknown palette, 10 = clear matrix match."""
-        w1 = self._is_color_wildcard(colors1)
-        w2 = self._is_color_wildcard(colors2)
-        if w1 and w2:
-            return 3
-        if w1 or w2:
-            return 3
+    def _pair_strength(self, c1: str, c2: str) -> int:
+        if c2 in self.color_compatibility.get(c1, ()) or c1 in self.color_compatibility.get(c2, ()):
+            return _STRENGTH_COMPLEMENT
+        if c1 in _NEUTRALS or c2 in _NEUTRALS:
+            return _STRENGTH_NEUTRAL  # includes tonal neutrals (black + black)
+        if c1 == c2:
+            return _STRENGTH_DENIM if c1 == "Blue" else _STRENGTH_MONOCHROME_BOLD
+        if "Blue" in (c1, c2):
+            return _STRENGTH_DENIM
+        return 0  # two different bold colors with no known harmony, e.g. red + green
 
-        for c1 in colors1:
-            for c2 in colors2:
-                if c1 in self.color_compatibility and c2 in self.color_compatibility[c1]:
-                    return 10
-                if c2 in self.color_compatibility and c1 in self.color_compatibility[c2]:
-                    return 10
-        return 0
+    def color_match_strength(self, colors1: List[str], colors2: List[str]) -> int:
+        """Best harmony between any color of each item.
+
+        0 = clash, 3 = unknown palette, 4-6 = acceptable, 8 = neutral/tonal,
+        10 = curated complementary pair.
+        """
+        if self._is_color_wildcard(colors1) or self._is_color_wildcard(colors2):
+            return _STRENGTH_UNKNOWN
+        return max(self._pair_strength(c1, c2) for c1 in colors1 for c2 in colors2)
 
     def colors_match(self, colors1: List[str], colors2: List[str]) -> bool:
         return self.color_match_strength(colors1, colors2) > 0
@@ -173,7 +199,25 @@ class OutfitRecommender:
                 score += 4.0
 
         score += self._weather_score(outfit_items, weather)
+        now = datetime.now(timezone.utc)
+        score += sum(self._freshness_bonus(item, now) for item in outfit_items)
         return score
+
+    @staticmethod
+    def _freshness_bonus(item: Dict, now: datetime) -> float:
+        """Favor pieces that haven't been worn lately, plus a nudge for favorites."""
+        bonus = _FAVORITE_BONUS if item.get("is_favorite") else 0.0
+        last = item.get("last_worn")
+        if not last:
+            return bonus + _FRESHNESS_MAX_BONUS
+        try:
+            worn = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+        except ValueError:
+            return bonus
+        if worn.tzinfo is None:
+            worn = worn.replace(tzinfo=timezone.utc)  # SQLite CURRENT_TIMESTAMP is UTC
+        days = max(0.0, (now - worn).total_seconds() / 86400)
+        return bonus + _FRESHNESS_MAX_BONUS * min(days, _FRESHNESS_FULL_DAYS) / _FRESHNESS_FULL_DAYS
 
     def _weather_score(self, outfit_items: List[Dict], weather: Optional[Dict]) -> float:
         if not weather:
@@ -221,22 +265,29 @@ class OutfitRecommender:
 
         return score
 
-    def _pick_shoe(self, base_items: List[Dict], shoes: List[Dict]) -> Optional[Dict]:
+    def _pick_shoe(
+        self,
+        base_items: List[Dict],
+        shoes: List[Dict],
+        rng: Optional[random.Random] = None,
+    ) -> Optional[Dict]:
+        """Best-fitting shoe for the base items; random among near-ties so the
+        same pair doesn't land in every suggestion."""
+        scored: List[Tuple[float, Dict]] = []
         for shoe in shoes:
-            if not all(
-                self.colors_match(self._item_colors(shoe), self._item_colors(b))
-                for b in base_items
-            ):
+            sc = self._item_colors(shoe)
+            strengths = [self.color_match_strength(sc, self._item_colors(b)) for b in base_items]
+            if any(s == 0 for s in strengths):
                 continue
+            fit = float(sum(strengths))
             if all(self.styles_match(shoe.get("style"), b.get("style")) for b in base_items):
-                return shoe
-        for shoe in shoes:
-            if all(
-                self.colors_match(self._item_colors(shoe), self._item_colors(b))
-                for b in base_items
-            ):
-                return shoe
-        return None
+                fit += 5.0 * len(base_items)
+            scored.append((fit, shoe))
+        if not scored:
+            return None
+        best = max(fit for fit, _ in scored)
+        near = [shoe for fit, shoe in scored if fit >= best - _SHOE_TIE_WINDOW]
+        return rng.choice(near) if rng else near[0]
 
     def _maybe_accessory(
         self,
@@ -414,7 +465,7 @@ class OutfitRecommender:
 
         for dress in dresses_s:
             outfit_items = [dress]
-            shoe = self._pick_shoe([dress], shoes_s)
+            shoe = self._pick_shoe([dress], shoes_s, rng)
             if shoe:
                 outfit_items.append(shoe)
             if not pinned_has_accessory:
@@ -456,7 +507,7 @@ class OutfitRecommender:
                     continue
 
                 outfit_items = [top, bottom]
-                shoe = self._pick_shoe([top, bottom], shoes_s)
+                shoe = self._pick_shoe([top, bottom], shoes_s, rng)
                 if shoe:
                     outfit_items.append(shoe)
                 if not pinned_has_accessory:
@@ -493,4 +544,26 @@ class OutfitRecommender:
 
         deduped = list(best_by_items.values())
         deduped.sort(key=lambda x: x["score"], reverse=True)
-        return deduped[:max_outfits]
+        return self._select_diverse(deduped, max_outfits)
+
+    @staticmethod
+    def _select_diverse(ranked: List[Dict], limit: int) -> List[Dict]:
+        """Greedy pick that trades a little score for variety.
+
+        Each pick is the outfit with the best score after a penalty for every
+        piece already used by an earlier pick, so five suggestions aren't five
+        variations on the same shoes and jeans. Reported scores are unchanged.
+        """
+        chosen: List[Dict] = []
+        used: Counter = Counter()
+        pool = list(ranked)
+        while pool and len(chosen) < limit:
+            best_i = max(
+                range(len(pool)),
+                key=lambda k: pool[k]["score"]
+                - _REUSE_PENALTY * sum(used[i["id"]] for i in pool[k]["items"]),
+            )
+            pick = pool.pop(best_i)
+            chosen.append(pick)
+            used.update(i["id"] for i in pick["items"])
+        return chosen
