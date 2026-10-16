@@ -577,6 +577,14 @@ export type PromoteBulkResult = {
 
 
 
+/** An outfit logged as worn (Today screen). */
+export type WornOutfit = {
+  id: number;
+  occasion?: string | null;
+  worn_at: string;
+  items: ClothingItem[];
+};
+
 export type OutfitRecommendation = {
 
   items: ClothingItem[];

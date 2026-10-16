@@ -569,6 +569,7 @@ class UsersMixin:
                 ("DELETE FROM ai_stylist_feedback WHERE user_id = ?", u),
                 ("DELETE FROM password_reset_tokens WHERE user_id = ?", u),
                 ("DELETE FROM refresh_tokens WHERE user_id = ?", u),
+                ("DELETE FROM outfit_wears WHERE user_id = ?", u),
                 ("DELETE FROM users WHERE id = ?", u),
             ]
             for sql, params in statements:

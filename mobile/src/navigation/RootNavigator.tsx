@@ -34,6 +34,7 @@ import { StatsScreen } from '../screens/StatsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ItemDetailScreen } from '../screens/ItemDetailScreen';
 import { WishlistScreen } from '../screens/WishlistScreen';
+import { TodayScreen } from '../screens/TodayScreen';
 import { FeedScreen } from '../screens/FeedScreen';
 import { FitDetailScreen } from '../screens/FitDetailScreen';
 import { CreateFitScreen } from '../screens/CreateFitScreen';
@@ -55,8 +56,8 @@ export type AuthStackParamList = {
 };
 
 export type MainTabParamList = {
+  TodayTab: undefined;
   ClosetTab: undefined;
-  FeedTab: undefined;
   UploadTab: undefined;
   OutfitsTab: undefined;
   ProfileTab: undefined;
@@ -92,6 +93,7 @@ export type AppStackParamList = {
   FitDetail: { postId: number };
   PublicProfile: { userId: number };
   PersonalSettings: undefined;
+  Feed: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -150,7 +152,7 @@ function MainTabs() {
   const socialEnabled = user?.social_enabled !== false;
   return (
     <Tab.Navigator
-      initialRouteName={socialEnabled ? 'FeedTab' : 'ClosetTab'}
+      initialRouteName="TodayTab"
       screenOptions={{
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
@@ -174,22 +176,20 @@ function MainTabs() {
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
-      {socialEnabled ? (
-        <Tab.Screen
-          name="FeedTab"
-          component={FeedScreen}
-          options={{
-            tabBarLabel: 'Feed',
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons
-                name={focused ? 'people' : 'people-outline'}
-                color={color}
-                size={size}
-              />
-            ),
-          }}
-        />
-      ) : null}
+      <Tab.Screen
+        name="TodayTab"
+        component={TodayScreen}
+        options={{
+          tabBarLabel: 'Today',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'sunny' : 'sunny-outline'}
+              color={color}
+              size={size}
+            />
+          ),
+        }}
+      />
       <Tab.Screen
         name="ClosetTab"
         component={ClosetScreen}
@@ -316,6 +316,11 @@ function AppStackNavigator() {
         name="PublicProfile"
         component={PublicProfileScreen}
         options={{ title: 'Profile', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="Feed"
+        component={FeedScreen}
+        options={{ headerShown: false }}
       />
       <AppStack.Screen
         name="PersonalSettings"

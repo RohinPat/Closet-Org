@@ -242,7 +242,23 @@ class SchemaMixin:
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_password_reset_token_hash "
 
             "ON password_reset_tokens (token_hash)"
+        )
 
+        # Whole outfits the user logged as worn (database/wears.py).
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS outfit_wears (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                item_ids TEXT NOT NULL,
+                occasion TEXT,
+                worn_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_outfit_wears_user_time ON outfit_wears(user_id, worn_at)"
         )
 
         # Refresh-token sessions (see database/sessions.py). Times are epoch seconds.

@@ -201,6 +201,11 @@ class ClassificationCorrection(BaseModel):
     corrected_data: Dict[str, object]
 
 
+class OutfitWear(BaseModel):
+    item_ids: List[int] = Field(..., min_length=1, max_length=8)
+    occasion: Optional[str] = Field(None, max_length=40)
+
+
 class PlannedOutfitCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=120)

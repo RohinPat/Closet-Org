@@ -14,7 +14,7 @@ from database.wishlist import WishlistMixin
 from database.laundry import LaundryMixin
 from database.social import SocialMixin
 from database.sessions import SessionsMixin
-
+from database.wears import WearsMixin
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 _DEFAULT_DB = str(_BACKEND_DIR / "closet.db")
@@ -70,6 +70,7 @@ class DatabaseManager(
     LaundryMixin,
     SocialMixin,
     SessionsMixin,
+    WearsMixin,
 ):
 
     """SQLite database manager for clothing inventory and user management"""

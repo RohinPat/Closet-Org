@@ -153,3 +153,17 @@ def test_refresh_tokens_are_stored_hashed(client, strong_password) -> None:
     finally:
         conn.close()
     assert hashes and a["refresh_token"] not in hashes
+
+
+def test_cors_preflight_allows_the_refresh_opt_in_header(client) -> None:
+    """Browser clients (Expo web) send X-Closet-Refresh; preflight must allow it."""
+    r = client.options(
+        "/api/auth/login",
+        headers={
+            "Origin": "http://localhost:8081",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,x-closet-refresh",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert "x-closet-refresh" in r.headers.get("access-control-allow-headers", "").lower()

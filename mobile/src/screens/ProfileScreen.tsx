@@ -231,6 +231,18 @@ export function ProfileScreen() {
           <Text style={styles.heading}>Profile</Text>
           {socialEnabled ? (
             <Pressable
+              onPress={() => navigation.navigate('Feed')}
+              style={({ pressed }) => [
+                styles.headerBtn,
+                { opacity: pressed ? 0.7 : 1 },
+              ]}
+              accessibilityLabel="Feed"
+            >
+              <Ionicons name="newspaper-outline" size={20} color={colors.text} />
+            </Pressable>
+          ) : null}
+          {socialEnabled ? (
+            <Pressable
               onPress={() => navigation.navigate('Friends')}
               style={({ pressed }) => [
                 styles.headerBtn,

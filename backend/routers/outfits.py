@@ -14,9 +14,11 @@ import deps
 from schemas import (
     AiStylistFeedbackRequest,
     AiStylistRequest,
+    OutfitWear,
 )
 from route_helpers import (
     _normalize_vibe,
+    _require_item_owner,
     _outfit_item_signature,
     _parse_outfit_id_list,
     _validate_iso_date,
@@ -158,7 +160,8 @@ def recommend_outfit(
         worn_recent = deps.db.get_worn_outfit_signatures(
             current_user["user_id"], days=180, limit=200
         )
-        avoid_signatures = set(recent) | set(worn_recent)
+        logged = deps.db.get_logged_outfit_signatures(current_user["user_id"], days=180)
+        avoid_signatures = set(recent) | set(worn_recent) | logged
 
         filtered = [
 
@@ -193,6 +196,32 @@ def recommend_outfit(
         logger.exception("outfit recommendation failed")
 
         raise HTTPException(status_code=500, detail="Recommendation failed")
+
+
+@router.post("/api/outfits/wear")
+def wear_outfit(body: OutfitWear, current_user: dict = Depends(get_current_user)):
+    """Log a whole outfit as worn today.
+
+    Marks each piece worn (wear history, last worn, laundry state) and records
+    the outfit so it isn't suggested again for a while.
+    """
+    uid = current_user["user_id"]
+    ids = sorted({int(i) for i in body.item_ids if int(i) > 0})
+    if not ids:
+        raise HTTPException(status_code=422, detail="item_ids must contain item ids")
+    for item_id in ids:
+        _require_item_owner(item_id, uid)
+    occasion = clip_text(body.occasion, max_len=40)
+    for item_id in ids:
+        deps.db.update_item_status(item_id, worn=True, occasion=occasion)
+    deps.db.log_outfit_wear(uid, ids, occasion)
+    return {"success": True, "outfit": deps.db.get_todays_outfit_wear(uid)}
+
+
+@router.get("/api/outfits/wear/today")
+def todays_outfit(current_user: dict = Depends(get_current_user)):
+    """The outfit logged today, if any (for the Today screen)."""
+    return {"outfit": deps.db.get_todays_outfit_wear(current_user["user_id"])}
 
 
 @router.post("/api/ai-stylist")
