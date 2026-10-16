@@ -10,6 +10,9 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AppStackParamList } from '../navigation/RootNavigator';
 import * as ImagePicker from 'expo-image-picker';
 import type { FitCheckPairing, WishlistIntent } from '../api/types';
 import * as api from '../api/client';
@@ -93,6 +96,7 @@ function smartBulkSuggestion(classification: Classification): BulkSuggestion | n
 }
 
 export function UploadScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const insets = useSafeAreaInsets();
   const scrollTop = tabScrollContentPaddingTop(insets);
   const { colors } = useTheme();
@@ -517,6 +521,20 @@ export function UploadScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.heading}>Add an item</Text>
+
+        <Pressable
+          onPress={() => navigation.navigate('QuickAdd')}
+          style={({ pressed }) => [styles.quickAdd, { opacity: pressed ? 0.8 : 1 }]}
+          accessibilityRole="button"
+          testID="open-quick-add"
+        >
+          <Ionicons name="images-outline" size={20} color={colors.accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.quickAddTitle}>Adding a lot?</Text>
+            <Text style={styles.quickAddBody}>Pick up to 30 photos; each becomes its own item.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
 
         <View style={styles.modeRow}>
           <Pressable
@@ -1213,6 +1231,17 @@ function makeStyles({
       paddingHorizontal: spacing.xl,
       paddingBottom: TAB_SCREEN_SCROLL_BOTTOM,
     },
+    quickAdd: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      padding: spacing.md,
+      marginBottom: spacing.lg,
+      borderRadius: radii.md,
+      backgroundColor: colors.accentSoft,
+    },
+    quickAddTitle: { ...typography.bodyMedium, color: colors.text },
+    quickAddBody: { ...typography.caption, color: colors.textSecondary },
     heading: {
       ...typography.title,
       color: colors.text,

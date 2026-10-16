@@ -33,6 +33,7 @@ import { OutfitsScreen } from '../screens/OutfitsScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ItemDetailScreen } from '../screens/ItemDetailScreen';
+import { QuickAddScreen } from '../screens/QuickAddScreen';
 import { WishlistScreen } from '../screens/WishlistScreen';
 import { TodayScreen } from '../screens/TodayScreen';
 import { FeedScreen } from '../screens/FeedScreen';
@@ -94,6 +95,7 @@ export type AppStackParamList = {
   PublicProfile: { userId: number };
   PersonalSettings: undefined;
   Feed: undefined;
+  QuickAdd: undefined;
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -271,6 +273,11 @@ function AppStackNavigator() {
         name="ItemDetail"
         component={ItemDetailScreen}
         options={{ title: 'Item', headerBackTitle: 'Back' }}
+      />
+      <AppStack.Screen
+        name="QuickAdd"
+        component={QuickAddScreen}
+        options={{ title: 'Quick add', headerBackTitle: 'Back' }}
       />
       <AppStack.Screen
         name="Wishlist"
