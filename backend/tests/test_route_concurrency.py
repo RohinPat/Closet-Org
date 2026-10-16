@@ -51,7 +51,7 @@ def test_slow_handler_does_not_block_health_check(client) -> None:
     tok = register_account(client, password="Abcd5678ef")["access_token"]
 
     class SlowClassifier:
-        def classify(self, image_path):
+        def classify(self, image_path, cutout_path=None):
             time.sleep(1.5)
             return {
                 "category": "T-Shirt",

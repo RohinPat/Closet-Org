@@ -123,16 +123,14 @@ def upload_clothing(
             saved = save_uploaded_image(upload, deps.UPLOAD_DIR, prefix="item")
 
             saved_paths.append(str(saved))
-
-            classifications.append(classifier.classify(str(saved)))
-
-
-
+            # Cutout first so classify() can reuse its mask for colors
+            # instead of running background removal a second time.
             thumb = saved.with_name(saved.stem + ".thumb.png")
-
             thumb_ok = generate_cutout_thumbnail(str(saved), str(thumb))
-
             thumb_paths.append(str(thumb) if thumb_ok else None)
+            classifications.append(
+                classifier.classify(str(saved), cutout_path=str(thumb) if thumb_ok else None)
+            )
 
 
 
@@ -545,8 +543,10 @@ def create_bulk_item_with_photo(
 
         spath = str(saved)
 
-        classifications = deps.get_classifier().classify(spath)
-
+        thumb = saved.with_name(saved.stem + ".thumb.png")
+        thumb_ok = generate_cutout_thumbnail(spath, str(thumb))
+        thumb_str = str(thumb) if thumb_ok else None
+        classifications = deps.get_classifier().classify(spath, cutout_path=thumb_str)
         cols = classifications.get("colors") or ["Neutral"]
 
         st = (
@@ -566,15 +566,7 @@ def create_bulk_item_with_photo(
             if season and season.strip()
 
             else classifications.get("season") or "All-Season"
-
         )
-
-        thumb = saved.with_name(saved.stem + ".thumb.png")
-
-        thumb_ok = generate_cutout_thumbnail(spath, str(thumb))
-
-        thumb_str = str(thumb) if thumb_ok else None
-
         emb_list = None
 
         try:
